@@ -360,12 +360,10 @@ async def get_edge_type_counts(graph_id: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing graph: {str(e)}")
-    """
-    Health check endpoint to verify the API is running.
 
-    Returns:
-        Status of the API.
-    """
+
+@app.get("/health/", summary="Health check")
+async def health_check():
     return JSONResponse(
         content={
             "status": "healthy",
