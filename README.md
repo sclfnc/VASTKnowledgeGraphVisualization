@@ -1,82 +1,153 @@
-# VAST Knowledge Graph Visualization
+# Telescope
 
-Collaborative project developed by students of the **Course on Visual Analytics** in response to the **VAST Challenge 2025 – Design Challenge**.
+> *Zoom into your graph.*
 
-> Challenge page: https://vast-challenge.github.io/2025/DC.html
+A visual analytics prototype for structured exploration of knowledge graphs.
+**Zero-code, a-lot-knowledge:** load a graph, get the main metrics computed, visualised, and interactively explorable — no notebook, no `nx.degree_centrality(G)`, no boilerplate.
 
-## Overview
+Developed for an academic project on visual analytics for knowledge graphs (Course on Visual Analytics, VAST Challenge 2025 — Design Challenge).
 
-This repository is intended to host the research, design material, prototypes, and documentation produced for the 2025 VAST Design Challenge. The challenge asks participants to conceive a **visual analytics design for knowledge graphs** that helps non-expert users:
+**Status:** v0.3.0 — work in progress, less than a prototype.
+**Branch:** `api-integration`
+**Current focus:** the entire effort is on **Guide mode**. Graph mode is intentionally a placeholder for now.
 
-- discover new information or relationships,
-- identify anomalies or inconsistencies, and/or
-- infer missing information from context.
+---
 
-Knowledge graphs combine graph structure with rich, heterogeneous node and edge attributes. This creates important visualization challenges related to scale, uncertainty, incomplete information, and interpretability. Our project explores how visual analytics can support these tasks through an accessible and well-justified design.
+## Who it's for
 
-## Project Goals
+Two audiences, one surface:
 
-The main goals of this collaborative project are to:
+- **Data scientists** approaching a new graph who want a structured first pass — degree distribution, centralities, components, assortativity, k-core, etc. — without writing any code. Each panel is a metric *photographed* on the loaded data and made interactive.
+- **Non-expert users** (the VAST Challenge target) who want to understand what those metrics mean, why they matter, and what a "good" or "anomalous" reading looks like — through theory drawers attached to every panel.
 
-1. study the VAST 2025 Design Challenge requirements;
-2. investigate visual encodings and interaction techniques for knowledge-graph exploration; (see [Notes of meeting 1](docs/meeting_1_notes.md))
-3. design a visual analytics solution that supports the challenge tasks;
-4. document the design rationale, limitations, and intended user workflow;
-5. coordinate the contributions of the student team.
+The same wiki serves both: the data scientist reads the chart, the non-expert reads the explanation, and both can drill into the same focus modal.
 
-## Challenge Context
+---
 
-According to the challenge brief, the final submission should focus on a **design**, not necessarily a fully working prototype. However, within the class we will explore factual implementations using Vue.js and D3.js to have a final tool that can be used to demonstrate the design.
+## What it does today
 
-Any suitable knowledge-graph-like dataset may be used to motivate or illustrate the design. The emphasis is on visual analytics thinking and design interactivity capable of supporting multiple domain scenarios.
+Telescope is a wiki-like surface organised in nine sections. Status of each section's chart panels:
 
-## Repository Status
+| Section                    | Panels                                                                       | Done | Working | Sospeso |
+| -------------------------- | ---------------------------------------------------------------------------- | :--: | :-----: | :-----: |
+| Fundamentals               | graph representation, graph types                                            |      |         |         |
+| Descriptive Metrics        | degree, paths, connectivity, density, clustering, reciprocity, edge weight   |      |         |         |
+| Centrality                 | degree & eigenvector, Katz & PageRank, betweenness & closeness, comparison   |      |         |         |
+| Local Structure            | ego network, triadic closure, bridges & weak ties, k-core                    |      |         |         |
+| Mixing & Assortativity     | assortativity *r*, degree correlation, cross-type matrix                     |      |         |         |
+| Generative Models          | ER, Watts–Strogatz, Barabási–Albert, model comparison                        |      |         |         |
+| Resilience                 | random failure, targeted attack, edge removal                                |      |         |         |
+| Temporal Analysis          | activity timeline, snapshot evolution                                        |      |         |         |
+| Heterogeneous Structure    | type distribution, cross-type constraints, semantic violations               |      |         |         |
 
-At the moment, this repository is in an **initial setup stage** and primarily serves as a starting point for team collaboration. It will also serve as a central location to track the meetings and design decisions made during classes.
+Each panel is meant to host a chart plus a theory drawer that explains what the user is looking at.
 
+A schema endpoint inspects the loaded graph and drives:
+- conditional panels (e.g. *Reciprocity* only for directed graphs, *Edge Weight* only when weighted, *Cross-type Matrix* only when heterogeneous),
+- dynamic filters (node/edge types, degree, weight, attributes — numeric / categorical / boolean),
+- the overview card with structural badges (multigraph, bipartite, DAG, self-loops).
 
-## Working Approach
+---
 
-A possible workflow for the team is:
+## Stack
 
-1. **Interpret the challenge**
-   - identify the analytical tasks the team wants to support;
-   - define the target user and usage scenario.
+| Area     | Tech                                                          |
+| -------- | ------------------------------------------------------------- |
+| Frontend | Vue 3 · Vite · Pinia · Vue Router · Tailwind CSS v4 · Lucide  |
+|          | D3 *(still missing — to power the Guide-mode chart panels)*   |
+| Backend  | FastAPI · NetworkX                                            |
 
-2. **Explore design alternatives**
-   - compare different visual representations for large, attributed, uncertain graphs;
-   - evaluate trade-offs between overview, detail, explainability, and interaction complexity.
+---
 
-3. **Develop and refine the concept**
-   - create sketches, wireframes, or interactive mockups;
-   - gather feedback during class reviews or team meetings;
-   - refine the design rationale and task support.
+## Repository layout
 
-4. **Prepare final deliverables**
-   - write the final design description;
-   - document limitations and assumptions;
-   - assemble supporting visuals, storyboard, and reflection material.
+```
+.
+├── api/              FastAPI server (graph registry, schema, dataset loader)
+├── frontend/         Vue 3 SPA — onboarding, header, Graph + Guide modes
+├── data/             Datasets (gitignored)
+├── docs/             Meeting notes, design rationale
+├── done.md           Progress log — updated after each session
+└── CLAUDE.md         Architecture + conventions reference
+```
 
-## Collaboration Guidelines
+---
 
-To keep the project organized, contributors may follow these practices:
+## Running locally
 
-- create focused branches for substantial changes;
-- use clear commit messages;
-- document design decisions in markdown files under `docs/`;
-- store figures and interface mockups in `assets/`.
+### Backend
 
+```bash
+cd api
+python -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
 
-## Team
+The API exposes `POST /upload/`, `POST /datasets/load/{name}`, `GET /schema/{graph_id}`, and a few legacy inspection endpoints (`/summary/`, `/node-types/`, `/edge-types/`). Registry is in-memory.
 
-This project is developed collaboratively by students of the **Course on Visual Analytics**.
+### Frontend
 
-This section will be later expanded with the list of participants.
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite serves on `:5173` and proxies to the FastAPI host on `:8000`. Node `^20.19.0 || >=22.12.0`.
+
+### Convenience
+
+A root-level `dev.sh` launches both processes in parallel and shuts them down together on `Ctrl+C`. It auto-activates `api/venv` if present.
+
+---
+
+## Built-in datasets
+
+Four NetworkX datasets are exposed via `GET /datasets/`:
+
+- **karate** — Zachary's Karate Club
+- **les_miserables** — co-appearance graph
+- **florentine** — Florentine families
+- **davis** — Davis Southern Women (bipartite)
+
+These are normalized at load time to expose `Node Type` / `Edge Type` keys (Mr. Hi / Officer for karate, Woman / Event for davis, etc.) so the schema endpoint works uniformly with the MC1 convention.
+
+---
+
+## Coming next
+
+All iterations are on **Guide mode** — turning its sections from labelled placeholders into a connected, exploratory surface.
+
+- **Real chart panels** — D3 charts driven by the loaded graph (degree distribution, centrality comparisons, k-core decomposition, etc.) — the *zero-code* photograph of the graph
+- **Cross-panel links** — each panel references related concepts in other sections; clicking a term opens the linked panel and scrolls it into focus
+- **Theory drawer with examples** — annotated with live snippets from the current graph, not generic prose ("your graph's top-3 hubs are X, Y, Z" instead of "hubs are nodes with high degree")
+- **Schema-aware conditional panels** — already partially driven by `/schema/`, to be wired end-to-end so the wiki only shows what's applicable to the loaded graph
+
+### Desiderata
+
+A *didactic graph view*: a small live subgraph extracted from the loaded dataset that visually demonstrates each concept as the user reads about it (highlight a hub for *degree centrality*, colour a triangle for *triadic closure*, etc.). Same graph, different lenses — the wiki shows graph-theory concepts *through* the user's own data instead of with toy examples, useful both as a didactic device and as a quick visual sanity check on real data.
+
+---
+
+## Notes on MC1
+
+The reference dataset (`data/MC1_release/MC1_graph.json`) is a directed multigraph: 17,412 nodes / 37,857 edges, 16 weakly connected components, LCC covers >99%. Five node types (`Person`, `Song`, `RecordLabel`, `Album`, `MusicalGroup`), twelve edge types. Centralities are computed via NetworKit because pure NetworkX is too slow at this scale.
+
+Detailed metrics, anomalies, and the NetworKit ↔ NetworkX mapping pattern are in `CLAUDE.md`.
+
+---
+
+## Author
+
+Francesco Secoli — [github.com/sclfnc](https://github.com/sclfnc)
+
+Repository: [github.com/sclfnc/VASTKnowledgeGraphVisualization](https://github.com/sclfnc/VASTKnowledgeGraphVisualization/tree/api-integration)
+
+---
 
 ## References
 
-- VAST Challenge 2025 – Design Challenge: https://vast-challenge.github.io/2025/DC.html
+- VAST Challenge 2025 — Design Challenge: <https://vast-challenge.github.io/2025/DC.html>
 - IEEE VIS / VAST community resources on visual analytics, graph visualization, and knowledge graphs
-
-
-
