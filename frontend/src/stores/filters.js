@@ -15,6 +15,7 @@ export const useFiltersStore = defineStore('filters', () => {
   const selected = ref([])    // node ids selected for focus/neighborhood
   const hops = ref(0)         // N-hop expansion around `selected`; -1 means "all reachable"
   const hideIsolated = ref(false)
+  const hideSelfLoops = ref(false)
 
   function reset(schema) {
     nodeTypes.value = [...(schema?.node_types ?? [])]
@@ -30,7 +31,8 @@ export const useFiltersStore = defineStore('filters', () => {
     selected.value = []
     hops.value = 0
     hideIsolated.value = false
+    hideSelfLoops.value = false
   }
 
-  return { nodeTypes, edgeTypes, degree, weight, attributes, selected, hops, hideIsolated, reset }
+  return { nodeTypes, edgeTypes, degree, weight, attributes, selected, hops, hideIsolated, hideSelfLoops, reset }
 })

@@ -18,7 +18,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       class="fixed inset-0 z-40 flex items-center justify-center bg-black/40"
       @click.self="emit('close')"
     >
-      <div class="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-8 shadow-xl">
+      <div class="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-8 shadow-xl">
         <button
           class="absolute right-4 top-4 text-slate-400 hover:text-slate-700"
           @click="emit('close')"

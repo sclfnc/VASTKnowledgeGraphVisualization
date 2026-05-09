@@ -2,7 +2,7 @@
 // EXTENSION: filter sidebar — renders only the filters that the schema supports.
 // State lives in the filters store; this component is pure UI.
 // Reset of the store is handled by useSchema, not here.
-import { Filter, X, Eye, EyeOff } from 'lucide-vue-next'
+import { Filter, X, Eye, EyeOff, RotateCw } from 'lucide-vue-next'
 import { useFiltersStore } from '../stores/filters.js'
 import NumericFilter from './NumericFilter.vue'
 
@@ -48,7 +48,7 @@ const toggleIn = (list, value) => {
       </div>
     </section>
 
-    <section>
+    <section class="space-y-1.5">
       <button
         class="flex items-center gap-1.5 text-[11px] transition"
         :class="filters.hideIsolated ? 'text-red-500 hover:text-red-600' : 'text-slate-500 hover:text-slate-700'"
@@ -56,6 +56,15 @@ const toggleIn = (list, value) => {
       >
         <component :is="filters.hideIsolated ? EyeOff : Eye" :size="13" />
         <span>{{ filters.hideIsolated ? 'Isolated nodes hidden' : 'Isolated nodes visible' }}</span>
+      </button>
+
+      <button
+        class="flex items-center gap-1.5 text-[11px] transition"
+        :class="filters.hideSelfLoops ? 'text-red-500 hover:text-red-600' : 'text-slate-500 hover:text-slate-700'"
+        @click="filters.hideSelfLoops = !filters.hideSelfLoops"
+      >
+        <RotateCw :size="13" />
+        <span>{{ filters.hideSelfLoops ? `Self-loops hidden (${schema.self_loops ?? 0})` : `Self-loops visible (${schema.self_loops ?? 0})` }}</span>
       </button>
     </section>
 
