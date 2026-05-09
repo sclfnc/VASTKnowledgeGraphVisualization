@@ -20,11 +20,13 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 cleanup() {
+    trap - EXIT INT TERM
     echo ""
     echo "Stopping..."
-    kill 0
+    kill 0 2>/dev/null
+    exit 0
 }
-trap cleanup EXIT INT TERM
+trap cleanup INT TERM
 
 cd "$ROOT/api"
 uvicorn main:app --reload --port 8000 &
