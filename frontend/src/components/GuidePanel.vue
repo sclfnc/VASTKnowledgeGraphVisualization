@@ -4,9 +4,9 @@ import { ref } from 'vue'
 import { Maximize2, Minimize2, Trash2, Search } from 'lucide-vue-next'
 
 defineProps({
-  title:       { type: String, required: true },
-  section:     { type: String, default: '' },
-  explanation: { type: String, default: '' },
+  panelSpec:  { type: Object, required: true },
+  schema:     { type: Object, required: true },
+  graphId:    { type: String, required: true },
 })
 
 defineEmits(['remove', 'focus'])
@@ -21,8 +21,8 @@ const expanded = ref(false)
       <div class="flex items-center gap-2">
         <Search :size="12" class="text-slate-300 transition group-hover:text-slate-500" />
         <div>
-          <p class="text-sm font-medium text-slate-800">{{ title }}</p>
-          <p v-if="section" class="text-xs text-slate-300">{{ section }}</p>
+          <p class="text-sm font-medium text-slate-800">{{ panelSpec.label }}</p>
+          <p v-if="panelSpec.section" class="text-xs text-slate-300">{{ panelSpec.section }}</p>
         </div>
       </div>
       <div class="flex items-center gap-1.5" @click.stop>
@@ -35,7 +35,13 @@ const expanded = ref(false)
       </div>
     </div>
     <div class="border-t border-slate-100 p-4">
-      <slot />
+      <component
+        :is="panelSpec.component"
+        :panelSpec="panelSpec"
+        :schema="schema"
+        :graphId="graphId"
+        :showExplanation="false"
+      />
     </div>
   </div>
 </template>

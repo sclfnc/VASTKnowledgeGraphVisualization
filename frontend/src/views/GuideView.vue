@@ -1,34 +1,35 @@
 <script setup>
 // EXTENSION: Guide view — orchestrates schema, active panels, focus modal.
 // Sidebar Contents and focus modal live in dedicated components.
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import GuidePanel from '../components/GuidePanel.vue'
 import GraphOverview from '../components/GraphOverview.vue'
 import FiltersPanel from '../components/FiltersPanel.vue'
 import GuideContents from '../components/GuideContents.vue'
 import PanelFocus from '../components/PanelFocus.vue'
-import { PANELS, SECTIONS } from '../data/panels.js'
+import { PANEL_SPECS, SECTIONS } from '../wikiPanels/index.js'
 import { useLocalStorage } from '../composables/useLocalStorage.js'
 import { useSchema } from '../composables/useSchema.js'
+import { storeToRefs } from 'pinia'
+import { useGraphStore } from '../stores/graph.js'
 
 const { schema } = useSchema()
+const { graphId } = storeToRefs(useGraphStore())
 
-const activeIds = useLocalStorage('guide_active_panels', PANELS.filter(p => p.defaultActive).map(p => p.id))
-const panels = ref(PANELS.map(p => ({ ...p, active: activeIds.value.includes(p.id) })))
+const activeIds = useLocalStorage('guide_active_panels', PANEL_SPECS.filter(p => p.defaultActive).map(p => p.id))
+const panels = ref(PANEL_SPECS.map(p => ({ ...p, active: activeIds.value.includes(p.id) })))
 
 watch(panels, () => { activeIds.value = panels.value.filter(p => p.active).map(p => p.id) }, { deep: true })
 
 const focused = ref(null)
 
-const orderedActive = ref(panels.value.filter(p => p.active))
-watch(
-  () => panels.value.filter(p => p.active).map(p => p.id),
-  (ids) => {
-    orderedActive.value = [
-      ...orderedActive.value.filter(p => ids.includes(p.id)),
-      ...panels.value.filter(p => p.active && !orderedActive.value.find(o => o.id === p.id)),
-    ]
-  }
+const orderedActive = computed(() =>
+  panels.value
+    .filter(p => p.active && p.component)
+    .sort((a, b) => {
+      const activeOrder = panels.value.filter(p => p.active).map(p => p.id)
+      return activeOrder.indexOf(a.id) - activeOrder.indexOf(b.id)
+    })
 )
 
 const toggle = (p) => { if (!p.conditional) p.active = !p.active }
@@ -40,7 +41,7 @@ const clearAll = () => panels.value.forEach(p => { p.active = false })
 <template>
   <div class="flex gap-6">
 
-    <aside class="sticky top-16 h-[calc(100vh-5rem)] w-52 shrink-0 overflow-y-auto">
+    <aside class="sticky top-16 h-[calc(100vh-5rem)] w-56 shrink-0 overflow-y-auto">
       <p class="mb-3 text-xs font-semibold text-slate-400">Filters</p>
       <FiltersPanel :schema="schema" />
     </aside>
@@ -72,20 +73,16 @@ const clearAll = () => panels.value.forEach(p => { p.active = false })
         <GuidePanel
           v-for="p in orderedActive"
           :key="p.id"
-          :title="p.label"
-          :section="p.section"
-          :explanation="p.explanation"
+          :panelSpec="p"
+          :schema="schema"
+          :graphId="graphId"
           @remove="toggle(p)"
           @focus="focused = p"
-        >
-          <div class="flex h-32 items-center justify-center rounded bg-slate-50 text-xs text-slate-400">
-            chart placeholder — {{ p.label }}
-          </div>
-        </GuidePanel>
+        />
       </div>
     </section>
 
-    <aside class="sticky top-16 h-[calc(100vh-5rem)] w-48 shrink-0 overflow-y-auto">
+    <aside class="sticky top-16 h-[calc(100vh-5rem)] w-56 shrink-0 overflow-y-auto">
       <GuideContents
         :panels="panels"
         :sections="SECTIONS"
@@ -97,5 +94,5 @@ const clearAll = () => panels.value.forEach(p => { p.active = false })
 
   </div>
 
-  <PanelFocus :panel="focused" @close="focused = null" />
+  <PanelFocus :panel="focused" :schema="schema" :graphId="graphId" @close="focused = null" />
 </template>
