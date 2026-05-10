@@ -12,7 +12,7 @@ const props = defineProps(PANEL_PROPS)
 const { metrics: data, loading, error } = useMetrics(toRef(props, 'graphId'))
 const { controls, updateControl } = usePanel(props, 'degree', data)
 const chartContainer = ref(null)
-const view = ref('PMF')
+const view = ref('CCDF')
 
 const VIEWS = ['PMF', 'CCDF', 'Rank']
 const MARGINS = { top: 8, right: 12, bottom: 38, left: 44 }

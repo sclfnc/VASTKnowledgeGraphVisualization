@@ -51,12 +51,12 @@ export const PANEL_SPECS = [
       return `Degree distribution of your ${nodeCount} nodes. Average degree: ${avgDegree}. ${DEGREE_EXPLANATION}`
     },
     controlsSchema: {
-      logX: { type: 'switch', label: 'Log X', default: false },
-      logY: { type: 'switch', label: 'Log Y', default: false },
+      logX: { type: 'switch', label: 'Log X', default: true },
+      logY: { type: 'switch', label: 'Log Y', default: true },
       byType: { type: 'boolean', label: 'By type', default: false },
-      showMean: { type: 'boolean', label: 'Mean', default: true },
-      showMedian: { type: 'boolean', label: 'Median', default: true },
-      showIqr: { type: 'boolean', label: 'IQR / ±1σ', default: true },
+      showMean: { type: 'boolean', label: 'Mean', default: false },
+      showMedian: { type: 'boolean', label: 'Median', default: false },
+      showIqr: { type: 'boolean', label: 'IQR / ±1σ', default: false },
       showOutliers: { type: 'boolean', label: 'Outliers', default: true },
       showInliers: { type: 'boolean', label: 'Inliers', default: true },
       colorOutliers: { type: 'boolean', label: 'Color outliers', default: false },
