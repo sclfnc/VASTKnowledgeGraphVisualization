@@ -1,4 +1,6 @@
 <script setup>
+import { Eye, EyeOff } from 'lucide-vue-next'
+
 defineProps({
   label: String,
   spec: Object,
@@ -9,13 +11,12 @@ const emit = defineEmits(['update:modelValue'])
 </script>
 
 <template>
-  <div class="flex items-center gap-2">
-    <input
-      type="checkbox"
-      :checked="modelValue"
-      @change="emit('update:modelValue', $event.target.checked)"
-      class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500"
-    />
-    <label class="text-sm font-medium text-slate-700">{{ label }}</label>
-  </div>
+  <button
+    class="flex items-center gap-1.5 text-[11px] transition"
+    :class="modelValue ? 'text-slate-600 hover:text-slate-800' : 'text-slate-400 hover:text-slate-600'"
+    @click="emit('update:modelValue', !modelValue)"
+  >
+    <component :is="modelValue ? Eye : EyeOff" :size="13" />
+    <span>{{ label }}</span>
+  </button>
 </template>

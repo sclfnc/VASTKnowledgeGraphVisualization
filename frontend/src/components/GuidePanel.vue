@@ -1,7 +1,7 @@
 <script setup>
 // EXTENSION: flat card panel with focus modal, theory drawer, and resize buttons
 import { ref } from 'vue'
-import { Maximize2, Minimize2, Trash2, Search } from 'lucide-vue-next'
+import { Maximize2, Minimize2, Trash2 } from 'lucide-vue-next'
 
 defineProps({
   panelSpec:  { type: Object, required: true },
@@ -15,14 +15,15 @@ const expanded = ref(false)
 </script>
 
 <template>
-  <div class="group flex flex-col rounded-lg border border-transparent bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md" :class="expanded ? 'col-span-2 row-span-2' : ''">
+  <div
+    class="group flex flex-col rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-8px_rgba(15,23,42,0.12)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(15,23,42,0.06),0_16px_40px_-12px_rgba(15,23,42,0.18)] hover:border-slate-300"
+    :class="expanded ? 'col-span-2 row-span-2' : ''"
+  >
     <!-- header — click opens focus modal -->
     <div class="flex cursor-pointer items-center justify-between px-4 py-3 group-hover:bg-slate-50" @click="$emit('focus')">
       <div class="flex items-center gap-2">
-        <Search :size="12" class="text-slate-300 transition group-hover:text-slate-500" />
         <div>
           <p class="text-sm font-medium text-slate-800">{{ panelSpec.label }}</p>
-          <p v-if="panelSpec.section" class="text-xs text-slate-300">{{ panelSpec.section }}</p>
         </div>
       </div>
       <div class="flex items-center gap-1.5" @click.stop>
@@ -34,7 +35,7 @@ const expanded = ref(false)
         </button>
       </div>
     </div>
-    <div class="border-t border-slate-100 p-4">
+    <div class="border-t border-slate-100 px-3 py-2">
       <component
         :is="panelSpec.component"
         :panelSpec="panelSpec"

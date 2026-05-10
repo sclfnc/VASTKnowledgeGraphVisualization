@@ -319,20 +319,33 @@ def get_metrics(graph_id: str):
 
         # Degree statistics
         import statistics
+        n = len(degree_sequence)
+        sorted_deg = sorted(degree_sequence)
+        def percentile(data, p):
+            idx = (len(data) - 1) * p / 100
+            lo, hi = int(idx), min(int(idx) + 1, len(data) - 1)
+            return data[lo] + (data[hi] - data[lo]) * (idx - lo)
+        q1 = percentile(sorted_deg, 25)
+        q3 = percentile(sorted_deg, 75)
+        iqr = q3 - q1
         degree_stats = {
             'mean': statistics.mean(degree_sequence),
             'median': statistics.median(degree_sequence),
             'min': min(degree_sequence),
             'max': max(degree_sequence),
-            'std': statistics.stdev(degree_sequence) if len(degree_sequence) > 1 else 0,
+            'std': statistics.stdev(degree_sequence) if n > 1 else 0,
+            'p25': q1,
+            'p75': q3,
+            'iqr': iqr,
+            'whisker_lo': max(min(degree_sequence), q1 - 1.5 * iqr),
+            'whisker_hi': min(max(degree_sequence), q3 + 1.5 * iqr),
         }
 
-        # ER baseline (same N, E)
-        N = G.number_of_nodes()
-        E = G.number_of_edges()
-        p = 2 * E / (N * (N - 1)) if N > 1 else 0
-        G_er = nx.erdos_renyi_graph(N, p, seed=42)
-        er_baseline = sorted([d for _, d in G_er.degree()], reverse=True)
+        # Degree by node type
+        degree_by_type = {}
+        for node, deg in G.degree():
+            ntype = G.nodes[node].get('Node Type', 'Unknown')
+            degree_by_type.setdefault(ntype, []).append(deg)
 
         # Connectivity
         if G.is_directed():
@@ -386,7 +399,7 @@ def get_metrics(graph_id: str):
         return JSONResponse(content={
             'degree_sequence': degree_sequence,
             'degree_stats': degree_stats,
-            'er_baseline': er_baseline,
+            'degree_by_type': degree_by_type,
             'weakly_connected_components': wcc,
             'lcc_size': len(lcc_nodes),
             'diameter': diameter,

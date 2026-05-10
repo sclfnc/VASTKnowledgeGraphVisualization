@@ -14,7 +14,7 @@ const emit = defineEmits(['update:modelValue'])
     <select
       :value="modelValue"
       @change="emit('update:modelValue', $event.target.value)"
-      class="px-3 py-2 text-sm border border-slate-300 rounded bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      class="px-3 py-2 text-sm border border-slate-300 rounded bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
     >
       <option v-for="opt in spec.options" :key="opt" :value="opt">
         {{ opt }}

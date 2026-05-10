@@ -35,7 +35,6 @@ const orderedActive = computed(() =>
 const toggle = (p) => { if (!p.conditional) p.active = !p.active }
 const loadSection = (s) => panels.value.filter(p => p.section === s && !p.conditional).forEach(p => { p.active = true })
 const removeSection = (s) => panels.value.filter(p => p.section === s).forEach(p => { p.active = false })
-const clearAll = () => panels.value.forEach(p => { p.active = false })
 </script>
 
 <template>
@@ -61,11 +60,7 @@ const clearAll = () => panels.value.forEach(p => { p.active = false })
         :acyclic="schema?.acyclic ?? null"
       />
 
-      <div v-if="orderedActive.length" class="mb-4 flex justify-end">
-        <button class="text-xs text-slate-400 hover:text-red-400" @click="clearAll">clear all</button>
-      </div>
-
-      <div v-if="!orderedActive.length" class="flex h-48 items-center justify-center text-sm text-slate-400">
+<div v-if="!orderedActive.length" class="flex h-48 items-center justify-center text-sm text-slate-400">
         Select a panel from Contents →
       </div>
 
