@@ -38,20 +38,17 @@ async function switchDataset(name) {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50">
-    <header class="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:px-6">
+  <div class="min-h-screen bg-slate-100">
+    <header class="sticky top-0 z-10 bg-slate-100/80 px-4 py-1.5 backdrop-blur md:px-6">
       <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-2.5">
-          <Telescope :size="28" class="text-slate-800" :stroke-width="1.75" />
-          <div>
-            <h1 class="text-lg font-semibold leading-tight text-slate-900 md:text-xl">Telescope</h1>
-            <p class="text-xs text-slate-500">Zoom into your graph</p>
-          </div>
+        <div class="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-slate-800" title="Telescope — Zoom into your graph">
+          <Telescope :size="16" :stroke-width="2" />
+          <span>Telescope</span>
         </div>
 
         <nav class="flex flex-wrap items-center gap-2">
           <button
-            class="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+            class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-1 text-sm text-emerald-600 transition hover:border-emerald-500 hover:bg-emerald-50"
             @click="aboutOpen = true"
           >
             <Info :size="14" />
@@ -61,7 +58,10 @@ async function switchDataset(name) {
           <!-- EXTENSION: dataset switcher dropdown -->
           <div v-if="graphStore.graphId" class="dataset-dropdown relative">
             <button
-              class="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition"
+              :class="dropdownOpen
+                ? 'border-sky-500 bg-sky-50 text-sky-700'
+                : 'border-sky-200 bg-white text-sky-600 hover:border-sky-500 hover:bg-sky-50'"
               @click="dropdownOpen = !dropdownOpen"
             >
               <Database :size="14" />
@@ -92,13 +92,15 @@ async function switchDataset(name) {
             </div>
           </div>
 
-          <!-- EXTENSION: mode toggle -->
-          <div v-if="graphStore.graphId" class="ml-2 flex rounded-md border border-slate-200 bg-white">
+          <!-- EXTENSION: mode toggle — Graph/Guide as two pill buttons -->
+          <div v-if="graphStore.graphId" class="ml-1 flex items-center gap-2">
             <button
               v-for="m in modes"
               :key="m.key"
-              class="flex items-center gap-1.5 px-4 py-1.5 text-sm transition"
-              :class="graphStore.mode === m.key ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-900'"
+              class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition"
+              :class="graphStore.mode === m.key
+                ? 'border-violet-500 bg-violet-50 text-violet-700'
+                : 'border-violet-200 bg-white text-violet-600 hover:border-violet-500 hover:bg-violet-50'"
               @click="graphStore.setMode(m.key)"
             >
               <component :is="m.icon" :size="14" />

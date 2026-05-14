@@ -30,11 +30,10 @@ const SECTION_ICONS = {
   'Link Prediction': Link2,
 }
 
-const parseSection = (s) => {
-  const m = s.match(/^(\d+)\.\s*(.+)$/)
-  return m ? { num: m[1], name: m[2] } : { num: '', name: s }
-}
-const sectionIcon = (s) => SECTION_ICONS[parseSection(s).name] ?? BookOpen
+// Section numbering is derived from the current order of sections (1-based).
+// This way, hiding a section in the registry doesn't leave gaps in the UI.
+const parseSection = (s) => ({ num: String(props.sections.indexOf(s) + 1), name: s })
+const sectionIcon = (s) => SECTION_ICONS[s] ?? BookOpen
 
 const panelsInSection = (s) => props.panels.filter(p => p.section === s)
 const togglablePanelsInSection = (s) => panelsInSection(s).filter(p => !p.conditional)
