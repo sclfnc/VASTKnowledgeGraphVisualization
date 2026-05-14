@@ -7,7 +7,7 @@ A visual analytics prototype for structured exploration of knowledge graphs.
 
 Developed for an academic project on visual analytics for knowledge graphs (Course on Visual Analytics, VAST Challenge 2025 — Design Challenge).
 
-**Status:** v0.3.0 — work in progress, less than a prototype.
+**Status:** v0.4.0 — work in progress, less than a prototype.
 **Branch:** `api-integration`
 **Current focus:** the entire effort is on **Guide mode**. Graph mode is intentionally a placeholder for now.
 
@@ -26,21 +26,16 @@ The same wiki serves both: the data scientist reads the chart, the non-expert re
 
 ## What it does today
 
-Telescope is a wiki-like surface organised in nine sections. Status of each section's chart panels:
+Telescope organises a panel registry around three states:
 
-| Section                    | Panels                                                                       | Done | Working | Sospeso |
-| -------------------------- | ---------------------------------------------------------------------------- | :--: | :-----: | :-----: |
-| Fundamentals               | graph representation, graph types                                            |      |         |         |
-| Descriptive Metrics        | degree, paths, connectivity, density, clustering, reciprocity, edge weight   |      |         |         |
-| Centrality                 | degree & eigenvector, Katz & PageRank, betweenness & closeness, comparison   |      |         |         |
-| Local Structure            | ego network, triadic closure, bridges & weak ties, k-core                    |      |         |         |
-| Mixing & Assortativity     | assortativity *r*, degree correlation, cross-type matrix                     |      |         |         |
-| Generative Models          | ER, Watts–Strogatz, Barabási–Albert, model comparison                        |      |         |         |
-| Resilience                 | random failure, targeted attack, edge removal                                |      |         |         |
-| Temporal Analysis          | activity timeline, snapshot evolution                                        |      |         |         |
-| Heterogeneous Structure    | type distribution, cross-type constraints, semantic violations               |      |         |         |
+| Status      | Panel                                                                 |
+| ----------- | --------------------------------------------------------------------- |
+| Implemented | **Degree Distribution** — PMF / CCDF, by-type breakdown, four theoretical fits (power-law, exponential, log-normal, Poisson) via the `powerlaw` package, IQR-based outlier highlight |
+| Implemented | **Connected Components** — bubbles or bars view, WCC / SCC modes, range and rank filters, click-to-drill into a side-by-side breakdown by node type |
+| Planned     | PageRank & Eigenvector, Betweenness, Closeness, Ego Network, Type Mixing Matrix, Activity Timeline |
+| Stub        | ~20 spec entries kept in the registry as a roadmap reference but filtered from the UI |
 
-Each panel is meant to host a chart plus a theory drawer that explains what the user is looking at.
+Each panel renders a chart in the grid and exposes a theory drawer inside the focus modal — the drawer is meant for non-experts who want to understand the metric, the in-grid chart is for the data scientist scanning for signal.
 
 A schema endpoint inspects the loaded graph and drives:
 - conditional panels (e.g. *Reciprocity* only for directed graphs, *Edge Weight* only when weighted, *Cross-type Matrix* only when heterogeneous),
@@ -51,11 +46,11 @@ A schema endpoint inspects the loaded graph and drives:
 
 ## Stack
 
-| Area     | Tech                                                          |
-| -------- | ------------------------------------------------------------- |
-| Frontend | Vue 3 · Vite · Pinia · Vue Router · Tailwind CSS v4 · Lucide  |
-|          | D3 *(still missing — to power the Guide-mode chart panels)*   |
-| Backend  | FastAPI · NetworkX                                            |
+| Area     | Tech                                                                                |
+| -------- | ----------------------------------------------------------------------------------- |
+| Frontend | Vue 3 · Vite · Pinia · Vue Router · Tailwind CSS v4 · D3 · Lucide · @vueform/slider |
+| Backend  | FastAPI · NetworkX · powerlaw (CSN distribution fits)                               |
+| Analysis | NetworkX · NetworKit · pandas · Jupyter                                             |
 
 ---
 
@@ -85,7 +80,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-The API exposes `POST /upload/`, `POST /datasets/load/{name}`, `GET /schema/{graph_id}`, and a few legacy inspection endpoints (`/summary/`, `/node-types/`, `/edge-types/`). Registry is in-memory.
+The API exposes `POST /upload/`, `GET /datasets/`, `POST /datasets/load/{name}`, `GET /schema/{graph_id}`, `GET /metrics/{graph_id}` (legacy, used by `DegreeDistribution`), `GET /degree-fit/{graph_id}` (powerlaw fits), `GET /components/{graph_id}` (WCC/SCC breakdown), and `GET /health/`. Registry and result caches are in-memory.
 
 ### Frontend
 
@@ -118,16 +113,14 @@ These are normalized at load time to expose `Node Type` / `Edge Type` keys (Mr. 
 
 ## Coming next
 
-All iterations are on **Guide mode** — turning its sections from labelled placeholders into a connected, exploratory surface.
+The six planned panels cover the main backend interaction patterns we want to demonstrate:
 
-- **Real chart panels** — D3 charts driven by the loaded graph (degree distribution, centrality comparisons, k-core decomposition, etc.) — the *zero-code* photograph of the graph
-- **Cross-panel links** — each panel references related concepts in other sections; clicking a term opens the linked panel and scrolls it into focus
-- **Theory drawer with examples** — annotated with live snippets from the current graph, not generic prose ("your graph's top-3 hubs are X, Y, Z" instead of "hubs are nodes with high degree")
-- **Schema-aware conditional panels** — already partially driven by `/schema/`, to be wired end-to-end so the wiki only shows what's applicable to the loaded graph
-
-### Desiderata
-
-A *didactic graph view*: a small live subgraph extracted from the loaded dataset that visually demonstrates each concept as the user reads about it (highlight a hub for *degree centrality*, colour a triangle for *triadic closure*, etc.). Same graph, different lenses — the wiki shows graph-theory concepts *through* the user's own data instead of with toy examples, useful both as a didactic device and as a quick visual sanity check on real data.
+- **PageRank & Eigenvector** — centrality for propagation importance
+- **Betweenness** — structural bridges and bottlenecks
+- **Closeness** — average reachability
+- **Ego Network** — interactive local neighbourhood around a selected node
+- **Type Mixing Matrix** — heterogeneity: edge counts between node types, surfacing semantic anomalies
+- **Activity Timeline** — temporal evolution for graphs that expose date attributes
 
 ---
 
