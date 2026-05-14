@@ -89,11 +89,21 @@ const toggleSection = (s) => {
             ? 'cursor-not-allowed text-slate-300'
             : p.active
               ? 'cursor-pointer font-semibold text-slate-900'
-              : 'cursor-pointer text-slate-400 hover:text-slate-700'"
+              : p.status === 'stub'
+                ? 'cursor-pointer text-slate-300 hover:text-slate-500'
+                : 'cursor-pointer text-slate-400 hover:text-slate-700'"
           @click="!p.conditional && emit('toggle', p)"
         >
           <component :is="p.active ? Check : Circle" :size="10" />
-          {{ p.label }}
+          <span class="flex-1 truncate">{{ p.label }}</span>
+          <span
+            v-if="p.status === 'implemented'"
+            class="rounded-full bg-emerald-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-600"
+          >Done</span>
+          <span
+            v-else-if="p.status === 'planned'"
+            class="rounded-full bg-sky-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-sky-600"
+          >Planned</span>
         </li>
       </ul>
     </li>

@@ -1,16 +1,20 @@
 <script setup>
-import { ref, watch, toRef, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, toRef, computed } from 'vue'
 import * as d3 from 'd3'
 import { useMetrics } from '@/composables/useMetrics'
 import { useDegreeFit } from '@/composables/useDegreeFit'
+import { useNodeTypeColors } from '@/composables/useNodeTypeColors'
 import {
   FORMATTERS, COLOR_SCHEME, applyOutlierEncoding, summaryStats,
   makeTooltip, showTip, hideTip, attachVLineTooltip,
   drawGrid, drawAxes, drawLine,
 } from './shared.js'
 import { usePanel } from './usePanel.js'
+import { useD3Chart } from './useD3Chart.js'
 import ControlSwitch from './controls/ControlSwitch.vue'
 import ControlBoolean from './controls/ControlBoolean.vue'
+import ControlSection from './controls/ControlSection.vue'
+import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -22,6 +26,7 @@ const props = defineProps({
 
 const { metrics: data, loading, error } = useMetrics(toRef(props, 'graphId'))
 const { fit } = useDegreeFit(toRef(props, 'graphId'))
+const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { controls, updateControl } = usePanel(props, 'degree', data)
 const chartContainer = ref(null)
 const view = ref('CCDF')
@@ -61,20 +66,23 @@ function isFitOn(t) {
 
 const availableTypes = computed(() => Object.keys(data.value?.degree_by_type || {}))
 
-// Aggregate log-likelihood for ranking fits:
-// - All mode: ll of fit on the full degree sequence
-// - By-type mode: sum of per-type ll (joint log-likelihood under independence,
-//   coherent with how AIC/BIC compose across groups)
+// Aggregate per-point log-likelihood for ranking fits.
+// All four families are fitted on the full sequence (xmin=1) server-side,
+// so ll values share support and are directly comparable.
+// By-type: weighted mean of per-type ll by group size n_t — equivalent to
+// joint LL per point under independence.
 function aggregateLL(name) {
   if (controls.value.byType) {
     const byType = fit.value?.by_type
-    if (!byType) return null
-    let sum = 0, any = false
+    const sizes = data.value?.degree_by_type
+    if (!byType || !sizes) return null
+    let llSum = 0, nSum = 0
     for (const t of Object.keys(byType)) {
       const ll = byType[t]?.[name]?.ll
-      if (ll != null && Number.isFinite(ll)) { sum += ll; any = true }
+      const n = sizes[t]?.length
+      if (ll != null && Number.isFinite(ll) && n) { llSum += ll * n; nSum += n }
     }
-    return any ? sum : null
+    return nSum ? llSum / nSum : null
   }
   return fit.value?.all?.[name]?.ll ?? null
 }
@@ -98,6 +106,9 @@ const fitSwitches = computed(() => {
 })
 
 const VIEWS = ['PMF', 'CCDF']
+const VIEW_OPTIONS = VIEWS.map(v => ({ k: v, label: v }))
+const BY_TYPE_OPTIONS = [{ k: false, label: 'All' }, { k: true, label: 'By type' }]
+const Y_AXIS_OPTIONS = [{ k: 'count', label: 'Count' }, { k: 'probability', label: 'Prob.' }]
 const MARGINS = { top: 8, right: 12, bottom: 38, left: 44 }
 
 watch(fit, (f) => {
@@ -113,20 +124,7 @@ watch(fit, (f) => {
 
 watch([data, fit, controls, view, fitVisible, overlayTypes, fitTypes], renderChart, { deep: true })
 
-let resizeObserver = null
-let rafId = null
-onMounted(() => {
-  if (!chartContainer.value) return
-  resizeObserver = new ResizeObserver(() => {
-    if (rafId) cancelAnimationFrame(rafId)
-    rafId = requestAnimationFrame(renderChart)
-  })
-  resizeObserver.observe(chartContainer.value)
-})
-onBeforeUnmount(() => {
-  if (resizeObserver) resizeObserver.disconnect()
-  if (rafId) cancelAnimationFrame(rafId)
-})
+useD3Chart(chartContainer, renderChart)
 
 // ── Distribution builders ──────────────────────────────────────────
 function buildPMF(seq) {
@@ -162,9 +160,9 @@ function buildScales(visible, innerW, lineH, useLogX, useLogY) {
 }
 
 // ── Theoretical curves ────────────────────────────────────────────
-// All distributions are fitted and pre-evaluated server-side via the powerlaw
-// package (Clauset-Shalizi-Newman framework). The backend ships a log-spaced
-// k-grid plus pmf/ccdf arrays for each model; the frontend just plots them.
+// All four families are fitted server-side on the full degree sequence
+// (xmin=1) — pmf is normalised over the same support as the data, so
+// scaling to counts is just `* n`.
 // In "All" mode, fit family is encoded via color; in "By type" mode color is
 // reserved for node type so fit family is encoded via dash style.
 // Fit family encoding — stable across plots and rank order.
@@ -237,7 +235,8 @@ function renderChart() {
   if (ctrl.byType) {
     const byTypeRaw = data.value.degree_by_type || {}
     const types = Object.keys(byTypeRaw)
-    const color = d3.scaleOrdinal(d3.schemeTableau10).domain(types)
+    // Use the shared schema-scoped mapping so types share colors across panels.
+    const color = typeColor
 
     // pre-compute per-type filtered points and stats once (used for scale + draw)
     const perType = types.map(t => {
@@ -455,7 +454,10 @@ function renderChart() {
     })
   }
 
-  drawAxes(g, xScale, yScale, innerW, lineH, useLogY, yMode, xLabel, yLabel)
+  drawAxes(g, xScale, yScale, innerW, lineH, {
+    xLabel, yLabel,
+    yTickFmt: useLogY ? (yMode === 'count' ? '~s' : '.0e') : (yMode === 'count' ? 'd' : '.0%'),
+  })
 }
 </script>
 
@@ -463,38 +465,20 @@ function renderChart() {
   <div class="flex flex-col gap-1.5">
     <Teleport v-if="controlsTarget" :to="`#${controlsTarget}`">
       <div class="grid grid-cols-2 auto-rows-min gap-2">
-        <div class="rounded-lg bg-white px-3 py-2 flex flex-col gap-1.5">
-          <h4 class="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">View</h4>
+        <ControlSection title="View">
           <div class="flex flex-col gap-1">
-            <div class="flex w-full rounded border border-slate-200 overflow-hidden text-[10px] font-medium">
-              <button v-for="opt in VIEWS" :key="opt"
-                class="flex-1 py-0.5 transition-colors"
-                :class="view === opt ? 'bg-sky-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'"
-                @click="view = opt">{{ opt }}</button>
-            </div>
-            <div class="flex w-full rounded border border-slate-200 overflow-hidden text-[10px] font-medium">
-              <button v-for="opt in [{ k: false, label: 'All' }, { k: true, label: 'By type' }]" :key="opt.label"
-                class="flex-1 py-0.5 transition-colors"
-                :class="controls.byType === opt.k ? 'bg-sky-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'"
-                @click="updateControl('byType', opt.k)">{{ opt.label }}</button>
-            </div>
-            <div class="flex w-full rounded border border-slate-200 overflow-hidden text-[10px] font-medium">
-              <button v-for="opt in [{ k: 'count', label: 'Count' }, { k: 'probability', label: 'Prob.' }]" :key="opt.k"
-                class="flex-1 py-0.5 transition-colors"
-                :class="controls.yAxis === opt.k ? 'bg-sky-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'"
-                @click="updateControl('yAxis', opt.k)">{{ opt.label }}</button>
-            </div>
+            <ControlToggleGroup :model-value="view" :options="VIEW_OPTIONS" @update:model-value="view = $event" />
+            <ControlToggleGroup :model-value="controls.byType" :options="BY_TYPE_OPTIONS" @update:model-value="updateControl('byType', $event)" />
+            <ControlToggleGroup :model-value="controls.yAxis" :options="Y_AXIS_OPTIONS" @update:model-value="updateControl('yAxis', $event)" />
           </div>
-        </div>
+        </ControlSection>
 
-        <div class="rounded-lg bg-white px-3 py-2 flex flex-col gap-1.5">
-          <h4 class="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Scale</h4>
+        <ControlSection title="Scale">
           <ControlSwitch label="Log X" :model-value="controls.logX" @update:model-value="updateControl('logX', $event)" />
           <ControlSwitch label="Log Y" :model-value="controls.logY" @update:model-value="updateControl('logY', $event)" />
-        </div>
+        </ControlSection>
 
-        <div class="rounded-lg bg-white px-3 py-2 flex flex-col gap-1.5">
-          <h4 class="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Overlay</h4>
+        <ControlSection title="Overlay">
           <ControlBoolean label="Mean" :model-value="controls.showMean" @update:model-value="updateControl('showMean', $event)" />
           <ControlBoolean label="Median" :model-value="controls.showMedian" @update:model-value="updateControl('showMedian', $event)" />
           <ControlBoolean label="IQR" :model-value="controls.showIqr" @update:model-value="updateControl('showIqr', $event)" />
@@ -510,12 +494,9 @@ function renderChart() {
                 @click="toggleOverlayType(t)">{{ t }}</button>
             </div>
           </div>
-        </div>
+        </ControlSection>
 
-        <div class="rounded-lg bg-white px-3 py-2 flex flex-col gap-1.5">
-          <h4 class="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
-            Fit <span class="font-normal text-slate-400 normal-case tracking-normal">— best first</span>
-          </h4>
+        <ControlSection title="Fit — best first">
           <ControlBoolean
             v-for="s in fitSwitches" :key="s.name"
             :label="s.label"
@@ -532,7 +513,7 @@ function renderChart() {
                 @click="toggleFitType(t)">{{ t }}</button>
             </div>
           </div>
-        </div>
+        </ControlSection>
       </div>
     </Teleport>
 

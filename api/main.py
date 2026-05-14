@@ -177,6 +177,7 @@ graph_registry: Dict[str, str] = {}
 # does not change for a given graph_id.
 schema_cache: Dict[str, Any] = {}
 degree_fit_cache: Dict[str, Any] = {}
+components_cache: Dict[str, Any] = {}
 
 # Upload size limit: reject files above this threshold to avoid OOM/DoS.
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -228,6 +229,7 @@ async def upload_graph(file: UploadFile = File(...)):  # async kept: UploadFile.
         graph_registry[graph_id] = file_path
         schema_cache.pop(graph_id, None)
         degree_fit_cache.pop(graph_id, None)
+        components_cache.pop(graph_id, None)
 
         return JSONResponse(
             status_code=201,
@@ -277,6 +279,7 @@ def load_builtin_dataset(name: str):
     graph_registry[graph_id] = file_path
     schema_cache.pop(graph_id, None)
     degree_fit_cache.pop(graph_id, None)
+    components_cache.pop(graph_id, None)
 
     return JSONResponse(status_code=201, content={
         "graph_id": graph_id,
@@ -439,6 +442,28 @@ def get_degree_fit(graph_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error computing degree fit: {str(e)}")
+
+
+@app.get("/components/{graph_id}", summary="Connected components breakdown")
+def get_components(graph_id: str):
+    if graph_id not in graph_registry:
+        raise HTTPException(status_code=404, detail="Graph ID not found")
+
+    cached = components_cache.get(graph_id)
+    if cached is not None:
+        return JSONResponse(content=cached)
+
+    try:
+        from components import compute_components
+        with open(graph_registry[graph_id]) as f:
+            G = nx.node_link_graph(json.load(f))
+        result = compute_components(G)
+        components_cache[graph_id] = result
+        return JSONResponse(content=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing components: {str(e)}")
 
 
 @app.get("/health/", summary="Health check")

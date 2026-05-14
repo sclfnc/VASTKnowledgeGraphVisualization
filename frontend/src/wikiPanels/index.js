@@ -1,48 +1,28 @@
-// Panel registry for interactive D3 visualizations
-// Each panel: id, label, section, conditional, defaultActive, component, schema builder, controls schema
+// Panel registry for Guide-mode D3 visualizations.
+//
+// Each panel has a `status`:
+//   - 'implemented' — real component, fully wired
+//   - 'planned'     — slated for release, component to be built (currently uses stub)
+//   - 'stub'        — roadmap-only, NOT exported to the UI
+//
+// Stub specs are kept here as a roadmap reference but filtered out at export
+// time. Promoting a stub to planned = change one field, no need to uncomment.
 
 import DegreeDistribution from './DegreeDistribution.vue'
-import Reciprocity from './Reciprocity.vue'
-import EdgeWeight from './EdgeWeight.vue'
-import Assortativity from './Assortativity.vue'
-import DegreeCorrelation from './DegreeCorrelation.vue'
-import TypeMixing from './TypeMixing.vue'
-import TypeDistribution from './TypeDistribution.vue'
-import ErBaseline from './ErBaseline.vue'
-import WattsStrogatz from './WattsStrogatz.vue'
-import BarabasiAlbert from './BarabasiAlbert.vue'
-import ModelComparison from './ModelComparison.vue'
-import Centrality from './Centrality.vue'
-import CentralityComparison from './CentralityComparison.vue'
-import Modularity from './Modularity.vue'
-import LouvainLeiden from './LouvainLeiden.vue'
-import LabelPropagation from './LabelPropagation.vue'
-import SimilarityIndices from './SimilarityIndices.vue'
-import EgoNetwork from './EgoNetwork.vue'
-import TriadicClosure from './TriadicClosure.vue'
-import KCoreDecomposition from './KCoreDecomposition.vue'
-import Connectivity from './Connectivity.vue'
-import Density from './Density.vue'
-import ClusteringCoefficient from './ClusteringCoefficient.vue'
-import Paths from './Paths.vue'
-import RandomFailure from './RandomFailure.vue'
-import TargetedAttack from './TargetedAttack.vue'
-import Timeline from './Timeline.vue'
+import ConnectedComponents from './ConnectedComponents.vue'
+import NotImplementedStub from './NotImplementedStub.vue'
 
 const DEGREE_EXPLANATION = `P(k) is the probability that a randomly chosen node has degree k. In sparse real-world networks, degree distributions are often heavy-tailed: a few nodes (hubs) concentrate most connections while the majority have low degree. Compare the shape against a Poisson baseline (Erdős-Rényi) — a broad tail indicates structure that random wiring cannot explain.`
 
-export const PANEL_SPECS = [
-  // 1. Fundamentals (text-only, not in wikiPanels)
-  // { id: 'graph_repr',    label: 'Graph Representation',    section: 'Fundamentals',            conditional: false },
-  // { id: 'graph_types',   label: 'Graph Types',             section: 'Fundamentals',            conditional: false },
-
-  // 2. Descriptive Metrics
+const ALL_SPECS = [
+  // 1. Descriptive Metrics
   {
     id: 'degree',
     label: 'Degree Distribution',
     section: 'Descriptive Metrics',
     conditional: false,
     defaultActive: true,
+    status: 'implemented',
     explanation: DEGREE_EXPLANATION,
     component: DegreeDistribution,
     contextualizeExplanation: (schema, data) => {
@@ -59,7 +39,7 @@ export const PANEL_SPECS = [
       showMedian: { type: 'boolean', label: 'Median', default: false },
       showIqr: { type: 'boolean', label: 'IQR / ±1σ', default: false },
       showOutliers: { type: 'boolean', label: 'Outliers', default: true },
-    }
+    },
   },
 
   {
@@ -67,45 +47,39 @@ export const PANEL_SPECS = [
     label: 'Paths & Distances',
     section: 'Descriptive Metrics',
     conditional: false,
-    component: Paths,
-    contextualizeExplanation: (schema, data) => {
-      const diameter = data?.diameter || '-'
-      const avgPath = (data?.avg_shortest_path || 0).toFixed(2)
-      return `Shortest path distances in your graph. Diameter: ${diameter}, Average: ${avgPath} hops.`
-    },
-    controlsSchema: {
-      showDistribution: {
-        type: 'boolean',
-        label: 'Show Distribution',
-        default: true
-      },
-      maxDistance: {
-        type: 'number',
-        label: 'Max Distance',
-        min: 1,
-        max: 50,
-        default: 10
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
     id: 'connectivity',
-    label: 'Connectivity',
+    label: 'Connected Components',
     section: 'Descriptive Metrics',
     conditional: false,
-    component: Connectivity,
+    status: 'implemented',
+    component: ConnectedComponents,
+    explanation: `Connected components reveal whether the graph is one piece or many. The largest one (LCC) typically dominates real-world networks: if it covers most nodes, the graph is essentially connected. The number of components, their sizes, and how many nodes are isolated tell you how fragmented the structure is. For directed graphs, weakly connected components (WCC) ignore direction; strongly connected components (SCC) require a directed path both ways.`,
     contextualizeExplanation: (schema, data) => {
-      const wcc = data?.weakly_connected_components || 1
-      return `Connected component structure. Your graph has ${wcc} weakly connected components.`
+      const wcc = data?.wcc
+      if (!wcc) return ''
+      const lcc = wcc.lcc_size
+      const total = schema?.nodes ?? 0
+      const frac = total ? ((lcc / total) * 100).toFixed(1) : '?'
+      return `${wcc.count} weakly connected component${wcc.count > 1 ? 's' : ''}. LCC: ${lcc} of ${total} nodes (${frac}%). ${wcc.singletons} isolated.`
     },
     controlsSchema: {
-      highlightLcc: {
-        type: 'boolean',
-        label: 'Highlight LCC',
-        default: true
-      }
-    }
+      view: { type: 'select', label: 'View', options: ['bubbles', 'bars'], default: 'bubbles' },
+      mode: { type: 'select', label: 'Mode', options: ['wcc', 'scc'], default: 'wcc' },
+      labelMode: { type: 'select', label: 'Label', options: ['absolute', 'percentage'], default: 'absolute' },
+      hideSingletons: { type: 'boolean', label: 'Hide singletons', default: false },
+      logX: { type: 'switch', label: 'Log X', default: true },
+      filterMode: { type: 'select', label: 'Filter mode', options: ['range', 'rank'], default: 'range' },
+      sizeMin: { type: 'number', label: 'Min size', default: null },
+      sizeMax: { type: 'number', label: 'Max size', default: null },
+      rankTop: { type: 'number', label: 'Top N', default: null },
+      rankBottom: { type: 'number', label: 'Bottom N', default: null },
+    },
   },
 
   {
@@ -113,12 +87,9 @@ export const PANEL_SPECS = [
     label: 'Density',
     section: 'Descriptive Metrics',
     conditional: false,
-    component: Density,
-    contextualizeExplanation: (schema, data) => {
-      const dens = (data?.density || 0).toFixed(4)
-      return `Edge density (actual edges / possible edges). Your graph: ${dens}.`
-    },
-    controlsSchema: {}
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -126,18 +97,9 @@ export const PANEL_SPECS = [
     label: 'Clustering Coefficient',
     section: 'Descriptive Metrics',
     conditional: false,
-    component: ClusteringCoefficient,
-    contextualizeExplanation: (schema, data) => {
-      const global = (data?.global_clustering || 0).toFixed(3)
-      return `Proportion of closed triangles. Global clustering coefficient: ${global}.`
-    },
-    controlsSchema: {
-      byNodeType: {
-        type: 'boolean',
-        label: 'Break down by node type',
-        default: false
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -145,18 +107,9 @@ export const PANEL_SPECS = [
     label: 'Reciprocity',
     section: 'Descriptive Metrics',
     conditional: true,
-    component: Reciprocity,
-    contextualizeExplanation: (schema, data) => {
-      const recip = (data?.reciprocity || 0).toFixed(3)
-      return `Fraction of reciprocated edges in your directed graph: ${recip}.`
-    },
-    controlsSchema: {
-      showByEdgeType: {
-        type: 'boolean',
-        label: 'Show by edge type',
-        default: true
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -164,58 +117,40 @@ export const PANEL_SPECS = [
     label: 'Edge Weight',
     section: 'Descriptive Metrics',
     conditional: true,
-    component: EdgeWeight,
-    contextualizeExplanation: (schema, data) => {
-      const range = data?.weight_range || [0, 1]
-      return `Weight distribution. Range: [${range[0]}, ${range[1]}].`
-    },
-    controlsSchema: {
-      scale: {
-        type: 'select',
-        label: 'Scale',
-        options: ['linear', 'log', 'sqrt'],
-        default: 'linear'
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 3. Centrality
+  // 2. Centrality
   {
-    id: 'deg_eigen',
-    label: 'Degree & Eigenvector',
+    id: 'cent_pr_eigen',
+    label: 'PageRank & Eigenvector',
     section: 'Centrality',
     conditional: false,
-    component: Centrality,
-    contextualizeExplanation: (schema, data) => {
-      return `Comparison of degree centrality vs eigenvector centrality on your ${schema.nodes} nodes.`
-    },
-    controlsSchema: {
-      colorBy: {
-        type: 'select',
-        label: 'Color by',
-        options: ['degree', 'eigenvector', 'difference'],
-        default: 'degree'
-      }
-    }
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
-    id: 'between_close',
-    label: 'Betweenness & Closeness',
+    id: 'betweenness',
+    label: 'Betweenness',
     section: 'Centrality',
     conditional: false,
-    component: Centrality,
-    contextualizeExplanation: (schema, data) => {
-      return `Betweenness (how often a node lies on shortest paths) vs Closeness (avg distance to all others).`
-    },
-    controlsSchema: {
-      metric: {
-        type: 'select',
-        label: 'Metric',
-        options: ['betweenness', 'closeness', 'both'],
-        default: 'both'
-      }
-    }
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
+  },
+
+  {
+    id: 'closeness',
+    label: 'Closeness',
+    section: 'Centrality',
+    conditional: false,
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -223,51 +158,20 @@ export const PANEL_SPECS = [
     label: 'Centrality Comparison',
     section: 'Centrality',
     conditional: false,
-    component: CentralityComparison,
-    contextualizeExplanation: (schema, data) => {
-      return `Multi-dimensional centrality: degree, eigenvector, betweenness, closeness, PageRank.`
-    },
-    controlsSchema: {
-      displayMode: {
-        type: 'select',
-        label: 'View',
-        options: ['scatterplot-matrix', 'radar', 'heatmap'],
-        default: 'scatterplot-matrix'
-      },
-      topK: {
-        type: 'number',
-        label: 'Top-K nodes',
-        min: 5,
-        max: 100,
-        default: 20
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 4. Local Structure
+  // 3. Local Structure
   {
     id: 'ego',
     label: 'Ego Network',
     section: 'Local Structure',
     conditional: false,
-    component: EgoNetwork,
-    contextualizeExplanation: (schema, data) => {
-      return `Local neighborhood of a selected node (ego + alters + edges between them).`
-    },
-    controlsSchema: {
-      egoNode: {
-        type: 'text',
-        label: 'Ego node ID',
-        default: ''
-      },
-      hops: {
-        type: 'number',
-        label: 'Hops',
-        min: 1,
-        max: 3,
-        default: 1
-      }
-    }
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -275,17 +179,9 @@ export const PANEL_SPECS = [
     label: 'Triadic Closure',
     section: 'Local Structure',
     conditional: false,
-    component: TriadicClosure,
-    contextualizeExplanation: (schema, data) => {
-      return `Tendency for triangles to form (triadic closure). Indicates cohesion and trust in social networks.`
-    },
-    controlsSchema: {
-      byNodeType: {
-        type: 'boolean',
-        label: 'Breakdown by node type',
-        default: false
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -293,45 +189,20 @@ export const PANEL_SPECS = [
     label: 'k-Core Decomposition',
     section: 'Local Structure',
     conditional: false,
-    component: KCoreDecomposition,
-    contextualizeExplanation: (schema, data) => {
-      const maxK = data?.max_kcore || 0
-      return `Coreness values (max k: ${maxK}). Nodes in higher k-cores are more densely connected.`
-    },
-    controlsSchema: {
-      minK: {
-        type: 'number',
-        label: 'Min k',
-        min: 0,
-        max: 50,
-        default: 0
-      },
-      showDistribution: {
-        type: 'boolean',
-        label: 'Show distribution',
-        default: true
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 5. Mixing & Assortativity
+  // 4. Mixing & Assortativity
   {
     id: 'assort',
     label: 'Assortativity r',
     section: 'Mixing & Assortativity',
     conditional: false,
-    component: Assortativity,
-    contextualizeExplanation: (schema, data) => {
-      const r = (data?.assortativity || 0).toFixed(3)
-      return `Pearson correlation of degrees at edge endpoints: ${r}. Positive = assortative (hubs connect to hubs).`
-    },
-    controlsSchema: {
-      byNodeType: {
-        type: 'boolean',
-        label: 'Show by node type',
-        default: false
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -339,18 +210,9 @@ export const PANEL_SPECS = [
     label: 'Degree Correlation',
     section: 'Mixing & Assortativity',
     conditional: false,
-    component: DegreeCorrelation,
-    contextualizeExplanation: (schema, data) => {
-      return `Joint distribution of source and target degrees. Reveals mixing patterns.`
-    },
-    controlsSchema: {
-      scale: {
-        type: 'select',
-        label: 'Scale',
-        options: ['linear', 'log'],
-        default: 'linear'
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -358,45 +220,20 @@ export const PANEL_SPECS = [
     label: 'Type Mixing Matrix',
     section: 'Mixing & Assortativity',
     conditional: true,
-    component: TypeMixing,
-    contextualizeExplanation: (schema, data) => {
-      const nodeTypes = (schema.node_types || []).length
-      return `Edge counts between node types. ${nodeTypes} node types detected.`
-    },
-    controlsSchema: {
-      normalization: {
-        type: 'select',
-        label: 'Normalize',
-        options: ['raw', 'row', 'column', 'total'],
-        default: 'raw'
-      },
-      hideZeros: {
-        type: 'boolean',
-        label: 'Hide zeros',
-        default: false
-      }
-    }
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 6. Generative Models
+  // 5. Generative Models
   {
     id: 'er',
     label: 'ER Baseline',
     section: 'Generative Models',
     conditional: false,
-    component: ErBaseline,
-    contextualizeExplanation: (schema, data) => {
-      return `Erdős-Rényi random graph (same N, E). Baseline for comparing degree distribution.`
-    },
-    controlsSchema: {
-      samples: {
-        type: 'number',
-        label: 'Sample graphs',
-        min: 1,
-        max: 100,
-        default: 10
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -404,27 +241,9 @@ export const PANEL_SPECS = [
     label: 'Watts-Strogatz',
     section: 'Generative Models',
     conditional: false,
-    component: WattsStrogatz,
-    contextualizeExplanation: (schema, data) => {
-      return `Small-world model: regular lattice rewired randomly. Balances clustering and short paths.`
-    },
-    controlsSchema: {
-      k: {
-        type: 'number',
-        label: 'Neighborhood k',
-        min: 2,
-        max: 20,
-        default: 4
-      },
-      p: {
-        type: 'number',
-        label: 'Rewiring probability',
-        min: 0,
-        max: 1,
-        step: 0.1,
-        default: 0.3
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -432,19 +251,9 @@ export const PANEL_SPECS = [
     label: 'Barabási-Albert',
     section: 'Generative Models',
     conditional: false,
-    component: BarabasiAlbert,
-    contextualizeExplanation: (schema, data) => {
-      return `Preferential attachment model. Produces power-law degree distributions.`
-    },
-    controlsSchema: {
-      m: {
-        type: 'number',
-        label: 'Edges per node',
-        min: 1,
-        max: 20,
-        default: 2
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -452,39 +261,20 @@ export const PANEL_SPECS = [
     label: 'Model Comparison',
     section: 'Generative Models',
     conditional: false,
-    component: ModelComparison,
-    contextualizeExplanation: (schema, data) => {
-      return `Compare degree distributions: your graph vs ER, Watts-Strogatz, Barabási-Albert.`
-    },
-    controlsSchema: {
-      metric: {
-        type: 'select',
-        label: 'Metric',
-        options: ['degree', 'clustering', 'avg_path'],
-        default: 'degree'
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 7. Resilience
+  // 6. Resilience
   {
     id: 'random_fail',
     label: 'Random Failure',
     section: 'Resilience',
     conditional: false,
-    component: RandomFailure,
-    contextualizeExplanation: (schema, data) => {
-      return `Network resilience: LCC size vs fraction of randomly removed nodes.`
-    },
-    controlsSchema: {
-      steps: {
-        type: 'number',
-        label: 'Steps',
-        min: 5,
-        max: 50,
-        default: 20
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -492,94 +282,42 @@ export const PANEL_SPECS = [
     label: 'Targeted Attack',
     section: 'Resilience',
     conditional: false,
-    component: TargetedAttack,
-    contextualizeExplanation: (schema, data) => {
-      return `Targeted attack: LCC size vs removing highest-degree nodes first.`
-    },
-    controlsSchema: {
-      strategy: {
-        type: 'select',
-        label: 'Strategy',
-        options: ['degree', 'betweenness', 'closeness', 'eigenvector'],
-        default: 'degree'
-      },
-      steps: {
-        type: 'number',
-        label: 'Steps',
-        min: 5,
-        max: 50,
-        default: 20
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 8. Temporal Analysis
+  // 7. Temporal Analysis
   {
     id: 'timeline',
     label: 'Activity Timeline',
     section: 'Temporal Analysis',
     conditional: true,
-    component: Timeline,
-    contextualizeExplanation: (schema, data) => {
-      const dateRange = data?.date_range || ['?', '?']
-      return `Temporal evolution. Date range: ${dateRange[0]} — ${dateRange[1]}.`
-    },
-    controlsSchema: {
-      granularity: {
-        type: 'select',
-        label: 'Granularity',
-        options: ['day', 'week', 'month', 'year'],
-        default: 'month'
-      },
-      aggregation: {
-        type: 'select',
-        label: 'Aggregate by',
-        options: ['node_count', 'edge_count', 'component_count'],
-        default: 'edge_count'
-      }
-    }
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 9. Heterogeneous Structure
+  // 8. Heterogeneous Structure
   {
     id: 'type_dist',
     label: 'Type Distribution',
     section: 'Heterogeneous Structure',
     conditional: true,
-    component: TypeDistribution,
-    contextualizeExplanation: (schema, data) => {
-      const nodeTypes = (schema.node_types || []).length
-      const edgeTypes = (schema.edge_types || []).length
-      return `Node types: ${nodeTypes}, Edge types: ${edgeTypes}.`
-    },
-    controlsSchema: {
-      view: {
-        type: 'select',
-        label: 'View',
-        options: ['nodes', 'edges', 'both'],
-        default: 'both'
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 10. Community Detection
+  // 9. Community Detection
   {
     id: 'modularity',
     label: 'Modularity',
     section: 'Community Detection',
     conditional: false,
-    component: Modularity,
-    contextualizeExplanation: (schema, data) => {
-      return `Community structure quality metric (modularity Q). Ranges from -1 to 1.`
-    },
-    controlsSchema: {
-      algorithm: {
-        type: 'select',
-        label: 'Algorithm',
-        options: ['louvain', 'greedy'],
-        default: 'louvain'
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -587,27 +325,9 @@ export const PANEL_SPECS = [
     label: 'Louvain & Leiden',
     section: 'Community Detection',
     conditional: false,
-    component: LouvainLeiden,
-    contextualizeExplanation: (schema, data) => {
-      const numCommunities = data?.num_communities || '?'
-      return `Community detection. Found ${numCommunities} communities.`
-    },
-    controlsSchema: {
-      algorithm: {
-        type: 'select',
-        label: 'Algorithm',
-        options: ['louvain', 'leiden'],
-        default: 'louvain'
-      },
-      resolution: {
-        type: 'number',
-        label: 'Resolution',
-        min: 0.1,
-        max: 5,
-        step: 0.1,
-        default: 1
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
   {
@@ -615,47 +335,22 @@ export const PANEL_SPECS = [
     label: 'Label Propagation',
     section: 'Community Detection',
     conditional: false,
-    component: LabelPropagation,
-    contextualizeExplanation: (schema, data) => {
-      return `Label propagation: fast community detection via iterative label updates.`
-    },
-    controlsSchema: {
-      maxIterations: {
-        type: 'number',
-        label: 'Max iterations',
-        min: 5,
-        max: 100,
-        default: 30
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 
-  // 11. Link Prediction
+  // 10. Link Prediction
   {
     id: 'similarity',
     label: 'Similarity Indices',
     section: 'Link Prediction',
     conditional: false,
-    component: SimilarityIndices,
-    contextualizeExplanation: (schema, data) => {
-      return `Common neighbor, Jaccard, Adamic-Adar similarity indices for link prediction.`
-    },
-    controlsSchema: {
-      metric: {
-        type: 'select',
-        label: 'Metric',
-        options: ['common_neighbors', 'jaccard', 'adamic_adar', 'preferential_attachment'],
-        default: 'common_neighbors'
-      },
-      topK: {
-        type: 'number',
-        label: 'Top-K predictions',
-        min: 5,
-        max: 200,
-        default: 50
-      }
-    }
+    status: 'stub',
+    component: NotImplementedStub,
+    controlsSchema: {},
   },
 ]
 
+export const PANEL_SPECS = ALL_SPECS.filter(p => p.status !== 'stub')
 export const SECTIONS = [...new Set(PANEL_SPECS.map(p => p.section))]

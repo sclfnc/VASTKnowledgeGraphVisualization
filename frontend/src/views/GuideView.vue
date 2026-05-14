@@ -11,6 +11,7 @@ import { useSchema } from '../composables/useSchema.js'
 import { useFiltersStore } from '../stores/filters.js'
 import { storeToRefs } from 'pinia'
 import { useGraphStore } from '../stores/graph.js'
+import { useNodeTypeColors } from '../composables/useNodeTypeColors.js'
 import FiltersPanel from '../components/FiltersPanel.vue'
 import NumericFilter from '../components/NumericFilter.vue'
 import { Eye, EyeOff, RotateCw, X } from 'lucide-vue-next'
@@ -18,6 +19,15 @@ import { Eye, EyeOff, RotateCw, X } from 'lucide-vue-next'
 const { schema } = useSchema()
 const { graphId } = storeToRefs(useGraphStore())
 const filters = useFiltersStore()
+const { color: typeColor } = useNodeTypeColors(schema)
+
+// Style helper for node type chips: when selected, fill with the type color
+// at low opacity and use the same color for border + text.
+function nodeChipStyle(t, selected) {
+  if (!selected) return null
+  const c = typeColor(t)
+  return { backgroundColor: `${c}20`, borderColor: c, color: c }
+}
 
 const activeIds = useLocalStorage('guide_active_panels', PANEL_SPECS.filter(p => p.defaultActive).map(p => p.id))
 const panels = ref(PANEL_SPECS.map(p => ({ ...p, active: activeIds.value.includes(p.id) })))
@@ -77,13 +87,26 @@ function toggleControls(id) {
   if (controlsOpenId.value === id) {
     controlsOpenId.value = null
     drawerReady.value = false
-    // Keep widenedId set: the chart stays at col-span-2 until the user
-    // explicitly shrinks via the resize button.
   } else {
     controlsOpenId.value = id
-    widenedId.value = id
     nextTick(() => { drawerReady.value = true })
   }
+}
+
+// Panels can request widening (e.g. ConnectedComponents opens a side chart on
+// click). Drill-down lives inside the panel itself; here we only handle the
+// layout side-effect of making the card col-span-2.
+function requestWiden(id) {
+  widenedId.value = id
+  // Controls and drill-down compete for the adjacent column.
+  if (controlsOpenId.value === id) {
+    controlsOpenId.value = null
+    drawerReady.value = false
+  }
+}
+
+function requestShrink(id) {
+  if (widenedId.value === id) widenedId.value = null
 }
 </script>
 
@@ -149,8 +172,9 @@ function toggleControls(id) {
             v-for="t in schema.node_types" :key="t"
             class="rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors"
             :class="filters.nodeTypes.includes(t)
-              ? 'border-sky-500 bg-sky-50 text-sky-700'
+              ? ''
               : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'"
+            :style="nodeChipStyle(t, filters.nodeTypes.includes(t))"
             @click="toggleType(filters.nodeTypes, t)">
             {{ t }}
           </button>
@@ -239,6 +263,8 @@ function toggleControls(id) {
           @focus="focused = p"
           @toggle-expand="toggleExpand(p.id)"
           @toggle-controls="toggleControls(p.id)"
+          @request-widen="requestWiden(p.id)"
+          @request-shrink="requestShrink(p.id)"
         />
         <!-- drawer slot: sits in the column adjacent to the (col-span-2) card -->
         <div v-if="controlsOpenId === p.id" class="min-w-0 flex flex-col gap-2 pt-3">

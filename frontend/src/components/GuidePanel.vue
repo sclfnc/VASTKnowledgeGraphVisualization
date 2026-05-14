@@ -13,7 +13,7 @@ defineProps({
   drawerReady:  { type: Boolean, default: false },
 })
 
-defineEmits(['remove', 'focus', 'toggle-expand', 'toggle-controls'])
+defineEmits(['remove', 'focus', 'toggle-expand', 'toggle-controls', 'request-widen', 'request-shrink'])
 </script>
 
 <template>
@@ -62,8 +62,11 @@ defineEmits(['remove', 'focus', 'toggle-expand', 'toggle-controls'])
         :panelSpec="panelSpec"
         :schema="schema"
         :graphId="graphId"
+        :widened="widened"
         :showExplanation="false"
         :controlsTarget="drawerReady ? drawerId : null"
+        @request-widen="$emit('request-widen')"
+        @request-shrink="$emit('request-shrink')"
       />
     </div>
   </div>
