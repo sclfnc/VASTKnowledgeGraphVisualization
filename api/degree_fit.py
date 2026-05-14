@@ -1,18 +1,10 @@
 """
 Fitting theoretical distributions to empirical degree sequences.
 
-Strategy:
-- Use the `powerlaw` package (Alstott et al.) for power law, exponential
-  (Lambda parameter), and lognormal. The package implements the
-  Clauset-Shalizi-Newman 2009 framework correctly (discrete MLE, Hurwitz zeta
-  normalisation, k_min selection via KS minimisation) and exposes `.pdf()`,
-  `.ccdf()`, `.loglikelihood` on each fitted distribution.
-- Use scipy for Poisson (not natively in the powerlaw package).
-- All fitting work happens server-side. The backend pre-computes the
-  theoretical CCDF and PMF on a log-spaced k-grid and ships them to the
-  frontend ready to plot — no maths in JS.
-
-Goodness-of-fit: mean log-likelihood per point (`ll`). Higher = better.
+All four families are fitted on the full sequence (xmin=1) so the curves
+describe the same data the user sees and the per-point log-likelihoods are
+directly comparable across families. This trades the CSN tail-only purity
+for a single, honest "which shape best matches *these* data" answer.
 """
 import warnings
 import numpy as np
@@ -45,28 +37,25 @@ def _curves(dist, grid):
     return [float(p) for p in pdf], [float(c) for c in ccdf]
 
 
-def _fit_with_library(seq, k_max):
-    """Run powerlaw.Fit once; extract power_law / exponential / lognormal."""
+def _fit_with_library(seq):
+    """Run powerlaw.Fit on the full sequence (xmin=1)."""
     import powerlaw
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        fit = powerlaw.Fit(seq, discrete=True, verbose=False)
+        fit = powerlaw.Fit(seq, discrete=True, xmin=1, verbose=False)
     return fit
 
 
-def _fit_powerlaw(fit, k_max):
+def _fit_powerlaw(fit, k_max, n):
     try:
         pl = fit.power_law
-        gamma = float(pl.alpha)
-        k_min = int(pl.xmin)
-
-        grid = _log_grid(k_min, k_max)
+        grid = _log_grid(1, k_max)
         pmf, ccdf = _curves(pl, grid)
-        ll = _ll_per_point(float(pl.loglikelihood), int(fit.n_tail))
+        ll = _ll_per_point(float(pl.loglikelihood), n)
 
         return {
-            "gamma": round(gamma, 4),
-            "k_min": k_min,
+            "gamma": round(float(pl.alpha), 4),
+            "k_min": 1,
             "ll": ll,
             "grid": grid,
             "pmf": pmf,
@@ -76,19 +65,16 @@ def _fit_powerlaw(fit, k_max):
         return None
 
 
-def _fit_exponential(fit, k_max):
+def _fit_exponential(fit, k_max, n):
     try:
         ex = fit.exponential
-        lam = float(ex.Lambda)
-        k_min = int(fit.xmin)  # exponential is fitted on the same tail as power_law
-
-        grid = _log_grid(k_min, k_max)
+        grid = _log_grid(1, k_max)
         pmf, ccdf = _curves(ex, grid)
-        ll = _ll_per_point(float(ex.loglikelihood), int(fit.n_tail))
+        ll = _ll_per_point(float(ex.loglikelihood), n)
 
         return {
-            "lambda": round(lam, 6),
-            "k_min": k_min,
+            "lambda": round(float(ex.Lambda), 6),
+            "k_min": 1,
             "ll": ll,
             "grid": grid,
             "pmf": pmf,
@@ -98,21 +84,17 @@ def _fit_exponential(fit, k_max):
         return None
 
 
-def _fit_lognormal(fit, k_max):
+def _fit_lognormal(fit, k_max, n):
     try:
         ln = fit.lognormal
-        mu = float(ln.mu)
-        sigma = float(ln.sigma)
-        k_min = int(fit.xmin)
-
-        grid = _log_grid(k_min, k_max)
+        grid = _log_grid(1, k_max)
         pmf, ccdf = _curves(ln, grid)
-        ll = _ll_per_point(float(ln.loglikelihood), int(fit.n_tail))
+        ll = _ll_per_point(float(ln.loglikelihood), n)
 
         return {
-            "mu": round(mu, 4),
-            "sigma": round(sigma, 4),
-            "k_min": k_min,
+            "mu": round(float(ln.mu), 4),
+            "sigma": round(float(ln.sigma), 4),
+            "k_min": 1,
             "ll": ll,
             "grid": grid,
             "pmf": pmf,
@@ -152,15 +134,16 @@ def fit_degree_sequence(seq):
     if not seq or len(seq) < 5:
         return {"powerlaw": None, "exponential": None, "poisson": None, "lognormal": None}
     k_max = int(max(seq))
+    n = len(seq)
     try:
-        fit = _fit_with_library(seq, k_max)
+        fit = _fit_with_library(seq)
     except Exception:
         fit = None
 
     return {
-        "powerlaw":    _fit_powerlaw(fit, k_max) if fit else None,
-        "exponential": _fit_exponential(fit, k_max) if fit else None,
-        "lognormal":   _fit_lognormal(fit, k_max) if fit else None,
+        "powerlaw":    _fit_powerlaw(fit, k_max, n) if fit else None,
+        "exponential": _fit_exponential(fit, k_max, n) if fit else None,
+        "lognormal":   _fit_lognormal(fit, k_max, n) if fit else None,
         "poisson":     _fit_poisson(seq, k_max),
     }
 
