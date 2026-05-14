@@ -33,14 +33,14 @@ const DEGREE_EXPLANATION = `P(k) is the probability that a randomly chosen node 
 
 export const PANEL_SPECS = [
   // 1. Fundamentals (text-only, not in wikiPanels)
-  // { id: 'graph_repr',    label: 'Graph Representation',    section: '1. Fundamentals',            conditional: false },
-  // { id: 'graph_types',   label: 'Graph Types',             section: '1. Fundamentals',            conditional: false },
+  // { id: 'graph_repr',    label: 'Graph Representation',    section: 'Fundamentals',            conditional: false },
+  // { id: 'graph_types',   label: 'Graph Types',             section: 'Fundamentals',            conditional: false },
 
   // 2. Descriptive Metrics
   {
     id: 'degree',
     label: 'Degree Distribution',
-    section: '2. Descriptive Metrics',
+    section: 'Descriptive Metrics',
     conditional: false,
     defaultActive: true,
     explanation: DEGREE_EXPLANATION,
@@ -51,6 +51,7 @@ export const PANEL_SPECS = [
       return `Degree distribution of your ${nodeCount} nodes. Average degree: ${avgDegree}. ${DEGREE_EXPLANATION}`
     },
     controlsSchema: {
+      yAxis: { type: 'select', label: 'Y-axis', options: ['count', 'probability'], default: 'count' },
       logX: { type: 'switch', label: 'Log X', default: true },
       logY: { type: 'switch', label: 'Log Y', default: true },
       byType: { type: 'boolean', label: 'By type', default: false },
@@ -58,15 +59,13 @@ export const PANEL_SPECS = [
       showMedian: { type: 'boolean', label: 'Median', default: false },
       showIqr: { type: 'boolean', label: 'IQR / ±1σ', default: false },
       showOutliers: { type: 'boolean', label: 'Outliers', default: true },
-      showInliers: { type: 'boolean', label: 'Inliers', default: true },
-      colorOutliers: { type: 'boolean', label: 'Color outliers', default: false },
     }
   },
 
   {
     id: 'paths',
     label: 'Paths & Distances',
-    section: '2. Descriptive Metrics',
+    section: 'Descriptive Metrics',
     conditional: false,
     component: Paths,
     contextualizeExplanation: (schema, data) => {
@@ -93,7 +92,7 @@ export const PANEL_SPECS = [
   {
     id: 'connectivity',
     label: 'Connectivity',
-    section: '2. Descriptive Metrics',
+    section: 'Descriptive Metrics',
     conditional: false,
     component: Connectivity,
     contextualizeExplanation: (schema, data) => {
@@ -112,7 +111,7 @@ export const PANEL_SPECS = [
   {
     id: 'density',
     label: 'Density',
-    section: '2. Descriptive Metrics',
+    section: 'Descriptive Metrics',
     conditional: false,
     component: Density,
     contextualizeExplanation: (schema, data) => {
@@ -125,7 +124,7 @@ export const PANEL_SPECS = [
   {
     id: 'clustering',
     label: 'Clustering Coefficient',
-    section: '2. Descriptive Metrics',
+    section: 'Descriptive Metrics',
     conditional: false,
     component: ClusteringCoefficient,
     contextualizeExplanation: (schema, data) => {
@@ -144,7 +143,7 @@ export const PANEL_SPECS = [
   {
     id: 'reciprocity',
     label: 'Reciprocity',
-    section: '2. Descriptive Metrics',
+    section: 'Descriptive Metrics',
     conditional: true,
     component: Reciprocity,
     contextualizeExplanation: (schema, data) => {
@@ -163,7 +162,7 @@ export const PANEL_SPECS = [
   {
     id: 'edge_weight',
     label: 'Edge Weight',
-    section: '2. Descriptive Metrics',
+    section: 'Descriptive Metrics',
     conditional: true,
     component: EdgeWeight,
     contextualizeExplanation: (schema, data) => {
@@ -184,7 +183,7 @@ export const PANEL_SPECS = [
   {
     id: 'deg_eigen',
     label: 'Degree & Eigenvector',
-    section: '3. Centrality',
+    section: 'Centrality',
     conditional: false,
     component: Centrality,
     contextualizeExplanation: (schema, data) => {
@@ -203,7 +202,7 @@ export const PANEL_SPECS = [
   {
     id: 'between_close',
     label: 'Betweenness & Closeness',
-    section: '3. Centrality',
+    section: 'Centrality',
     conditional: false,
     component: Centrality,
     contextualizeExplanation: (schema, data) => {
@@ -222,7 +221,7 @@ export const PANEL_SPECS = [
   {
     id: 'cent_compare',
     label: 'Centrality Comparison',
-    section: '3. Centrality',
+    section: 'Centrality',
     conditional: false,
     component: CentralityComparison,
     contextualizeExplanation: (schema, data) => {
@@ -249,7 +248,7 @@ export const PANEL_SPECS = [
   {
     id: 'ego',
     label: 'Ego Network',
-    section: '4. Local Structure',
+    section: 'Local Structure',
     conditional: false,
     component: EgoNetwork,
     contextualizeExplanation: (schema, data) => {
@@ -274,7 +273,7 @@ export const PANEL_SPECS = [
   {
     id: 'triadic',
     label: 'Triadic Closure',
-    section: '4. Local Structure',
+    section: 'Local Structure',
     conditional: false,
     component: TriadicClosure,
     contextualizeExplanation: (schema, data) => {
@@ -292,7 +291,7 @@ export const PANEL_SPECS = [
   {
     id: 'kcore',
     label: 'k-Core Decomposition',
-    section: '4. Local Structure',
+    section: 'Local Structure',
     conditional: false,
     component: KCoreDecomposition,
     contextualizeExplanation: (schema, data) => {
@@ -319,7 +318,7 @@ export const PANEL_SPECS = [
   {
     id: 'assort',
     label: 'Assortativity r',
-    section: '5. Mixing & Assortativity',
+    section: 'Mixing & Assortativity',
     conditional: false,
     component: Assortativity,
     contextualizeExplanation: (schema, data) => {
@@ -338,7 +337,7 @@ export const PANEL_SPECS = [
   {
     id: 'deg_corr',
     label: 'Degree Correlation',
-    section: '5. Mixing & Assortativity',
+    section: 'Mixing & Assortativity',
     conditional: false,
     component: DegreeCorrelation,
     contextualizeExplanation: (schema, data) => {
@@ -357,7 +356,7 @@ export const PANEL_SPECS = [
   {
     id: 'type_mixing',
     label: 'Type Mixing Matrix',
-    section: '5. Mixing & Assortativity',
+    section: 'Mixing & Assortativity',
     conditional: true,
     component: TypeMixing,
     contextualizeExplanation: (schema, data) => {
@@ -383,7 +382,7 @@ export const PANEL_SPECS = [
   {
     id: 'er',
     label: 'ER Baseline',
-    section: '6. Generative Models',
+    section: 'Generative Models',
     conditional: false,
     component: ErBaseline,
     contextualizeExplanation: (schema, data) => {
@@ -403,7 +402,7 @@ export const PANEL_SPECS = [
   {
     id: 'ws',
     label: 'Watts-Strogatz',
-    section: '6. Generative Models',
+    section: 'Generative Models',
     conditional: false,
     component: WattsStrogatz,
     contextualizeExplanation: (schema, data) => {
@@ -431,7 +430,7 @@ export const PANEL_SPECS = [
   {
     id: 'ba',
     label: 'Barabási-Albert',
-    section: '6. Generative Models',
+    section: 'Generative Models',
     conditional: false,
     component: BarabasiAlbert,
     contextualizeExplanation: (schema, data) => {
@@ -451,7 +450,7 @@ export const PANEL_SPECS = [
   {
     id: 'model_compare',
     label: 'Model Comparison',
-    section: '6. Generative Models',
+    section: 'Generative Models',
     conditional: false,
     component: ModelComparison,
     contextualizeExplanation: (schema, data) => {
@@ -471,7 +470,7 @@ export const PANEL_SPECS = [
   {
     id: 'random_fail',
     label: 'Random Failure',
-    section: '7. Resilience',
+    section: 'Resilience',
     conditional: false,
     component: RandomFailure,
     contextualizeExplanation: (schema, data) => {
@@ -491,7 +490,7 @@ export const PANEL_SPECS = [
   {
     id: 'targeted',
     label: 'Targeted Attack',
-    section: '7. Resilience',
+    section: 'Resilience',
     conditional: false,
     component: TargetedAttack,
     contextualizeExplanation: (schema, data) => {
@@ -518,7 +517,7 @@ export const PANEL_SPECS = [
   {
     id: 'timeline',
     label: 'Activity Timeline',
-    section: '8. Temporal Analysis',
+    section: 'Temporal Analysis',
     conditional: true,
     component: Timeline,
     contextualizeExplanation: (schema, data) => {
@@ -545,7 +544,7 @@ export const PANEL_SPECS = [
   {
     id: 'type_dist',
     label: 'Type Distribution',
-    section: '9. Heterogeneous Structure',
+    section: 'Heterogeneous Structure',
     conditional: true,
     component: TypeDistribution,
     contextualizeExplanation: (schema, data) => {
@@ -567,7 +566,7 @@ export const PANEL_SPECS = [
   {
     id: 'modularity',
     label: 'Modularity',
-    section: '10. Community Detection',
+    section: 'Community Detection',
     conditional: false,
     component: Modularity,
     contextualizeExplanation: (schema, data) => {
@@ -586,7 +585,7 @@ export const PANEL_SPECS = [
   {
     id: 'louvain',
     label: 'Louvain & Leiden',
-    section: '10. Community Detection',
+    section: 'Community Detection',
     conditional: false,
     component: LouvainLeiden,
     contextualizeExplanation: (schema, data) => {
@@ -614,7 +613,7 @@ export const PANEL_SPECS = [
   {
     id: 'label_prop',
     label: 'Label Propagation',
-    section: '10. Community Detection',
+    section: 'Community Detection',
     conditional: false,
     component: LabelPropagation,
     contextualizeExplanation: (schema, data) => {
@@ -635,7 +634,7 @@ export const PANEL_SPECS = [
   {
     id: 'similarity',
     label: 'Similarity Indices',
-    section: '11. Link Prediction',
+    section: 'Link Prediction',
     conditional: false,
     component: SimilarityIndices,
     contextualizeExplanation: (schema, data) => {
