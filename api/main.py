@@ -176,6 +176,7 @@ graph_registry: Dict[str, str] = {}
 # compute_schema is non-trivial on large graphs (MC1: ~37k edges) and the schema
 # does not change for a given graph_id.
 schema_cache: Dict[str, Any] = {}
+degree_fit_cache: Dict[str, Any] = {}
 
 # Upload size limit: reject files above this threshold to avoid OOM/DoS.
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -223,9 +224,10 @@ async def upload_graph(file: UploadFile = File(...)):  # async kept: UploadFile.
         with open(file_path, 'wb') as f:
             f.write(contents)
 
-        # Register the graph and invalidate any stale schema cache for this id
+        # Register the graph and invalidate any stale caches for this id
         graph_registry[graph_id] = file_path
         schema_cache.pop(graph_id, None)
+        degree_fit_cache.pop(graph_id, None)
 
         return JSONResponse(
             status_code=201,
@@ -274,6 +276,7 @@ def load_builtin_dataset(name: str):
 
     graph_registry[graph_id] = file_path
     schema_cache.pop(graph_id, None)
+    degree_fit_cache.pop(graph_id, None)
 
     return JSONResponse(status_code=201, content={
         "graph_id": graph_id,
@@ -414,6 +417,28 @@ def get_metrics(graph_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error computing metrics: {str(e)}")
+
+
+@app.get("/degree-fit/{graph_id}", summary="Fit degree distribution to theoretical models")
+def get_degree_fit(graph_id: str):
+    if graph_id not in graph_registry:
+        raise HTTPException(status_code=404, detail="Graph ID not found")
+
+    cached = degree_fit_cache.get(graph_id)
+    if cached is not None:
+        return JSONResponse(content=cached)
+
+    try:
+        from degree_fit import compute_degree_fit
+        with open(graph_registry[graph_id]) as f:
+            G = nx.node_link_graph(json.load(f))
+        result = compute_degree_fit(G)
+        degree_fit_cache[graph_id] = result
+        return JSONResponse(content=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing degree fit: {str(e)}")
 
 
 @app.get("/health/", summary="Health check")
