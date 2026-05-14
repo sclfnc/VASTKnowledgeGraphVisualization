@@ -39,8 +39,8 @@ async function switchDataset(name) {
 
 <template>
   <div class="min-h-screen bg-slate-100">
-    <header class="sticky top-0 z-10 bg-slate-100/80 px-4 py-1.5 backdrop-blur md:px-6">
-      <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+    <header class="sticky top-0 z-10 bg-slate-100/80 py-1.5 backdrop-blur">
+      <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 md:px-6">
         <div class="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-slate-800" title="Telescope — Zoom into your graph">
           <Telescope :size="16" :stroke-width="2" />
           <span>Telescope</span>
@@ -92,15 +92,15 @@ async function switchDataset(name) {
             </div>
           </div>
 
-          <!-- EXTENSION: mode toggle — Graph/Guide as two pill buttons -->
-          <div v-if="graphStore.graphId" class="ml-1 flex items-center gap-2">
+          <!-- EXTENSION: mode toggle — Graph/Guide segmented inside one pill -->
+          <div v-if="graphStore.graphId" class="ml-1 inline-flex items-center rounded-full bg-violet-100/70 p-0.5">
             <button
               v-for="m in modes"
               :key="m.key"
-              class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition"
+              class="inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-sm transition"
               :class="graphStore.mode === m.key
-                ? 'border-violet-500 bg-violet-50 text-violet-700'
-                : 'border-violet-200 bg-white text-violet-600 hover:border-violet-500 hover:bg-violet-50'"
+                ? 'bg-violet-600 text-white shadow-sm'
+                : 'text-violet-700 hover:text-violet-900'"
               @click="graphStore.setMode(m.key)"
             >
               <component :is="m.icon" :size="14" />
@@ -111,7 +111,7 @@ async function switchDataset(name) {
       </div>
     </header>
 
-    <main class="mx-auto w-full max-w-7xl p-4 md:p-6">
+    <main class="mx-auto w-full max-w-7xl px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-2">
       <RouterView />
     </main>
 

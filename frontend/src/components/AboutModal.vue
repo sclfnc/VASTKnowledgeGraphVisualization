@@ -44,8 +44,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <div class="mb-5">
           <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Stack</p>
           <ul class="space-y-1 text-sm text-slate-600">
-            <li><span class="text-slate-400">Frontend:</span> Vue 3 · Vite · Pinia · Tailwind CSS · D3 <span class="text-slate-400">(still missing)</span></li>
-            <li><span class="text-slate-400">Backend:</span> FastAPI · NetworkX</li>
+            <li><span class="text-slate-400">Frontend:</span> Vue 3 · Vite · Pinia · Tailwind CSS · D3 · Lucide · @vueform/slider</li>
+            <li><span class="text-slate-400">Backend:</span> FastAPI · NetworkX · powerlaw (CSN fits)</li>
             <li><span class="text-slate-400">Analysis:</span> NetworkX · NetworKit · pandas · Jupyter</li>
           </ul>
         </div>
@@ -79,9 +79,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <div class="mb-5">
           <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Progress so far</p>
           <p class="text-sm leading-relaxed text-slate-600">
-            Onboarding flow with built-in datasets and JSON upload, schema inspection,
-            dynamic filters (types, degree, weight, attributes), didactic Guide view with
-            a panel registry, focus modal with theory drawer.
+            Onboarding with built-in datasets and JSON upload, schema-driven filter bar
+            (types, degree, weight, attributes, N-hop), and a Guide view with a panel
+            registry tracking three states (implemented, planned, stub). Two D3 panels
+            live: <span class="font-medium text-slate-700">Degree Distribution</span>
+            (PMF / CCDF, by-type breakdown, power-law / log-normal / Poisson / exponential
+            fits via the <span class="italic">powerlaw</span> package, IQR-based outlier
+            highlight) and <span class="font-medium text-slate-700">Connected Components</span>
+            (bubbles or bars view, WCC / SCC modes, range and rank filters, click-to-drill
+            into a side-by-side breakdown by node type). Six more planned panels share
+            extracted primitives (drawer sections, pill toggles, D3 lifecycle composable)
+            and a unified node-type color mapping across chips and charts.
           </p>
         </div>
 
@@ -99,20 +107,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </ul>
         </div>
 
-        <div class="mb-5">
-          <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Desiderata</p>
-          <p class="text-sm leading-relaxed text-slate-600">
-            A <span class="font-medium text-slate-700">didactic graph view</span>: a small live subgraph extracted from
-            the loaded dataset that visually demonstrates each concept as you read about it
-            (highlight a hub for <span class="italic">degree centrality</span>, colour a triangle for
-            <span class="italic">triadic closure</span>, etc.). Same graph, different lenses — the wiki teaches graph
-            theory <span class="italic">through</span> the user's own data instead of with toy examples.
-          </p>
-        </div>
-
         <div class="flex items-center justify-between">
           <p class="text-xs italic text-slate-400">Work in progress — prototype.</p>
-          <p class="text-xs text-slate-400">v0.3.0 · 2026-05-07</p>
+          <p class="text-xs text-slate-400">v0.4.0 · 2026-05-14</p>
         </div>
       </div>
     </div>
