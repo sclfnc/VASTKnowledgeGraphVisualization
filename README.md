@@ -7,7 +7,7 @@ A visual analytics prototype for structured exploration of knowledge graphs.
 
 Developed for an academic project on visual analytics for knowledge graphs (Course on Visual Analytics, VAST Challenge 2025 — Design Challenge).
 
-**Status:** v0.4.0 — work in progress, less than a prototype.
+**Status:** v0.4.1 — work in progress, less than a prototype.
 **Branch:** `api-integration`
 **Current focus:** the entire effort is on **Guide mode**. Graph mode is intentionally a placeholder for now.
 
@@ -26,14 +26,22 @@ The same wiki serves both: the data scientist reads the chart, the non-expert re
 
 ## What it does today
 
-Telescope organises a panel registry around three states:
+Telescope organises a panel registry. Currently implemented:
 
-| Status      | Panel                                                                 |
-| ----------- | --------------------------------------------------------------------- |
-| Implemented | **Degree Distribution** — PMF / CCDF, by-type breakdown, four theoretical fits (power-law, exponential, log-normal, Poisson) via the `powerlaw` package, IQR-based outlier highlight |
-| Implemented | **Connected Components** — bubbles or bars view, WCC / SCC modes, range and rank filters, click-to-drill into a side-by-side breakdown by node type |
-| Planned     | PageRank & Eigenvector, Betweenness, Closeness, Ego Network, Type Mixing Matrix, Activity Timeline |
-| Stub        | ~20 spec entries kept in the registry as a roadmap reference but filtered from the UI |
+| Section | Panel | Notes |
+|---|---|---|
+| Descriptive | **Degree Distribution** | PMF / CCDF, by-type breakdown, four theoretical fits (power-law, exponential, log-normal, Poisson) via the `powerlaw` package, IQR-based outlier highlight |
+| Descriptive | **Connected Components** | bubbles or bars view, WCC / SCC modes, range and rank filters, click-to-drill side-by-side breakdown by node type |
+| Descriptive | **Node / Edge Attribute Schema** | per-type attribute coverage matrix or attribute-first view, shared-attr highlight, coverage threshold filter |
+| Centrality | **PageRank · Eigenvector · Betweenness · Closeness** | parametric `CentralityPanel` (rank-mass bars, decay-from-core boxplots, Lorenz + Gini, per-type violins, generic Deg-vs-Centrality scatter) |
+| Centrality | **Centrality Comparison** | 4×4 scatter matrix: mini-scatters in the lower triangle, correlation heat-cells in the upper |
+| Ego | **Ego Network** | k-hop subgraph around a selected node, direction Out/In/Both on directed graphs, breadcrumb navigation |
+| Ego | **Ego Comparison** | multi-ego (up to 4) union/intersection view with pie-wedge node encoding |
+| Mixing | **Type Mixing Matrix** | type × type heatmap, Newman assortativity, per-edge-type r bars on widen |
+| Mixing | **Edge Flow** | radial meta-graph: types on a circle, edge flows as colored arcs |
+| Temporal | **Activity Timeline** | stacked-by-type bars over years, brush writes a global temporal filter |
+
+Stub entries (~20) live in `ALL_SPECS` as roadmap reference, filtered from the UI via `PANEL_SPECS = ALL_SPECS.filter(p => p.status !== 'stub')`.
 
 Each panel renders a chart in the grid and exposes a theory drawer inside the focus modal — the drawer is meant for non-experts who want to understand the metric, the in-grid chart is for the data scientist scanning for signal.
 
@@ -80,7 +88,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-The API exposes `POST /upload/`, `GET /datasets/`, `POST /datasets/load/{name}`, `GET /schema/{graph_id}`, `GET /metrics/{graph_id}` (legacy, used by `DegreeDistribution`), `GET /degree-fit/{graph_id}` (powerlaw fits), `GET /components/{graph_id}` (WCC/SCC breakdown), and `GET /health/`. Registry and result caches are in-memory.
+The API exposes dataset endpoints (`POST /upload/`, `GET /datasets/`, `POST /datasets/load/{name}`), schema (`GET /schema/{graph_id}`), per-panel data endpoints (`/metrics/`, `/degree-fit/`, `/components/`, `/nodes/`, `/ego/`, `/type-mixing/`, `/edge-flow/`, `/timeline/`), centrality with async precompute pipeline (`/centrality-status/`, `/centrality/spectral/`, `/centrality/betweenness/`, `/centrality/closeness/`), and `GET /health/`. Registry and result caches are in-memory — restarting the server clears them. See `CLAUDE.md` for full endpoint contracts.
 
 ### Frontend
 
@@ -113,14 +121,9 @@ These are normalized at load time to expose `Node Type` / `Edge Type` keys (Mr. 
 
 ## Coming next
 
-The six planned panels cover the main backend interaction patterns we want to demonstrate:
+The current focus is the **filter & selection propagation refactor** (see `PROPAGATION.md` at repo root): wire all 10 panels to a global filter contract via a Uint32-packed bitset (`useFilteredModel` → `usePanelContext`), introduce per-panel Pin (lens-on-subset) and Isolation (full freeze), and surface a filter history with undo/redo arrows in `GraphContextBar`. Mask-only semantics: filters attenuate marks, never recompute metrics.
 
-- **PageRank & Eigenvector** — centrality for propagation importance
-- **Betweenness** — structural bridges and bottlenecks
-- **Closeness** — average reachability
-- **Ego Network** — interactive local neighbourhood around a selected node
-- **Type Mixing Matrix** — heterogeneity: edge counts between node types, surfacing semantic anomalies
-- **Activity Timeline** — temporal evolution for graphs that expose date attributes
+After the propagation layer, the next batch of panels (stub → planned → implemented) covers triadic closure, k-core decomposition, assortativity, degree correlation, and community detection (Louvain / Label Propagation).
 
 ---
 
