@@ -1,8 +1,13 @@
 <script setup>
-// EXTENSION: flat card panel with focus modal, theory drawer, and resize buttons
-import { Maximize2, Minimize2, Trash2, SlidersHorizontal, BookOpen } from 'lucide-vue-next'
+import { computed } from 'vue'
+import { Maximize2, Minimize2, Trash2, BookOpen, SlidersHorizontal, Pin, PinOff, Lock, Unlock } from 'lucide-vue-next'
+import { usePinsStore } from '../stores/pins.js'
+import { useSelectionStore } from '../stores/selection.js'
+import { useIsolationStore } from '../stores/isolation.js'
+import { useFiltersStore } from '../stores/filters.js'
+import { usePanelContextFromProps } from '../composables/usePanelContext.js'
 
-defineProps({
+const props = defineProps({
   panelSpec:    { type: Object, required: true },
   schema:       { type: Object, required: true },
   graphId:      { type: String, required: true },
@@ -14,40 +19,114 @@ defineProps({
 })
 
 defineEmits(['remove', 'focus', 'toggle-expand', 'toggle-controls', 'request-widen', 'request-shrink'])
+
+// Panels that don't carry per-node marks (or are already driven by selection)
+// hide the Pin affordance entirely. Updating this set is the single place
+// where the contract on "which panels are pinnable" is declared.
+const PIN_HIDDEN_IDS = new Set(['ego', 'ego_compare', 'node_attrs', 'edge_attrs', 'timeline'])
+
+const pins = usePinsStore()
+const selection = useSelectionStore()
+const isolation = useIsolationStore()
+const filters = useFiltersStore()
+const { activeNodeMask, selectedMask } = usePanelContextFromProps(props)
+
+const showPin = computed(() => !PIN_HIDDEN_IDS.has(props.panelSpec.id))
+const isPinned = computed(() => pins.isPinned(props.panelSpec.id))
+const canPin = computed(() => isPinned.value || selection.ids.length > 0)
+const isIsolated = computed(() => isolation.isFrozen(props.panelSpec.id))
+
+function togglePin() {
+  const panelId = props.panelSpec.id
+  if (pins.isPinned(panelId)) {
+    pins.unpin(panelId)
+    return
+  }
+  const mask = selectedMask.value
+  if (!mask) return
+  pins.pin(panelId, mask)
+  selection.clear()
+}
+
+// Lock = full freeze. Deep-clone every live signal the panel currently reads
+// so post-Lock mutations to filters/selection/pin/masks don't leak through.
+// Filters use $state cloned via JSON; Bitsets via .clone(); selection.ids
+// copied as a plain array; pin is captured from the pins store.
+function toggleLock() {
+  const panelId = props.panelSpec.id
+  if (isolation.isFrozen(panelId)) {
+    isolation.unfreeze(panelId)
+    return
+  }
+  const mask = activeNodeMask.value
+  if (!mask) return
+  const pin = pins.maskFor(panelId)
+  const snapshot = {
+    filters: JSON.parse(JSON.stringify(filters.$state)),
+    selection: [...selection.ids],
+    activeNodeMask: mask.clone(),
+    pin: pin ? pin.clone() : null,
+  }
+  isolation.freeze(panelId, snapshot)
+}
 </script>
 
 <template>
   <div
-    class="group flex flex-col rounded-xl bg-white"
-    :class="expanded ? 'col-span-2 row-span-2' : (widened ? 'col-span-2' : '')"
+    class="card-elev group flex flex-col rounded-2xl relative"
+    :class="[
+      expanded ? 'col-span-2 row-span-2' : (widened ? 'col-span-2' : ''),
+      isIsolated ? 'ring-2 ring-amber-400' : '',
+    ]"
   >
-    <!-- header -->
-    <div class="flex items-center justify-between px-4 pt-3 pb-1">
-      <p class="text-sm font-bold leading-6 text-slate-800">{{ panelSpec.label }}</p>
-      <div class="flex items-center gap-1.5">
+    <div
+      v-if="isIsolated"
+      class="pointer-events-none absolute -top-2 -left-2 rounded-full bg-amber-400 p-1 shadow-sm"
+      title="Panel is locked"
+    >
+      <Lock :size="10" class="text-white" />
+    </div>
+    <div class="flex items-center justify-between p-1">
+      <p class="pl-3 text-base font-bold leading-6 text-primary">{{ panelSpec.label }}</p>
+      <div class="segmented-track inline-flex items-center">
         <button
-          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border p-0 leading-none transition-colors"
-          :class="controlsOpen
-            ? 'border-sky-500 bg-sky-100 text-sky-700'
-            : 'border-sky-200 bg-white text-sky-600 hover:border-sky-500 hover:bg-sky-50'"
+          class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center"
+          :class="{ 'segmented-pill--active': controlsOpen }"
           title="Controls"
           @click="$emit('toggle-controls')">
           <SlidersHorizontal :size="14" />
         </button>
         <button
-          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-white p-0 leading-none text-violet-600 transition-colors hover:border-violet-500 hover:bg-violet-50"
+          v-if="showPin"
+          class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-40"
+          :class="{ 'segmented-pill--active': isPinned }"
+          :disabled="!canPin"
+          :title="isPinned ? 'Unpin (release subset)' : 'Pin selection as subset for this panel'"
+          @click="togglePin">
+          <component :is="isPinned ? PinOff : Pin" :size="14" />
+        </button>
+        <button
+          class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center"
+          :class="{ 'segmented-pill--active': isIsolated }"
+          :title="isIsolated ? 'Unlock (resume live updates)' : 'Lock (freeze current state)'"
+          @click="toggleLock">
+          <component :is="isIsolated ? Unlock : Lock" :size="14" />
+        </button>
+        <button
+          class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center"
+          :class="{ 'segmented-pill--active': expanded || widened }"
           :title="(expanded || widened) ? 'Shrink' : 'Enlarge'"
           @click="$emit('toggle-expand')">
           <component :is="(expanded || widened) ? Minimize2 : Maximize2" :size="14" />
         </button>
         <button
-          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-white p-0 leading-none text-emerald-600 transition-colors hover:border-emerald-500 hover:bg-emerald-50"
+          class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center"
           title="Open detail"
           @click="$emit('focus')">
           <BookOpen :size="14" />
         </button>
         <button
-          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-red-200 bg-white p-0 leading-none text-red-500 transition-colors hover:border-red-500 hover:bg-red-50"
+          class="segmented-pill segmented-pill--danger inline-flex h-6 w-6 shrink-0 items-center justify-center"
           title="Remove"
           @click="$emit('remove')">
           <Trash2 :size="14" />
@@ -55,24 +134,25 @@ defineEmits(['remove', 'focus', 'toggle-expand', 'toggle-controls', 'request-wid
       </div>
     </div>
 
-    <!-- body: chart fills the card (which is col-span-2 when controls open) -->
-    <div class="min-h-0 flex-1 px-1 pt-4 pb-2">
+    <!-- Collapsible settings strip, embedded inside the card just above the chart.
+         Renders only when controls open; Teleport target lives inside so the panel
+         component can inject its controls here without leaving the card. -->
+    <div v-if="controlsOpen" class="mx-4 mb-3 mt-2">
+      <div :id="drawerId" />
+    </div>
+
+    <div class="min-h-0 flex-1 p-1">
       <component
         :is="panelSpec.component"
-        :panelSpec="panelSpec"
+        v-bind="panelSpec.componentProps || {}"
+        :panel-spec="panelSpec"
         :schema="schema"
-        :graphId="graphId"
+        :graph-id="graphId"
         :widened="widened"
-        :showExplanation="false"
-        :controlsTarget="drawerReady ? drawerId : null"
+        :controls-target="drawerReady ? drawerId : null"
         @request-widen="$emit('request-widen')"
         @request-shrink="$emit('request-shrink')"
       />
     </div>
   </div>
 </template>
-
-<style scoped>
-.drawer-enter-active, .drawer-leave-active { transition: opacity 0.15s ease; }
-.drawer-enter-from, .drawer-leave-to { opacity: 0; }
-</style>
