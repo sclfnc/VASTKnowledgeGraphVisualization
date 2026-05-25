@@ -1,5 +1,35 @@
 @import 'tailwindcss';
 
+/* ──────────────────────────────────────────────────────────────────
+   Design tokens — single source of truth for surfaces and text.
+   Change a value here and it propagates to every consumer through
+   the `.surface-*` / `.text-*` utilities below.
+
+   Surfaces: 2 levels (raised over recessed).
+   Text:     3 levels (primary > secondary > muted).
+   Icons:    use `currentColor` — inherit from their text container.
+   ────────────────────────────────────────────────────────────────── */
+:root {
+  /* Light scope — page background, cards, charts, headers */
+  --elev-light:   rgb(255 255 255);  /* cards, header, chart */
+  --surface-recessed: rgb(241 245 249); /* slate-100 — page, slot/track wells */
+
+  --text-primary:   rgb(15 23 42);    /* slate-900 — titles, body */
+  --text-secondary: rgb(100 116 139); /* slate-500 — captions, labels */
+  --text-muted:     rgb(148 163 184); /* slate-400 — placeholders, hints */
+
+  /* Dark scope — currently only the Guide sidebar.
+     Mirrors the light scope: 2 surfaces + 3 text levels + a border token. */
+  --surface-dark-raised:   rgb(38 38 38);   /* neutral-800 — sidebar body */
+  --surface-dark-recessed: rgb(23 23 23);   /* neutral-900 — sunken slots (search input, inactive pill track) */
+  --surface-dark-elevated: rgb(82 82 82);   /* neutral-600 — active pill, popping above raised */
+  --border-dark:           rgb(64 64 64);   /* neutral-700 — dividers, input borders */
+
+  --text-on-dark-primary:   rgb(245 245 245); /* neutral-100 — titles, body */
+  --text-on-dark-secondary: rgb(212 212 212); /* neutral-300 — captions, taglines */
+  --text-on-dark-muted:     rgb(115 115 115); /* neutral-500 — disabled, stub */
+}
+
 @layer base {
   html,
   body,
@@ -8,11 +38,197 @@
   }
 
   body {
-    @apply m-0 bg-slate-50 text-slate-900 antialiased;
+    margin: 0;
+    background: var(--surface-recessed);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
   }
 }
 
+/* ── Semantic surface/text utilities ────────────────────────────
+   Defined via @utility (Tailwind v4 native) so hover/focus/responsive
+   variants are auto-generated and tree-shaking works correctly.
+   Prefer these over raw bg-*/text-* in component code. */
+@utility elev-light       { background-color: #ffffff; color: inherit; }
+@utility surface-recessed { background-color: var(--surface-recessed); }
+@utility text-primary   { color: var(--text-primary); }
+@utility text-secondary { color: var(--text-secondary); }
+@utility text-muted     { color: var(--text-muted); }
+
+/* Dark scope — parallel utilities for the Guide sidebar.
+   No theme switching: the light utilities above stay untouched. */
+@utility surface-dark-raised   { background-color: var(--surface-dark-raised); }
+@utility surface-dark-recessed { background-color: var(--surface-dark-recessed); }
+@utility surface-dark-elevated { background-color: var(--surface-dark-elevated); }
+@utility border-dark           { border-color: var(--border-dark); }
+@utility text-on-dark-primary   { color: var(--text-on-dark-primary); }
+@utility text-on-dark-secondary { color: var(--text-on-dark-secondary); }
+@utility text-on-dark-muted     { color: var(--text-on-dark-muted); }
+
 @layer utilities {
+
+  /* Card elevation: color-led, fully flat. Separation comes from the
+     white fill against the slate-100 page background — no border, no shadow.
+     Works only when --surface-recessed is dark enough to read distinct
+     from --elev-light without an outline. */
+  .card-elev {
+    background: var(--elev-light);
+  }
+  /* Pill elevation: same vocabulary as card, slightly more contrast on the
+     border so the small surface reads as anchored against the header.
+     Hover thickens the border instead of pumping the shadow. */
+  .pill-elev {
+    border: 1px solid rgb(226 232 240 / 0.9);
+    background: var(--elev-light);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: border-color 150ms;
+  }
+  .pill-elev:hover {
+    border-color: rgb(203 213 225); /* slate-300 */
+  }
+  /* Chart elevation: the chart surface sits naked inside the card. No border,
+     no shadow — the parent .card-elev already provides the edge. Keeping a
+     radius preserves the rounded crop on overflowing marks. */
+  .chart-elev {
+    border-radius: 0.75rem; /* matches rounded-xl */
+    background: var(--elev-light);
+  }
+  /* Header drop: raised surface + bottom border. No vertical shadow —
+     the border already separates the sticky chrome from the page. */
+  .header-elev {
+    background: var(--elev-light);
+    border-bottom: 1px solid rgb(226 232 240); /* slate-200 — slightly stronger than card border */
+  }
+  /* Inset depth: soft hollow used on resting slots — like a tray waiting to be
+     filled. Light comes from above so the top edge is slightly darker.
+     A thin slate-200 border (matches card-elev) frames the well. */
+  .card-inset {
+    border: 1px solid rgb(226 232 240 / 0.9); /* slate-200 @ 90% */
+    box-shadow:
+      inset 0 1px 2px rgba(15, 23, 42, 0.035),
+      inset 0 1px 1px rgba(15, 23, 42, 0.02);
+  }
+
+  /* Segmented control vocabulary. Pair these classes with `inline-flex`
+     (or `flex`) on the track and use the active modifier on the selected pill.
+       <div class="segmented-track inline-flex items-center">
+         <button class="segmented-pill">…</button>
+         <button class="segmented-pill segmented-pill--active">…</button>
+       </div> */
+  .segmented-track {
+    border: 1px solid rgb(226 232 240 / 0.9);
+    background: var(--surface-recessed);
+    border-radius: 9999px;
+    padding: 2px;
+  }
+  .segmented-pill {
+    border-radius: 9999px;
+    color: var(--text-secondary);
+    transition: background-color 150ms, color 150ms, box-shadow 150ms;
+  }
+  .segmented-pill:hover {
+    background: var(--elev-light);
+    color: var(--text-primary);
+  }
+  .segmented-pill--active,
+  .segmented-pill--active:hover {
+    background: var(--elev-light);
+    color: var(--text-primary);
+    box-shadow: inset 0 0 0 1px rgb(226 232 240); /* slate-200 — outlines the active pill */
+  }
+  .segmented-pill--danger:hover {
+    color: rgb(239 68 68); /* red-500 — destructive accent, not in token set */
+  }
+  .segmented-pill--disabled,
+  .segmented-pill--disabled:hover {
+    background: transparent;
+    color: rgb(203 213 225); /* slate-300 — between muted and disabled */
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  /* Dark variants of the segmented control — used inside the Guide sidebar
+     so Dataset/Mode/About pills read on the dark surface. */
+  .segmented-track--dark {
+    border-color: var(--border-dark);
+    background: var(--surface-dark-recessed);
+  }
+  .segmented-track--dark .segmented-pill {
+    color: var(--text-on-dark-secondary);
+  }
+  .segmented-track--dark .segmented-pill:hover {
+    background: var(--surface-dark-raised);
+    color: var(--text-on-dark-primary);
+  }
+  .segmented-track--dark .segmented-pill--active,
+  .segmented-track--dark .segmented-pill--active:hover {
+    background: var(--surface-dark-elevated);
+    color: var(--text-on-dark-primary);
+    box-shadow: inset 0 0 0 1px var(--border-dark);
+  }
+
+  /* Selectable chip used to toggle membership in a set (e.g. node/edge types,
+     overlay "show for" filters). Active = filled slate-900. Use `--type` when
+     the active fill is the per-type color (set via inline style). */
+  .type-chip {
+    border-radius: 9999px;
+    border: 1px solid rgb(226 232 240);
+    background: var(--elev-light);
+    color: var(--text-secondary);
+    transition: background-color 150ms, color 150ms, border-color 150ms;
+  }
+  .type-chip:hover {
+    border-color: rgb(203 213 225); /* slate-300 */
+  }
+  .type-chip--active {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--elev-light);
+  }
+
+  /* Bordered input/select. Pair with size-specific padding/font as needed.
+     Focus moves the border to slate-900 with a faint slate-300 ring.
+       <input class="input-base px-3 py-2 text-sm" /> */
+  .input-base {
+    border: 1px solid rgb(226 232 240); /* slate-200 */
+    border-radius: 0.5rem; /* matches rounded-lg */
+    background: var(--elev-light);
+    outline: none;
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+  .input-base:hover {
+    border-color: rgb(203 213 225); /* slate-300 */
+  }
+  .input-base:focus {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 1px rgb(203 213 225);
+  }
+
+  /* Centrality precompute status badges. One badge utility per state so the
+     sidebar can show progress at a glance without re-implementing color logic
+     in JS. `.badge-done` reuses the existing emerald palette used elsewhere
+     for "ready" affirmations. */
+  .badge-base {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+  }
+  .badge-pending   { background-color: rgb(203 213 225); color: rgb(71 85 105); }    /* slate-300/slate-600 */
+  .badge-computing { background-color: rgb(254 243 199); color: rgb(180 83 9); }      /* amber-100/amber-700 */
+  .badge-done      { background-color: rgb(209 250 229); color: rgb(4 120 87); }      /* emerald-100/emerald-700 */
+  .badge-error     { background-color: rgb(254 226 226); color: rgb(185 28 28); }     /* red-100/red-700 */
+  .badge-cancelled {
+    background-color: rgb(148 163 184);                                                /* slate-400 */
+    color: rgb(71 85 105);                                                             /* slate-600 */
+    font-style: italic;
+  }
+
   .scrollbar-slim {
     scrollbar-width: thin;
     scrollbar-color: rgb(203 213 225) transparent; /* slate-300 thumb, transparent track */

@@ -32,13 +32,13 @@ const setHigh = (e) => { state.value = { ...state.value, value: [state.value.val
 <template>
   <div class="space-y-1">
     <div class="flex items-center justify-between">
-      <span class="flex items-center gap-1 text-xs font-medium text-slate-600">
-        <SlidersHorizontal :size="11" class="text-slate-400" />
+      <span class="flex items-center gap-1 text-xs font-medium text-secondary">
+        <SlidersHorizontal :size="11" class="text-muted" />
         {{ label }}
       </span>
       <select
         :value="state.mode"
-        class="rounded border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-600 outline-none"
+        class="input-base px-1 py-0.5 text-[10px] text-secondary"
         @change="setMode($event.target.value)"
       >
         <option value="absolute">Absolute</option>
@@ -48,33 +48,33 @@ const setHigh = (e) => { state.value = { ...state.value, value: [state.value.val
     </div>
 
     <template v-if="state.mode === 'absolute'">
-      <div class="flex items-center gap-1 text-[10px] text-slate-500">
-        <input type="number" :min="range[0]" :max="range[1]" :value="state.value[0]" class="w-full rounded border border-slate-200 px-1 py-0.5" @input="setLow">
+      <div class="flex items-center gap-1 text-[10px] text-secondary">
+        <input type="number" :min="range[0]" :max="range[1]" :value="state.value[0]" class="input-base w-full px-1 py-0.5" @input="setLow">
         <span>—</span>
-        <input type="number" :min="range[0]" :max="range[1]" :value="state.value[1]" class="w-full rounded border border-slate-200 px-1 py-0.5" @input="setHigh">
+        <input type="number" :min="range[0]" :max="range[1]" :value="state.value[1]" class="input-base w-full px-1 py-0.5" @input="setHigh">
       </div>
-      <p class="text-[10px] text-slate-400">range: {{ range[0] }}–{{ range[1] }}</p>
+      <p class="text-[10px] text-muted">range: {{ range[0] }}–{{ range[1] }}</p>
     </template>
 
     <template v-else-if="state.mode === 'percentile'">
-      <div class="flex items-center gap-1 text-[10px] text-slate-500">
-        <input type="number" min="0" max="100" :value="state.value[0]" class="w-full rounded border border-slate-200 px-1 py-0.5" @input="setLow">
+      <div class="flex items-center gap-1 text-[10px] text-secondary">
+        <input type="number" min="0" max="100" :value="state.value[0]" class="input-base w-full px-1 py-0.5" @input="setLow">
         <span>—</span>
-        <input type="number" min="0" max="100" :value="state.value[1]" class="w-full rounded border border-slate-200 px-1 py-0.5" @input="setHigh">
+        <input type="number" min="0" max="100" :value="state.value[1]" class="input-base w-full px-1 py-0.5" @input="setHigh">
       </div>
-      <p class="text-[10px] text-slate-400">presets: 25–75 · 10–90</p>
+      <p class="text-[10px] text-muted">presets: 25–75 · 10–90</p>
     </template>
 
     <template v-else>
       <div class="flex gap-1 text-[10px]">
         <button
-          class="flex-1 rounded border px-1 py-0.5"
-          :class="state.value === 'hide' ? 'border-slate-700 bg-slate-700 text-white' : 'border-slate-200 text-slate-500'"
+          class="flex-1 rounded-lg border px-1 py-0.5"
+          :class="state.value === 'hide' ? 'border-slate-700 bg-slate-700 text-white' : 'border-slate-200 text-secondary'"
           @click="state = { mode: 'outliers', value: 'hide' }"
         >hide outliers</button>
         <button
-          class="flex-1 rounded border px-1 py-0.5"
-          :class="state.value === 'show' ? 'border-slate-700 bg-slate-700 text-white' : 'border-slate-200 text-slate-500'"
+          class="flex-1 rounded-lg border px-1 py-0.5"
+          :class="state.value === 'show' ? 'border-slate-700 bg-slate-700 text-white' : 'border-slate-200 text-secondary'"
           @click="state = { mode: 'outliers', value: 'show' }"
         >only outliers</button>
       </div>

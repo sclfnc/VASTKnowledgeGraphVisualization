@@ -3,7 +3,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { Telescope, X, Github } from 'lucide-vue-next'
 
-const props = defineProps({ open: { type: Boolean, default: false } })
+defineProps({ open: { type: Boolean, default: false } })
 const emit = defineEmits(['close'])
 
 const onKeydown = (e) => { if (e.key === 'Escape') emit('close') }
@@ -15,101 +15,119 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 z-40 flex items-center justify-center bg-black/40"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 backdrop-blur-[2px]"
       @click.self="emit('close')"
     >
-      <div class="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-8 shadow-xl">
+      <div class="card-elev relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl p-8">
         <button
-          class="absolute right-4 top-4 text-slate-400 hover:text-slate-700"
+          class="absolute right-4 top-4 text-muted hover:text-primary"
           @click="emit('close')"
         ><X :size="18" /></button>
 
-        <div class="mb-5 flex items-center gap-2.5">
-          <Telescope :size="32" class="text-slate-800" :stroke-width="1.75" />
-          <div>
-            <h2 class="text-xl font-semibold leading-tight text-slate-900">Telescope</h2>
-            <p class="text-xs text-slate-500">Zoom into your graph</p>
+        <div class="flex items-center gap-5">
+          <Telescope :size="44" class="text-primary" :stroke-width="1.75" />
+          <div class="min-w-0 flex-1">
+            <h2 class="text-2xl font-semibold leading-tight text-primary">Telescope</h2>
+            <p class="text-sm text-secondary">Zoom into your graph</p>
+            <div class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              <a
+                href="https://github.com/sclfnc"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1.5 font-medium text-primary underline decoration-slate-300 underline-offset-2 hover:decoration-slate-900"
+              ><Github :size="13" /> Francesco Secoli</a>
+              <a
+                href="https://github.com/sclfnc/VASTKnowledgeGraphVisualization/tree/api-integration"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1.5 font-medium text-primary underline decoration-slate-300 underline-offset-2 hover:decoration-slate-900"
+              ><Github :size="13" /> Repository <span class="font-normal text-muted">· api-integration</span></a>
+            </div>
           </div>
         </div>
 
-        <p class="mb-3 text-sm leading-relaxed text-slate-600">
-          A visual analytics prototype for non-expert exploration of knowledge graphs — built
-          around discovery, anomaly detection, and missing-data inference.
-        </p>
+        <hr class="my-5 border-slate-200" />
 
-        <p class="mb-6 text-sm leading-relaxed text-slate-600">
-          Developed for an academic project on visual analytics for knowledge graphs.
-        </p>
+        <div class="space-y-2 text-sm leading-relaxed text-secondary">
+          <p>
+            A visual analytics prototype for exploring knowledge graphs through coordinated D3
+            panels. Academic project.
+          </p>
 
-        <div class="mb-5">
-          <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Stack</p>
-          <ul class="space-y-1 text-sm text-slate-600">
-            <li><span class="text-slate-400">Frontend:</span> Vue 3 · Vite · Pinia · Tailwind CSS · D3 · Lucide · @vueform/slider</li>
-            <li><span class="text-slate-400">Backend:</span> FastAPI · NetworkX · powerlaw (CSN fits)</li>
-            <li><span class="text-slate-400">Analysis:</span> NetworkX · NetworKit · pandas · Jupyter</li>
-          </ul>
-        </div>
+          <p>
+            <span class="font-medium text-primary">Panels.</span> Degree distribution,
+            connected components, four centrality measures (PageRank, Eigenvector,
+            Betweenness, Closeness) plus a comparison matrix, ego network and multi-ego
+            comparison, type-mixing matrix, edge-type flow, node and edge attribute schema,
+            activity timeline.
+          </p>
 
-        <div class="mb-5">
-          <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Author</p>
-          <a
-            href="https://github.com/sclfnc"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1.5 text-sm text-slate-700 hover:text-slate-900"
-          >
-            <Github :size="14" />
-            <span>Francesco Secoli — github.com/sclfnc</span>
-          </a>
-        </div>
+          <p>
+            <span class="font-medium text-primary">Coordination.</span> Filters and
+            selections propagate across panels via mask-only semantics (marks attenuate,
+            metrics stay anchored to the full graph).
+          </p>
 
-        <div class="mb-5">
-          <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Repository</p>
-          <a
-            href="https://github.com/sclfnc/VASTKnowledgeGraphVisualization/tree/api-integration"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1.5 text-sm text-slate-700 hover:text-slate-900"
-          >
-            <Github :size="14" />
-            <span>sclfnc/VASTKnowledgeGraphVisualization <span class="text-slate-400">· api-integration</span></span>
-          </a>
-        </div>
-
-        <div class="mb-5">
-          <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Progress so far</p>
-          <p class="text-sm leading-relaxed text-slate-600">
-            Onboarding with built-in datasets and JSON upload, schema-driven filter bar
-            (types, degree, weight, attributes, N-hop), and a Guide view with a panel
-            registry tracking three states (implemented, planned, stub). Two D3 panels
-            live: <span class="font-medium text-slate-700">Degree Distribution</span>
-            (PMF / CCDF, by-type breakdown, power-law / log-normal / Poisson / exponential
-            fits via the <span class="italic">powerlaw</span> package, IQR-based outlier
-            highlight) and <span class="font-medium text-slate-700">Connected Components</span>
-            (bubbles or bars view, WCC / SCC modes, range and rank filters, click-to-drill
-            into a side-by-side breakdown by node type). Six more planned panels share
-            extracted primitives (drawer sections, pill toggles, D3 lifecycle composable)
-            and a unified node-type color mapping across chips and charts.
+          <p>
+            <span class="font-medium text-primary">Per-panel affordances.</span> Pin restricts
+            a panel to the current selection; Lock freezes a snapshot independently of live
+            mutations.
           </p>
         </div>
 
-        <div class="mb-5">
-          <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Coming next</p>
-          <p class="mb-2 text-sm leading-relaxed text-slate-600">
-            The next iterations focus on the <span class="font-medium text-slate-700">Guide view</span> — turning its
-            sections from labelled placeholders into a connected didactic surface.
-          </p>
-          <ul class="space-y-1.5 text-sm text-slate-600">
-            <li><span class="font-medium text-slate-700">Real chart panels</span> — replace placeholders with D3 charts driven by the loaded graph (degree distribution, centrality comparisons, k-core, etc.)</li>
-            <li><span class="font-medium text-slate-700">Cross-panel links</span> — each panel references related concepts in other sections; clicking a term opens the linked panel and scrolls it into focus</li>
-            <li><span class="font-medium text-slate-700">Theory drawer with examples</span> — every panel's theory text annotated with live snippets from the current graph, not generic prose</li>
-            <li><span class="font-medium text-slate-700">Schema-aware conditional panels</span> — <span class="italic">Reciprocity</span> only when directed, <span class="italic">Edge Weight</span> only when weighted, <span class="italic">Cross-type Matrix</span> only when heterogeneous, etc.</li>
-          </ul>
+        <hr class="my-5 border-slate-200" />
+
+        <div class="space-y-4">
+          <div>
+            <p class="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">Frontend stack</p>
+            <dl class="space-y-1.5 text-sm">
+              <div>
+                <dt class="font-medium text-primary">D3</dt>
+              </div>
+              <div>
+                <dt class="font-medium text-primary">Vue 3</dt>
+                <dd class="text-xs text-muted">@vueform/slider · Lucide · Pinia · Tailwind · Vite · Vue Router</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div>
+            <p class="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">Backend stack</p>
+            <dl class="space-y-1.5 text-sm">
+              <div>
+                <dt class="font-medium text-primary">FastAPI</dt>
+                <dd class="text-xs text-muted">Uvicorn</dd>
+              </div>
+              <div>
+                <dt class="font-medium text-primary">NetworkX</dt>
+              </div>
+              <div>
+                <dt class="font-medium text-primary">NetworKit</dt>
+              </div>
+              <div>
+                <dt class="font-medium text-primary">powerlaw</dt>
+                <dd class="text-xs text-muted">SciPy</dd>
+              </div>
+            </dl>
+          </div>
         </div>
+
+        <hr class="my-5 border-slate-200" />
+
+        <div>
+          <p class="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">Next steps</p>
+          <ol class="list-decimal space-y-1.5 pl-5 text-sm text-secondary">
+            <li>Panel-by-panel HCI audit, including cross-panel relationships.</li>
+            <li>Visual-Analytics-specific layout pass: at least two alternative encodings per panel
+              where meaningful — one for data scientists, one for non-experts.</li>
+          </ol>
+        </div>
+
+        <hr class="my-5 border-slate-200" />
 
         <div class="flex items-center justify-between">
-          <p class="text-xs italic text-slate-400">Work in progress — prototype.</p>
-          <p class="text-xs text-slate-400">v0.4.0 · 2026-05-14</p>
+          <p class="text-xs italic text-muted">Work in progress — prototype.</p>
+          <p class="text-xs text-muted">v0.5.5 · 2026-05-25</p>
         </div>
       </div>
     </div>
