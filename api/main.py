@@ -1,243 +1,133 @@
-"""
-FastAPI application for handling NetworkX graphs.
+"""Telescope FastAPI backend — wiring only; domain logic lives in dedicated modules."""
+import hashlib
+import json
+import logging
+import os
+import statistics
+import uuid
+from typing import Optional
 
-This application provides endpoints for:
-- Uploading JSON files containing NetworkX graphs
-- Retrieving graph summaries by unique ID
-- Setting a default graph that can be accessed without uploading a file
-"""
-
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import networkit as nk
 import networkx as nx
-import json
-import os
-import uuid
-from typing import Dict, Any
-from pathlib import Path
 
-# EXTENSION: lightweight schema extractor — single source of truth for /schema endpoint
-TEMPORAL_HINTS = ('date', 'year', 'time', 'timestamp')
+from schema import compute_schema, load_node_link, node_type, percentile
+from registry import (
+    Caches,
+    EMPTY_CENTRALITY_STATUS,
+    centrality_status,
+    ego_subgraph_cache,
+    graph_names,
+    graph_path,
+    graph_registry,
+    load_graph,
+    register_graph,
+)
+import precompute
+import datasets
+from centrality import centrality_response
+from components import compute_components
+from degree_fit import compute_degree_fit
+from edge_flow import compute_edge_flow
+from ego import ego_subgraph, EgoTooLargeError, LRU_SIZE, SOFT_CAP_DEFAULT, VALID_DIRECTIONS
+from timeline import compute_timeline
+from type_mixing import compute_type_mixing
 
-RESERVED_NODE_ATTRS = {'Node Type'}
+logger = logging.getLogger("telescope.centrality")
 
-def _infer_attr_kind(values):
-    sample = [v for v in values if v is not None]
-    if not sample:
-        return None
-    if all(isinstance(v, bool) for v in sample):
-        return 'boolean'
-    if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in sample):
-        return 'numeric'
-    return 'categorical'
-
-
-def compute_schema(G, name='Graph'):
-    nodes_data = list(G.nodes(data=True))
-    edge_data  = [d for _, _, d in G.edges(data=True)]
-
-    node_attrs = {k for _, d in nodes_data for k in d}
-    node_types = sorted({d.get('Node Type', 'Unknown') for _, d in nodes_data})
-    edge_types = sorted({d.get('Edge Type', 'Unknown') for d in edge_data})
-
-    # weighted only if at least one edge has a non-trivial weight (more than one distinct value)
-    weights = [d['weight'] for d in edge_data if 'weight' in d]
-    distinct_weights = set(weights)
-    weighted = len(distinct_weights) > 1
-    weight_range = [min(weights), max(weights)] if weighted else None
-
-    temporal_attrs = sorted({a for a in node_attrs if any(h in a.lower() for h in TEMPORAL_HINTS)})
-
-    # degree range — uses total degree; frontend can split in/out for directed graphs if needed
-    degrees = [d for _, d in G.degree()]
-    degree_range = [min(degrees), max(degrees)] if degrees else [0, 0]
-
-    # per-attribute kind inference, used to render dynamic filters
-    attributes = []
-    for attr in sorted(node_attrs - RESERVED_NODE_ATTRS):
-        values = [d[attr] for _, d in nodes_data if attr in d]
-        kind = _infer_attr_kind(values)
-        if kind is None:
-            continue
-        entry = {'name': attr, 'kind': kind}
-        if kind == 'numeric':
-            nums = [v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)]
-            if nums:
-                entry['range'] = [min(nums), max(nums)]
-        elif kind == 'categorical':
-            cats = sorted({str(v) for v in values})
-            # cap categorical filter values to keep payload small
-            if len(cats) <= 50:
-                entry['values'] = cats
-            else:
-                entry['values'] = cats[:50]
-                entry['truncated'] = True
-        attributes.append(entry)
-
-    self_loops = nx.number_of_selfloops(G)
-    acyclic = nx.is_directed_acyclic_graph(G) if G.is_directed() else None
-    try:
-        bipartite = nx.is_bipartite(G)
-    except nx.NetworkXError:
-        bipartite = False
-
-    return {
-        'name': name,
-        'nodes': G.number_of_nodes(),
-        'edges': G.number_of_edges(),
-        'directed': G.is_directed(),
-        'multigraph': G.is_multigraph(),
-        'weighted': weighted,
-        'bipartite': bipartite,
-        'node_types': node_types,
-        'edge_types': edge_types,
-        'temporal_attrs': temporal_attrs,
-        'self_loops': self_loops,
-        'acyclic': acyclic,
-        'degree_range': degree_range,
-        'weight_range': weight_range,
-        'attributes': attributes,
-        'warnings': [],
-    }
-
-
-# EXTENSION: built-in dataset registry — maps name to (loader_fn, description)
-BUILTIN_DATASETS = {
-    "karate":       (nx.karate_club_graph,        "Zachary's Karate Club — 34 nodes, 78 edges"),
-    "les_miserables": (nx.les_miserables_graph,   "Les Misérables characters — 77 nodes, 254 edges"),
-    "florentine":   (nx.florentine_families_graph, "Florentine families — 15 nodes"),
-    "davis":        (nx.davis_southern_women_graph,"Davis Southern Women — bipartite"),
-}
-
-# Normalize built-in datasets to expose 'Node Type' / 'Edge Type' attributes,
-# matching the convention used by MC1 so compute_schema works uniformly.
-# 'from': read value from this node attribute (optionally remapped via 'map')
-# 'const': assign a fixed string to every node
-BUILTIN_TYPE_NORMALIZATION = {
-    "karate":         {'node': {'from': 'club'},
-                       'edge': {'const': 'Friendship'}},
-    "les_miserables": {'node': {'const': 'Character'},
-                       'edge': {'const': 'CoAppearance'}},
-    "florentine":     {'node': {'const': 'Family'},
-                       'edge': {'const': 'Marriage'}},
-    "davis":          {'node': {'from': 'bipartite', 'map': {0: 'Woman', 1: 'Event'}},
-                       'edge': {'const': 'Attended'}},
-}
-
-
-def normalize_builtin_types(name, G):
-    spec = BUILTIN_TYPE_NORMALIZATION.get(name)
-    if not spec:
-        return
-    nspec = spec.get('node')
-    if nspec:
-        for _, d in G.nodes(data=True):
-            if 'const' in nspec:
-                d['Node Type'] = nspec['const']
-            else:
-                v = d.get(nspec['from'])
-                d['Node Type'] = nspec.get('map', {}).get(v, str(v))
-    espec = spec.get('edge')
-    if espec:
-        for *_, d in G.edges(data=True):
-            if 'const' in espec:
-                d['Edge Type'] = espec['const']
-            else:
-                v = d.get(espec['from'])
-                d['Edge Type'] = espec.get('map', {}).get(v, str(v))
+# Reject uploads above this threshold to avoid OOM/DoS.
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 app = FastAPI(
-    title="NetworkX Graph API",
-    description="API for uploading and analyzing NetworkX graphs",
-    version="1.0.0"
+    title="Telescope Graph API",
+    description="Backend for the Telescope visual analytics prototype.",
+    version="1.0.0",
 )
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:5173", "http://127.0.0.1", "http://127.0.0.1:8000"],
+    allow_origins=[
+        "http://localhost", "http://localhost:5173",
+        "http://127.0.0.1", "http://127.0.0.1:5173", "http://127.0.0.1:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Directory to store uploaded graph files
-GRAPH_STORAGE_DIR = "graph_storage"
 
-# Create storage directory if it doesn't exist
-Path(GRAPH_STORAGE_DIR).mkdir(exist_ok=True)
+@app.on_event("startup")
+def _configure_networkit():
+    """Cap NetworKit threads — defaults to all cores, starving the asyncio loop."""
+    cores = os.cpu_count() or 1
+    threads = min(8, max(1, cores // 2))
+    nk.setNumberOfThreads(threads)
+    logger.info("NetworKit thread cap: %d (host cores: %d)", threads, cores)
 
-# Dictionary to map graph IDs to file paths
-# In production, this would be a database
-graph_registry: Dict[str, str] = {}
 
-# In-memory cache for /schema/ responses, invalidated when a graph is (re)registered.
-# compute_schema is non-trivial on large graphs (MC1: ~37k edges) and the schema
-# does not change for a given graph_id.
-schema_cache: Dict[str, Any] = {}
-degree_fit_cache: Dict[str, Any] = {}
-components_cache: Dict[str, Any] = {}
-
-# Upload size limit: reject files above this threshold to avoid OOM/DoS.
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+def cached_endpoint(cache_name: str, compute_fn):
+    """Cache-then-compute for endpoints whose payload is a pure function of the graph."""
+    def run(graph_id: str) -> JSONResponse:
+        cache = Caches[cache_name]
+        cached = cache.get(graph_id)
+        if cached is not None:
+            return JSONResponse(content=cached)
+        try:
+            G = load_graph(graph_id)
+            result = compute_fn(G)
+            cache[graph_id] = result
+            return JSONResponse(content=result)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error computing {cache_name}: {str(e)}")
+    return run
 
 
 @app.post("/upload/", summary="Upload a NetworkX graph JSON file")
-async def upload_graph(file: UploadFile = File(...)):  # async kept: UploadFile.read() is async
-    """
-    Upload a JSON file containing a NetworkX graph.
-
-    The file should contain a NetworkX graph in JSON format (e.g., from nx.readwrite.json_graph.node_link_data).
-
-    Returns:
-        A unique ID that can be used to reference this graph in other endpoints.
-    """
-    # Check if file has .json extension
+async def upload_graph(file: UploadFile = File(...), name: str = Form(None)):
+    """Async because UploadFile.read() is async."""
     if not file.filename.lower().endswith('.json'):
         raise HTTPException(status_code=400, detail="File must have .json extension")
 
     try:
-        # Read the file content
         contents = await file.read()
         if len(contents) > MAX_UPLOAD_BYTES:
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large: {len(contents)} bytes (max {MAX_UPLOAD_BYTES})"
+                detail=f"File too large: {len(contents)} bytes (max {MAX_UPLOAD_BYTES})",
             )
 
         data = json.loads(contents)
 
-        # Validate that it's a NetworkX graph by trying to load it
         try:
-            nx.node_link_graph(data)
+            load_node_link(data)
         except Exception as e:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid NetworkX graph format: {str(e)}"
+                detail=f"Invalid NetworkX graph format: {str(e)}",
             )
 
-        # Generate a unique ID for this graph
         graph_id = str(uuid.uuid4())
-
-        # Save the raw bytes — already validated, no need to re-serialize
-        file_path = os.path.join(GRAPH_STORAGE_DIR, f"{graph_id}.json")
+        file_path = graph_path(graph_id)
         with open(file_path, 'wb') as f:
             f.write(contents)
 
-        # Register the graph and invalidate any stale caches for this id
-        graph_registry[graph_id] = file_path
-        schema_cache.pop(graph_id, None)
-        degree_fit_cache.pop(graph_id, None)
-        components_cache.pop(graph_id, None)
+        # Order: drain → register → kickoff (registering first would race with cleanup).
+        await precompute.cancel_all()
+        clean_name = (name or '').strip()
+        register_graph(graph_id, file_path, clean_name or 'Uploaded graph')
+        precompute.kickoff(graph_id)
 
         return JSONResponse(
             status_code=201,
             content={
                 "graph_id": graph_id,
                 "message": "Graph uploaded successfully",
-                "filename": file.filename
-            }
+                "filename": file.filename,
+            },
         )
 
     except HTTPException:
@@ -248,89 +138,45 @@ async def upload_graph(file: UploadFile = File(...)):  # async kept: UploadFile.
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 
-# EXTENSION: list available built-in datasets — frontend uses this to populate the onboarding picker
 @app.get("/datasets/", summary="List available built-in datasets")
 def list_datasets():
-    return JSONResponse(content={
-        "datasets": [
-            {"name": name, "description": desc}
-            for name, (_, desc) in BUILTIN_DATASETS.items()
-        ]
-    })
+    return JSONResponse(content=datasets.list_builtin_payload())
 
 
-# EXTENSION: load a built-in dataset by name, register it, and return a graph_id
 @app.post("/datasets/load/{name}", summary="Load a built-in NetworkX dataset")
-def load_builtin_dataset(name: str):
-    if name not in BUILTIN_DATASETS:
-        raise HTTPException(status_code=404, detail=f"Unknown dataset '{name}'. Available: {list(BUILTIN_DATASETS)}")
-
-    loader_fn, _ = BUILTIN_DATASETS[name]
-    graph = loader_fn()
-    normalize_builtin_types(name, graph)
-
-    graph_id = f"builtin_{name}"
-    file_path = os.path.join(GRAPH_STORAGE_DIR, f"{graph_id}.json")
-
-    data = nx.node_link_data(graph)
-    with open(file_path, "w") as f:
-        json.dump(data, f)
-
-    graph_registry[graph_id] = file_path
-    schema_cache.pop(graph_id, None)
-    degree_fit_cache.pop(graph_id, None)
-    components_cache.pop(graph_id, None)
-
+async def load_builtin_dataset(name: str):
+    """Async because we await the precompute cancellation before registering."""
+    await precompute.cancel_all()
+    graph_id = datasets.load_builtin_payload(name)
+    precompute.kickoff(graph_id)
     return JSONResponse(status_code=201, content={
         "graph_id": graph_id,
         "message": f"Built-in dataset '{name}' loaded successfully",
     })
 
 
-# EXTENSION: schema endpoint — lightweight summary used by the dashboard Overview panel.
-# Result is cached per graph_id; cache is invalidated when a graph is (re)registered.
 @app.get("/schema/{graph_id}", summary="Get lightweight schema for a graph")
 def get_schema(graph_id: str):
-    if graph_id not in graph_registry:
-        raise HTTPException(status_code=404, detail="Graph ID not found")
-
-    cached = schema_cache.get(graph_id)
+    cache = Caches['schema']
+    cached = cache.get(graph_id)
     if cached is not None:
         return JSONResponse(content=cached)
-
-    with open(graph_registry[graph_id]) as f:
-        graph = nx.node_link_graph(json.load(f))
-
-    name = graph_id.replace('builtin_', '').replace('_', ' ').title() if graph_id.startswith('builtin_') else graph_id
+    graph = load_graph(graph_id)
+    name = graph_names.get(graph_id) or 'Graph'
     schema = compute_schema(graph, name=name)
-    schema_cache[graph_id] = schema
+    cache[graph_id] = schema
     return JSONResponse(content=schema)
 
 
-@app.get("/metrics/{graph_id}", summary="Get computed metrics for D3 panels")
+@app.get("/metrics/{graph_id}", summary="Degree sequence + stats for the Degree Distribution panel")
 def get_metrics(graph_id: str):
-    """
-    Compute and return metrics needed by D3 wiki panels.
-    Results are NOT cached (may be expensive for large graphs).
-    """
-    if graph_id not in graph_registry:
-        raise HTTPException(status_code=404, detail="Graph ID not found")
-
+    """Degree sequence + summary stats + per-type breakdown for DegreeDistribution."""
     try:
-        with open(graph_registry[graph_id]) as f:
-            G = nx.node_link_graph(json.load(f))
-
-        # Degree sequence
+        G = load_graph(graph_id)
         degree_sequence = sorted([d for _, d in G.degree()], reverse=True)
-
-        # Degree statistics
-        import statistics
-        n = len(degree_sequence)
         sorted_deg = sorted(degree_sequence)
-        def percentile(data, p):
-            idx = (len(data) - 1) * p / 100
-            lo, hi = int(idx), min(int(idx) + 1, len(data) - 1)
-            return data[lo] + (data[hi] - data[lo]) * (idx - lo)
+        n = len(degree_sequence)
+
         q1 = percentile(sorted_deg, 25)
         q3 = percentile(sorted_deg, 75)
         iqr = q3 - q1
@@ -347,73 +193,14 @@ def get_metrics(graph_id: str):
             'whisker_hi': min(max(degree_sequence), q3 + 1.5 * iqr),
         }
 
-        # Degree by node type
         degree_by_type = {}
-        for node, deg in G.degree():
-            ntype = G.nodes[node].get('Node Type', 'Unknown')
-            degree_by_type.setdefault(ntype, []).append(deg)
-
-        # Connectivity
-        if G.is_directed():
-            wcc = nx.number_weakly_connected_components(G)
-            lcc_nodes = max(nx.weakly_connected_components(G), key=len) if wcc > 0 else set()
-        else:
-            wcc = nx.number_connected_components(G)
-            lcc_nodes = max(nx.connected_components(G), key=len) if wcc > 0 else set()
-
-        # LCC subgraph
-        if lcc_nodes:
-            G_lcc = G.subgraph(lcc_nodes).copy()
-            if G_lcc.number_of_nodes() > 0:
-                diameter = nx.diameter(G_lcc.to_undirected() if G.is_directed() else G_lcc)
-                lengths = dict(nx.all_pairs_shortest_path_length(G_lcc))
-                avg_path = sum(sum(dict(lengths[u]).values()) for u in lengths) / (G_lcc.number_of_nodes() * (G_lcc.number_of_nodes() - 1)) if G_lcc.number_of_nodes() > 1 else 0
-            else:
-                diameter = 0
-                avg_path = 0
-        else:
-            diameter = 0
-            avg_path = 0
-
-        # Density
-        if G.number_of_nodes() > 1:
-            density = nx.density(G)
-        else:
-            density = 0
-
-        # Clustering coefficient
-        try:
-            global_clustering = nx.transitivity(G)
-        except:
-            global_clustering = 0
-
-        # Reciprocity (directed only)
-        if G.is_directed():
-            try:
-                reciprocity = nx.reciprocity(G)
-            except:
-                reciprocity = 0
-        else:
-            reciprocity = None
-
-        # Assortativity
-        try:
-            assortativity = nx.degree_assortativity_coefficient(G)
-        except:
-            assortativity = 0
+        for n_id, deg in G.degree():
+            degree_by_type.setdefault(node_type(G, n_id), []).append(deg)
 
         return JSONResponse(content={
             'degree_sequence': degree_sequence,
             'degree_stats': degree_stats,
             'degree_by_type': degree_by_type,
-            'weakly_connected_components': wcc,
-            'lcc_size': len(lcc_nodes),
-            'diameter': diameter,
-            'avg_shortest_path': avg_path,
-            'density': float(density),
-            'global_clustering': float(global_clustering),
-            'reciprocity': reciprocity,
-            'assortativity': float(assortativity),
         })
 
     except HTTPException:
@@ -422,60 +209,165 @@ def get_metrics(graph_id: str):
         raise HTTPException(status_code=500, detail=f"Error computing metrics: {str(e)}")
 
 
+get_degree_fit_impl = cached_endpoint('degree_fit', compute_degree_fit)
+
 @app.get("/degree-fit/{graph_id}", summary="Fit degree distribution to theoretical models")
 def get_degree_fit(graph_id: str):
-    if graph_id not in graph_registry:
-        raise HTTPException(status_code=404, detail="Graph ID not found")
+    return get_degree_fit_impl(graph_id)
 
-    cached = degree_fit_cache.get(graph_id)
-    if cached is not None:
-        return JSONResponse(content=cached)
 
-    try:
-        from degree_fit import compute_degree_fit
-        with open(graph_registry[graph_id]) as f:
-            G = nx.node_link_graph(json.load(f))
-        result = compute_degree_fit(G)
-        degree_fit_cache[graph_id] = result
-        return JSONResponse(content=result)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error computing degree fit: {str(e)}")
-
+get_components_impl = cached_endpoint('components', compute_components)
 
 @app.get("/components/{graph_id}", summary="Connected components breakdown")
 def get_components(graph_id: str):
-    if graph_id not in graph_registry:
-        raise HTTPException(status_code=404, detail="Graph ID not found")
+    return get_components_impl(graph_id)
 
-    cached = components_cache.get(graph_id)
-    if cached is not None:
-        return JSONResponse(content=cached)
 
+get_edge_flow_impl = cached_endpoint('edge_flow', compute_edge_flow)
+
+@app.get("/edge-flow/{graph_id}", summary="Tripartite edge-type flow (meta-graph payload)")
+def get_edge_flow(graph_id: str):
+    return get_edge_flow_impl(graph_id)
+
+
+get_type_mixing_impl = cached_endpoint('type_mixing', compute_type_mixing)
+
+@app.get("/type-mixing/{graph_id}", summary="Type mixing matrix (edges and nodes modes)")
+def get_type_mixing(graph_id: str):
+    return get_type_mixing_impl(graph_id)
+
+
+def _overrides_key(overrides_json: Optional[str]) -> str:
+    if not overrides_json:
+        return ''
     try:
-        from components import compute_components
-        with open(graph_registry[graph_id]) as f:
-            G = nx.node_link_graph(json.load(f))
-        result = compute_components(G)
-        components_cache[graph_id] = result
+        parsed = json.loads(overrides_json)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="overrides must be valid JSON")
+    canonical = json.dumps(parsed, sort_keys=True)
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+
+@app.get("/timeline/{graph_id}", summary="Temporal activity histogram per attribute")
+def get_timeline(graph_id: str, overrides: Optional[str] = None):
+    key = _overrides_key(overrides)
+    sub = Caches['timeline'].setdefault(graph_id, {})
+    if key in sub:
+        return JSONResponse(content=sub[key])
+    try:
+        G = load_graph(graph_id)
+        parsed_overrides = json.loads(overrides) if overrides else None
+        result = compute_timeline(G, overrides=parsed_overrides)
+        sub[key] = result
         return JSONResponse(content=result)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error computing components: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error computing timeline: {str(e)}")
+
+
+@app.get("/centrality/spectral/{graph_id}", summary="PageRank + Eigenvector")
+def get_spectral(graph_id: str):
+    return centrality_response(graph_id, 'spectral')
+
+
+@app.get("/centrality/betweenness/{graph_id}", summary="Betweenness centrality")
+def get_betweenness(graph_id: str):
+    return centrality_response(graph_id, 'betweenness')
+
+
+@app.get("/centrality/closeness/{graph_id}", summary="Closeness centrality")
+def get_closeness(graph_id: str):
+    return centrality_response(graph_id, 'closeness')
+
+
+@app.get("/centrality-status/{graph_id}", summary="Per-measure status for sidebar polling")
+def get_centrality_status(graph_id: str):
+    if graph_id not in graph_registry:
+        raise HTTPException(status_code=404, detail="Graph ID not found")
+    return JSONResponse(content=centrality_status.get(graph_id) or dict(EMPTY_CENTRALITY_STATUS))
+
+
+def _component_membership(G):
+    """Return (wcc_of, scc_of): node → 0-based id, size-descending. scc_of is None on undirected."""
+    if G.is_directed():
+        wcc = sorted(nx.weakly_connected_components(G), key=len, reverse=True)
+    else:
+        wcc = sorted(nx.connected_components(G), key=len, reverse=True)
+    wcc_of = {}
+    for cid, nodes in enumerate(wcc):
+        for n in nodes:
+            wcc_of[n] = cid
+
+    scc_of = None
+    if G.is_directed():
+        scc = sorted(nx.strongly_connected_components(G), key=len, reverse=True)
+        scc_of = {}
+        for cid, nodes in enumerate(scc):
+            for n in nodes:
+                scc_of[n] = cid
+
+    return wcc_of, scc_of
+
+
+def _compute_node_index(G):
+    """Per-node {id, type, degree, wcc_id[, scc_id]} sorted by degree desc; ids match /components/."""
+    wcc_of, scc_of = _component_membership(G)
+    records = [{
+        'id': str(n),
+        'type': node_type(G, n),
+        'degree': int(G.degree(n)),
+        'wcc_id': int(wcc_of[n]),
+        **({'scc_id': int(scc_of[n])} if scc_of is not None else {}),
+    } for n in G.nodes()]
+    records.sort(key=lambda r: r['degree'], reverse=True)
+    return records
+
+
+get_nodes_impl = cached_endpoint('node_index', _compute_node_index)
+
+@app.get("/nodes/{graph_id}", summary="Full node index (id, type, degree)")
+def get_nodes(graph_id: str):
+    """Full node index, degree-sorted desc. ~600KB on MC1; powers client-side search."""
+    return get_nodes_impl(graph_id)
+
+
+@app.get("/ego/{graph_id}/{node_id}", summary="k-hop ego subgraph around a node")
+def get_ego(graph_id: str, node_id: str, k: int = 1, cap: int = SOFT_CAP_DEFAULT,
+            direction: str = 'out'):
+    """BFS depth k (clamped 1..3), stratified-sample over cap; 422 when too large."""
+    if graph_id not in graph_registry:
+        raise HTTPException(status_code=404, detail="Graph ID not found")
+    if direction not in VALID_DIRECTIONS:
+        raise HTTPException(status_code=400,
+                            detail=f"Invalid direction '{direction}'. Must be one of {VALID_DIRECTIONS}.")
+    k_clamped = max(1, min(3, k))
+    cap_clamped = max(50, min(1000, cap))
+    cache_key = (graph_id, node_id, k_clamped, cap_clamped, direction)
+
+    cached = ego_subgraph_cache.get(cache_key)
+    if cached is not None:
+        ego_subgraph_cache.move_to_end(cache_key)
+        return JSONResponse(content=cached)
+
+    try:
+        G = load_graph(graph_id)
+        result = ego_subgraph(G, node_id, k_clamped, cap_clamped, direction)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not in graph")
+    except EgoTooLargeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing ego subgraph: {str(e)}")
+
+    ego_subgraph_cache[cache_key] = result
+    if len(ego_subgraph_cache) > LRU_SIZE:
+        ego_subgraph_cache.popitem(last=False)
+    return JSONResponse(content=result)
 
 
 @app.get("/health/", summary="Health check")
-async def health_check():
-    return JSONResponse(
-        content={
-            "status": "healthy",
-            "graph_count": len(graph_registry)
-        }
-    )
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+def health():
+    return {"status": "ok"}

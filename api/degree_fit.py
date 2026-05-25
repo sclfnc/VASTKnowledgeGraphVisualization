@@ -10,6 +10,8 @@ import warnings
 import numpy as np
 from scipy.stats import poisson
 
+from schema import node_type
+
 # resolution of the theoretical curves shipped to the frontend
 GRID_SIZE = 200
 
@@ -152,9 +154,8 @@ def compute_degree_fit(G):
     degree_seq = [d for _, d in G.degree()]
 
     by_type = {}
-    for node, deg in G.degree():
-        ntype = G.nodes[node].get('Node Type', 'Unknown')
-        by_type.setdefault(ntype, []).append(deg)
+    for n, deg in G.degree():
+        by_type.setdefault(node_type(G, n), []).append(deg)
 
     return {
         "all": fit_degree_sequence(degree_seq),

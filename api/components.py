@@ -6,6 +6,8 @@ and top-K nodes by degree. WCC for all graphs; SCC additionally for directed gra
 """
 import networkx as nx
 
+from schema import node_type
+
 # How many top-degree nodes to ship per component for the drill-down.
 TOP_K_PER_COMPONENT = 5
 
@@ -20,7 +22,7 @@ def _component_record(G, nodes, comp_id):
     sub = G.subgraph(nodes)
     by_type = {}
     for n in nodes:
-        t = G.nodes[n].get('Node Type', 'Unknown')
+        t = node_type(G, n)
         by_type[t] = by_type.get(t, 0) + 1
 
     # Degree is computed on the subgraph so it reflects internal connectivity,
