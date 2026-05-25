@@ -12,10 +12,13 @@ export const useFiltersStore = defineStore('filters', () => {
   const degree = ref(numeric([0, 0]))
   const weight = ref(numeric([0, 0]))
   const attributes = ref({})  // { attrName: { mode, value } | string[] }
-  const selected = ref([])    // node ids selected for focus/neighborhood
-  const hops = ref(0)         // N-hop expansion around `selected`; -1 means "all reachable"
+  const hops = ref(0)         // N-hop expansion around cross-panel selection; -1 means "all reachable"
   const hideIsolated = ref(false)
   const hideSelfLoops = ref(false)
+  // Open landing point: written by Activity Timeline brush, read by future
+  // panels that want to respect a temporal window. No current consumer.
+  // Shape: null (no filter) | { attr: string, range: [int, int] (inclusive) }
+  const temporalFilter = ref(null)
 
   function reset(schema) {
     nodeTypes.value = [...(schema?.node_types ?? [])]
@@ -28,11 +31,11 @@ export const useFiltersStore = defineStore('filters', () => {
         a.kind === 'numeric' ? numeric(a.range) : []
       ])
     )
-    selected.value = []
     hops.value = 0
     hideIsolated.value = false
     hideSelfLoops.value = false
+    temporalFilter.value = null
   }
 
-  return { nodeTypes, edgeTypes, degree, weight, attributes, selected, hops, hideIsolated, hideSelfLoops, reset }
+  return { nodeTypes, edgeTypes, degree, weight, attributes, hops, hideIsolated, hideSelfLoops, temporalFilter, reset }
 })
