@@ -1,12 +1,7 @@
-// Stable nodeType → color mapping shared across panels and chips.
-//
-// Backend returns `schema.node_types` already sorted (api/main.py compute_schema),
-// so the mapping is deterministic for a given graph. We pick from a fixed
-// palette in order; if the graph has more types than the palette length, we
-// wrap around (rare — Tableau10 covers 10 types, most graphs have ≤ 6).
+// Stable nodeType → color mapping; deterministic per graph since schema.node_types is sorted backend-side.
 import { computed, toValue } from 'vue'
 
-// Tableau10: chosen for high distinguishability at small sizes (chips, dots).
+// Tableau10 — high distinguishability at small sizes; wraps past 10 types.
 const PALETTE = [
   '#4e79a7', // blue
   '#f28e2c', // orange
@@ -21,7 +16,6 @@ const PALETTE = [
 ]
 
 export function useNodeTypeColors(schemaRef) {
-  // Map { type: color } — deterministic across mounts as long as schema is the same.
   const colors = computed(() => {
     const types = toValue(schemaRef)?.node_types ?? []
     const out = {}
@@ -29,8 +23,7 @@ export function useNodeTypeColors(schemaRef) {
     return out
   })
 
-  // d3-style accessor: `color('Person')` returns the hex. Falls back to a
-  // neutral slate for unknown types so a panel never breaks on missing schema.
+  // Falls back to neutral slate so panels never break on missing schema.
   const color = (type) => colors.value[type] ?? '#94a3b8'
 
   return { colors, color, palette: PALETTE }

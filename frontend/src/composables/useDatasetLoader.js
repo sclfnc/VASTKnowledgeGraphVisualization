@@ -2,8 +2,7 @@
 import { apiUrl } from './useApi.js'
 import { useFetch } from './useFetch.js'
 import { useGraphStore } from '../stores/graph.js'
-
-const GUIDE_PANELS_KEY = 'guide_active_panels'
+import { GUIDE_PANELS_KEY } from '../stores/panels.js'
 
 export function useDatasetLoader() {
   const graphStore = useGraphStore()
@@ -21,9 +20,10 @@ export function useDatasetLoader() {
   const loadBuiltin = (name) =>
     call(apiUrl(`/datasets/load/${name}`), { method: 'POST' })
 
-  const uploadFile = (file) => {
+  const uploadFile = (file, name = null) => {
     const form = new FormData()
     form.append('file', file)
+    if (name) form.append('name', name)
     return call(apiUrl('/upload/'), { method: 'POST', body: form })
   }
 

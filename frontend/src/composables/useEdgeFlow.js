@@ -1,2 +1,3 @@
 import { createGraphResource } from './createGraphResource.js'
-export const useDegreeFit = createGraphResource('degree-fit')
+
+export const useEdgeFlow = createGraphResource('edge-flow')
