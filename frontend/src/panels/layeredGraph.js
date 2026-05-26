@@ -28,6 +28,7 @@ export function fromEgoPayload(payload, layerIdx = 0) {
     source: e.source,
     target: e.target,
     type: e.type,
+    edge_id: e.edge_id,
     layers: new Set([layerIdx]),
   }))
   return { nodes, edges }
@@ -67,6 +68,7 @@ export function mergeLayers(layers) {
           source: e.source,
           target: e.target,
           type: e.type,
+          edge_id: e.edge_id,
           layers: new Set(e.layers),
         })
       }

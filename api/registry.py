@@ -24,7 +24,10 @@ Caches: Dict[str, Dict[str, Any]] = {
     'schema': {},
     'degree_fit': {},
     'components': {},
-    'node_index': {},
+    'node_index': {},        # JSON-safe records served by /nodes/
+    'node_order': {},        # canonical [orig_node, ...] degree-desc, shared with /edges/
+    'edge_index': {},        # SoA payload served by /edges/
+    'edge_index_map': {},    # (u, v[, key]) → edge_id, mirrors edge_index ordering
     'graph_object': {},
     'edge_flow': {},
     'type_mixing': {},

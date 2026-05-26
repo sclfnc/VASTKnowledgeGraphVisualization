@@ -4,12 +4,13 @@ import * as d3 from 'd3'
 import { Spline } from 'lucide-vue-next'
 import { useEdgeFlow } from '@/composables/useEdgeFlow.js'
 import { useGraphNodes } from '@/composables/useGraphNodes.js'
+import { useGraphEdges } from '@/composables/useGraphEdges.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
-import { useFiltersStore } from '@/stores/filters.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, visibleSetPred, idsOfTypes } from './shared.js'
+import { makeTooltip, showTip, hideTip, idsOfTypes } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlSwitch from './controls/ControlSwitch.vue'
 
@@ -24,11 +25,47 @@ const props = defineProps({
 const emit = defineEmits(['request-widen', 'request-shrink'])
 
 const { data, loading, error } = useEdgeFlow(toRef(props, 'graphId'))
-const { data: allNodes } = useGraphNodes(toRef(props, 'graphId'))
+const { data: allNodes, nodes: nodesSoA } = useGraphNodes(toRef(props, 'graphId'))
+const { edges: edgesSoA } = useGraphEdges(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { activeEdgeMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
-const filters = useFiltersStore()
 const { controls, updateControl } = usePanel(props, 'edge_flow', data)
+
+// Always recompute flows from edges SoA + activeEdgeMask: single codepath,
+// edge filters (type/weight/selfLoop) propagate uniformly.
+// Nested Map keyed by tuple-of-Maps avoids string-split fragility on type
+// names with separator-like characters.
+const liveFlows = computed(() => {
+  const soaN = nodesSoA.value
+  const soaE = edgesSoA.value
+  const eMask = activeEdgeMask.value
+  if (!soaN || !soaE || !eMask) return []
+  const directed = data.value?.directed ?? false
+  const acc = new Map()  // Map<st, Map<et, Map<dt, count>>>
+  for (let i = 0; i < soaE.E; i++) {
+    if (!eMask.get(i)) continue
+    let st = soaN.types[soaE.source[i]]
+    let dt = soaN.types[soaE.target[i]]
+    if (!directed && st > dt) { const tmp = st; st = dt; dt = tmp }
+    const et = soaE.edgeTypes[soaE.type[i]]
+    let byEt = acc.get(st)
+    if (!byEt) { byEt = new Map(); acc.set(st, byEt) }
+    let byDt = byEt.get(et)
+    if (!byDt) { byDt = new Map(); byEt.set(et, byDt) }
+    byDt.set(dt, (byDt.get(dt) || 0) + 1)
+  }
+  const out = []
+  for (const [src_type, byEt] of acc) {
+    for (const [edge_type, byDt] of byEt) {
+      for (const [dst_type, count] of byDt) {
+        out.push({ src_type, edge_type, dst_type, count })
+      }
+    }
+  }
+  out.sort((a, b) => b.count - a.count)
+  return out
+})
 
 const mainContainer = ref(null)
 const tableContainer = ref(null)
@@ -45,13 +82,10 @@ const edgeColorScale = computed(() => {
 })
 
 const filteredFlows = computed(() => {
-  const d = data.value
-  if (!d) return []
   const { srcTypeFilter, dstTypeFilter, edgeTypeFilter, topN, minFlow } = controls.value
-  // Global chip filter first; local select drawer composes on top.
-  const ntOk = visibleSetPred(filters.nodeTypes)
-  const etOk = visibleSetPred(filters.edgeTypes)
-  let list = d.flows.filter(f => ntOk(f.src_type) && ntOk(f.dst_type) && etOk(f.edge_type))
+  // Global node/edge type filters already encoded into liveFlows via activeEdgeMask;
+  // here we apply only the panel-local refiners.
+  let list = liveFlows.value
   if (srcTypeFilter) list = list.filter(f => f.src_type === srcTypeFilter)
   if (dstTypeFilter) list = list.filter(f => f.dst_type === dstTypeFilter)
   if (edgeTypeFilter) list = list.filter(f => f.edge_type === edgeTypeFilter)
@@ -75,7 +109,7 @@ const totalFlowSum = computed(() => d3.sum(filteredFlows.value, f => f.count))
 // Source-type totals for the `normalize` width mode.
 const outgoingPerType = computed(() => {
   const m = new Map()
-  for (const f of (data.value?.flows ?? [])) {
+  for (const f of liveFlows.value) {
     m.set(f.src_type, (m.get(f.src_type) || 0) + f.count)
   }
   return m
@@ -322,7 +356,7 @@ function renderTable() {
 
 function renderAll() { renderMain(); renderTable() }
 
-watch([data, controls, () => props.widened, () => filters.nodeTypes, () => filters.edgeTypes], () => nextTick(renderAll), { deep: true })
+watch([data, controls, () => props.widened, liveFlows], () => nextTick(renderAll), { deep: true })
 
 useD3Chart([mainContainer, tableContainer], renderAll)
 
@@ -406,13 +440,15 @@ function toggleWiden() {
 
     <div v-if="loading" class="text-sm text-secondary p-3 surface-recessed rounded-lg">Loading edge flow…</div>
     <div v-if="error" class="text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">{{ error }}</div>
+    <p v-if="!loading && !error && noNodesActive" class="text-[10px] italic text-amber-600 px-1">No data under current filters.</p>
 
     <div v-if="!loading && !error" :class="widened ? 'grid grid-cols-2 gap-6' : ''">
       <div ref="mainContainer" class="chart-elev w-full min-w-0" style="aspect-ratio: 4/3; position: relative;"></div>
       <div v-if="widened" ref="tableContainer" class="chart-elev w-full min-w-0 h-full p-2" style="position: relative;"></div>
     </div>
     <p v-if="!loading && !error" class="text-[10px] leading-tight text-muted px-1">
-      Flow counts computed on the full graph; current filter hides meta-nodes and arcs whose types are deselected.
+      <template v-if="edgeFilterActive">Flows recomputed on the active edge subset.</template>
+      <template v-else>Flow counts on the full graph; deselect types via chips to refine.</template>
     </p>
   </div>
 </template>

@@ -36,7 +36,7 @@ const filters = useFiltersStore()
 const { hideIsolated } = storeToRefs(filters)
 const selection = useSelectionStore()
 const { ids: filterSelected } = storeToRefs(selection)
-const { activeNodeMask, isActive } = usePanelContextFromProps(props)
+const { activeNodeMask, isActive, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 
 const chartContainer = ref(null)
 
@@ -723,9 +723,10 @@ function togglePageRankType(t) {
     <div v-else-if="status !== 'ready'" class="flex flex-1 items-center justify-center text-sm text-secondary surface-recessed rounded-lg p-3">
       Computing {{ labelFor }}…
     </div>
-    <div v-else ref="chartContainer" class="chart-elev w-full" style="aspect-ratio: 4/3; position: relative;"></div>
-    <p v-if="status === 'ready'" class="text-[10px] leading-tight text-muted px-1">
-      {{ labelFor }} computed on the full graph; current filter attenuates non-matching marks.
+    <p v-if="status === 'ready' && noNodesActive" class="text-[10px] italic text-amber-600 px-1">No data under current filters.</p>
+    <p v-else-if="status === 'ready' && edgeFilterActive" class="text-[10px] italic text-muted px-1">
+      {{ labelFor }} computed on the full graph; edge filter attenuates marks only.
     </p>
+    <div v-if="status === 'ready'" ref="chartContainer" class="chart-elev w-full" style="aspect-ratio: 4/3; position: relative;"></div>
   </div>
 </template>

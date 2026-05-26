@@ -453,19 +453,40 @@ const ALL_SPECS = [
     controlsSchema: {},
   },
 
-  // 7. Temporal Analysis
+  // 7. Temporal Analysis (two scopes share one parametric component)
   {
-    id: 'timeline',
-    label: 'Activity Timeline',
+    id: 'timeline_node',
+    label: 'Activity Timeline · Nodes',
     section: 'Temporal Analysis',
     conditional: false,
     defaultActive: false,
     status: 'implemented',
     component: ActivityTimeline,
-    explanation: `The activity timeline shows how node creation or activity distributes over time. Each bar represents one year (or decade); the stacked breakdown reveals which node types are most active in each period. The brush selects a year range and writes a temporal filter that future panels can opt-in to respect. When temporal data is sparse or absent, the panel reports a coverage fraction so you know what portion of nodes are included, and which parse strategy was used to extract years from raw attribute values.`,
+    componentProps: { mode: 'node' },
+    explanation: `Timeline of node-level temporal attributes (creation dates, release years, etc.). Each bar is one year (or decade); the stacked breakdown shows which node types dominate each period. The brush writes a temporal filter with scope='node' that future readers can opt into.`,
     contextualizeExplanation: (schema, data) => {
-      if (!data || !data.temporal_attrs?.length) return 'No temporal attributes detected in this graph.'
-      return `Temporal attributes detected: ${data.temporal_attrs.join(', ')}.`
+      if (!data || !data.temporal_attrs_node?.length) return 'No node-level temporal attributes in this graph.'
+      return `Node temporal attributes: ${data.temporal_attrs_node.join(', ')}.`
+    },
+    controlsSchema: {
+      attr:      { default: null },
+      breakdown: { default: 'type' },
+      binSize:   { default: 'year' },
+    },
+  },
+  {
+    id: 'timeline_edge',
+    label: 'Activity Timeline · Edges',
+    section: 'Temporal Analysis',
+    conditional: false,
+    defaultActive: false,
+    status: 'implemented',
+    component: ActivityTimeline,
+    componentProps: { mode: 'edge' },
+    explanation: `Timeline of edge-level temporal attributes (transaction dates, rating timestamps, etc.). Stack is by edge type. Brush writes a temporal filter with scope='edge'.`,
+    contextualizeExplanation: (schema, data) => {
+      if (!data || !data.temporal_attrs_edge?.length) return 'No edge-level temporal attributes in this graph.'
+      return `Edge temporal attributes: ${data.temporal_attrs_edge.join(', ')}.`
     },
     controlsSchema: {
       attr:      { default: null },

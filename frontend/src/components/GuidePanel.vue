@@ -23,13 +23,13 @@ defineEmits(['remove', 'focus', 'toggle-expand', 'toggle-controls', 'request-wid
 // Panels that don't carry per-node marks (or are already driven by selection)
 // hide the Pin affordance entirely. Updating this set is the single place
 // where the contract on "which panels are pinnable" is declared.
-const PIN_HIDDEN_IDS = new Set(['ego', 'ego_compare', 'node_attrs', 'edge_attrs', 'timeline'])
+const PIN_HIDDEN_IDS = new Set(['ego', 'ego_compare', 'node_attrs', 'edge_attrs', 'timeline_node', 'timeline_edge'])
 
 const pins = usePinsStore()
 const selection = useSelectionStore()
 const isolation = useIsolationStore()
 const filters = useFiltersStore()
-const { activeNodeMask, selectedMask } = usePanelContextFromProps(props)
+const { activeNodeMask, activeEdgeMask, selectedMask } = usePanelContextFromProps(props)
 
 const showPin = computed(() => !PIN_HIDDEN_IDS.has(props.panelSpec.id))
 const isPinned = computed(() => pins.isPinned(props.panelSpec.id))
@@ -42,9 +42,11 @@ function togglePin() {
     pins.unpin(panelId)
     return
   }
-  const mask = selectedMask.value
-  if (!mask) return
-  pins.pin(panelId, mask)
+  const nodeMask = selectedMask.value
+  if (!nodeMask) return
+  // Capture the current edge mask too so the lens freezes the full slice (Q4).
+  const edgeMask = activeEdgeMask.value?.clone() ?? null
+  pins.pin(panelId, { nodeMask, edgeMask })
   selection.clear()
 }
 
@@ -58,14 +60,17 @@ function toggleLock() {
     isolation.unfreeze(panelId)
     return
   }
-  const mask = activeNodeMask.value
-  if (!mask) return
-  const pin = pins.maskFor(panelId)
+  const nMask = activeNodeMask.value
+  if (!nMask) return
+  const eMask = activeEdgeMask.value
+  const pinNode = pins.nodeMaskFor(panelId)
+  const pinEdge = pins.edgeMaskFor(panelId)
   const snapshot = {
     filters: JSON.parse(JSON.stringify(filters.$state)),
     selection: [...selection.ids],
-    activeNodeMask: mask.clone(),
-    pin: pin ? pin.clone() : null,
+    activeNodeMask: nMask.clone(),
+    activeEdgeMask: eMask ? eMask.clone() : null,
+    pin: pinNode ? { nodeMask: pinNode.clone(), edgeMask: pinEdge ? pinEdge.clone() : null } : null,
   }
   isolation.freeze(panelId, snapshot)
 }

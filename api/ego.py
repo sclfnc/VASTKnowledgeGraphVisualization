@@ -95,9 +95,13 @@ def _stratified_sample(G, alters, soft_cap):
     return picked
 
 
-def ego_subgraph(G, node_id, k, soft_cap, direction='out',
+def ego_subgraph(G, node_id, k, soft_cap, direction='out', edge_index_map=None,
                  hard_cap=HARD_NODE_LIMIT, hard_timeout_ms=HARD_TIMEOUT_MS):
-    """k-hop ego subgraph. Raises KeyError (→404) or EgoTooLargeError (→422)."""
+    """k-hop ego subgraph. Raises KeyError (→404) or EgoTooLargeError (→422).
+
+    `edge_index_map`: optional (u, v[, key]) → edge_id mapping. When provided,
+    each edge record carries `edge_id` for client-side filter mask lookups.
+    """
     # Path params arrive as strings; built-in datasets keep int ids — try both before failing.
     if node_id in G:
         ego = node_id
@@ -133,12 +137,25 @@ def ego_subgraph(G, node_id, k, soft_cap, direction='out',
     } for n in keep]
 
     edges = []
-    for u, v, data in sub.edges(data=True):
-        edges.append({
+    is_multi = G.is_multigraph()
+    edge_iter = sub.edges(keys=True, data=True) if is_multi else sub.edges(data=True)
+    for record in edge_iter:
+        if is_multi:
+            u, v, key, data = record
+            map_key = (u, v, key)
+        else:
+            u, v, data = record
+            map_key = (u, v)
+        entry = {
             'source': str(u),
             'target': str(v),
             'type': data.get('Edge Type', 'Unknown'),
-        })
+        }
+        if edge_index_map is not None:
+            edge_id = edge_index_map.get(map_key)
+            if edge_id is not None:
+                entry['edge_id'] = edge_id
+        edges.append(entry)
 
     return {
         'nodes': nodes,

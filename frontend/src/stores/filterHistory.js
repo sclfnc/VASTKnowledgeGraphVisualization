@@ -19,7 +19,7 @@ function snapshotFrom(f) {
     hops: f.hops,
     attributes: structuredClone(f.attributes),
     temporalFilter: f.temporalFilter
-      ? { attr: f.temporalFilter.attr, range: [...f.temporalFilter.range] }
+      ? { attr: f.temporalFilter.attr, scope: f.temporalFilter.scope ?? 'node', range: [...f.temporalFilter.range] }
       : null,
   }
 }
@@ -37,7 +37,7 @@ function restoreInto(f, snap, schema) {
   f.hops = snap.hops
   f.attributes = structuredClone(snap.attributes)
   f.temporalFilter = snap.temporalFilter
-    ? { attr: snap.temporalFilter.attr, range: [...snap.temporalFilter.range] }
+    ? { attr: snap.temporalFilter.attr, scope: snap.temporalFilter.scope ?? 'node', range: [...snap.temporalFilter.range] }
     : null
 }
 

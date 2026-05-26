@@ -30,7 +30,20 @@ export function usePanelContext(panelId, graphId) {
     }
     const base = live.activeNodeMask.value
     if (!base) return null
-    const pin = pins.maskFor(panelId)
+    const pin = pins.nodeMaskFor(panelId)
+    if (!pin) return base
+    const out = base.clone()
+    out.andInPlace(pin)
+    return out
+  })
+
+  const activeEdgeMask = computed(() => {
+    if (isolated.value) {
+      return isolation.snapshotOf(panelId)?.activeEdgeMask ?? null
+    }
+    const base = live.activeEdgeMask.value
+    if (!base) return null
+    const pin = pins.edgeMaskFor(panelId)
     if (!pin) return base
     const out = base.clone()
     out.andInPlace(pin)
@@ -55,6 +68,16 @@ export function usePanelContext(panelId, graphId) {
     return m
   })
 
+  // Caption helpers — collapsed here so panels stop redefining them.
+  // `edgeFilterActive`: an edge filter (type/weight/selfLoop) is narrowing the edge set.
+  // `noNodesActive`: the node mask is empty — panels should render an empty-state caption.
+  const edgeFilterActive = computed(() => {
+    const m = activeEdgeMask.value
+    if (!m) return false
+    return m.popcount() < m.n
+  })
+  const noNodesActive = computed(() => activeNodeMask.value?.popcount() === 0)
+
   // Returns true when no mask is ready yet, so initial paint isn't dim.
   function isActive(id) {
     const m = activeNodeMask.value
@@ -65,11 +88,24 @@ export function usePanelContext(panelId, graphId) {
     return m.get(idx)
   }
 
+  // Same lenient default as isActive — out-of-range / missing edge_id reads as active
+  // so initial paint isn't dim before /edges loads.
+  function isEdgeActive(edgeId) {
+    const m = activeEdgeMask.value
+    if (!m || edgeId == null) return true
+    if (edgeId < 0 || edgeId >= m.n) return true
+    return m.get(edgeId)
+  }
+
   return {
     activeNodeMask,
+    activeEdgeMask,
+    edgeFilterActive,
+    noNodesActive,
     selectedIds,
     selectedMask,
     isActive,
+    isEdgeActive,
     isolated,
     pinned,
   }

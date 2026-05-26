@@ -34,7 +34,7 @@ const { controls, updateControl } = usePanel(props, 'ego')
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { data: allNodes } = useGraphNodes(toRef(props, 'graphId'))
 // Alters attenuate under the global filter; ego is immune (it's the focus).
-const { activeNodeMask, isActive: isActiveId } = usePanelContextFromProps(props)
+const { activeNodeMask, activeEdgeMask, isActive: isActiveId, isEdgeActive } = usePanelContextFromProps(props)
 
 // Local nav stack (top = active); seeded by selection.ids[0], doesn't write back.
 const egoStack = ref([])
@@ -149,7 +149,7 @@ function renderEdge(sel) {
   sel
     .attr('stroke', '#94a3b8')
     .attr('stroke-width', 1)
-    .attr('stroke-opacity', 0.7)
+    .attr('stroke-opacity', d => isEdgeActive(d.edge_id) ? 0.7 : 0.1)
     .attr('marker-end', isDirected.value ? 'url(#ego-arrow)' : null)
 }
 
@@ -213,7 +213,7 @@ const { reconcile } = useForceGraph({
 })
 
 // Reconcile on mask flip — opacity attenuation reads activeNodeMask via isActiveId.
-watch(activeNodeMask, () => reconcile())
+watch([activeNodeMask, activeEdgeMask], () => reconcile())
 
 watch(chartContainer, (el) => {
   if (el && !tooltip) tooltip = makeTooltip(el)

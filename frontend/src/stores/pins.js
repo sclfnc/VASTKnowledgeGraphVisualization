@@ -1,13 +1,13 @@
-// Per-panel Pin store. Effective mask = globalActiveNodeMask AND pin.
+// Per-panel Pin store. Effective masks = global AND pin (node-side; edge-side).
 // Bitset words mutate in place — spread the outer object on each write so Pinia tracks it.
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export const usePinsStore = defineStore('pins', () => {
-  const masks = ref({})  // [panelId] → Bitset
+  const masks = ref({})  // [panelId] → { nodeMask: Bitset, edgeMask: Bitset | null }
 
-  function pin(panelId, bitset) {
-    masks.value = { ...masks.value, [panelId]: bitset }
+  function pin(panelId, { nodeMask, edgeMask = null }) {
+    masks.value = { ...masks.value, [panelId]: { nodeMask, edgeMask } }
   }
 
   function unpin(panelId) {
@@ -21,13 +21,17 @@ export const usePinsStore = defineStore('pins', () => {
     return panelId in masks.value
   }
 
-  function maskFor(panelId) {
-    return masks.value[panelId] ?? null
+  function nodeMaskFor(panelId) {
+    return masks.value[panelId]?.nodeMask ?? null
+  }
+
+  function edgeMaskFor(panelId) {
+    return masks.value[panelId]?.edgeMask ?? null
   }
 
   function clearAll() {
     masks.value = {}
   }
 
-  return { masks, pin, unpin, isPinned, maskFor, clearAll }
+  return { masks, pin, unpin, isPinned, nodeMaskFor, edgeMaskFor, clearAll }
 })

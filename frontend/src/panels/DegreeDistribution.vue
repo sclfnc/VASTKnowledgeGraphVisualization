@@ -26,7 +26,7 @@ const props = defineProps({
 // Histogram derived live from SoA; fits stay anchored to the full graph (CSN framework).
 const { nodes, loading, error } = useGraphNodes(toRef(props, 'graphId'))
 const { data: fit } = useDegreeFit(toRef(props, 'graphId'))
-const { activeNodeMask, selectedMask } = usePanelContextFromProps(props)
+const { activeNodeMask, selectedMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 
@@ -660,6 +660,8 @@ function renderChart() {
 
     <div v-if="loading" class="text-sm text-secondary p-3 surface-recessed rounded-lg">Loading nodes…</div>
     <div v-if="error" class="text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">{{ error }}</div>
+    <p v-if="noNodesActive" class="text-[10px] italic text-amber-600 px-1">No data under current filters.</p>
+    <p v-else-if="edgeFilterActive" class="text-[10px] italic text-muted px-1">Degree shown on full graph; edge filter attenuates marks only.</p>
     <div ref="chartContainer" class="chart-elev w-full" style="aspect-ratio: 4/3; position: relative;"></div>
 
     <p class="text-[10px] leading-tight text-muted px-1">

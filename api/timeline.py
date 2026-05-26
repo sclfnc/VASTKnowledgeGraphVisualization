@@ -149,23 +149,23 @@ def _resolve_strategy(attr, values, overrides):
     return _sniff_strategy(values)
 
 
-def compute_timeline(G, overrides=None):
-    temporal_attrs = sorted({
-        k for _, d in G.nodes(data=True)
-        for k in d
-        if any(h in k.lower() for h in TEMPORAL_HINTS)
-    })
-    total_nodes = G.number_of_nodes()
+def _per_attr_summary(records, attr_iter, get_data, get_breakdown_key, overrides):
+    """Build `per_attr` map for one scope (nodes or edges).
 
+    - `records`: total record count for the scope (denominator in coverage).
+    - `attr_iter`: discovered temporal attribute names for the scope.
+    - `get_data(record) → dict-like`: returns the attribute container.
+    - `get_breakdown_key(record) → str`: returns the by-type bucket key
+      (Node Type for nodes, Edge Type for edges).
+    """
     per_attr = {}
-    for attr in temporal_attrs:
-        values = [d[attr] for _, d in G.nodes(data=True) if attr in d]
+    for attr in attr_iter:
+        values = [get_data(r)[attr] for r in records if attr in get_data(r)]
         eligible = len(values)
         strategy, fn = _resolve_strategy(attr, values, overrides)
 
-        # Up to 8 distinct raw values, stringified, for the Settings modal preview.
-        sample_values = []
-        seen = set()
+        # Up to 8 distinct raw values for the Settings modal preview.
+        sample_values, seen = [], set()
         for v in values:
             s = str(v)
             if s not in seen:
@@ -177,8 +177,8 @@ def compute_timeline(G, overrides=None):
         if fn is None:
             per_attr[attr] = {
                 'valid_count': 0,
-                'eligible_nodes': eligible,
-                'total_nodes': total_nodes,
+                'eligible_records': eligible,
+                'total_records': len(records),
                 'parse_strategy': strategy,
                 'parse_failures': eligible,
                 'sample_values': sample_values,
@@ -190,7 +190,8 @@ def compute_timeline(G, overrides=None):
             continue
 
         bins_raw, valid_count, failures = {}, 0, 0
-        for n, d in G.nodes(data=True):
+        for r in records:
+            d = get_data(r)
             raw = d.get(attr)
             if raw is None:
                 continue
@@ -199,17 +200,17 @@ def compute_timeline(G, overrides=None):
                 failures += 1
                 continue
             valid_count += 1
-            nt = node_type(G, n)
+            bkey = get_breakdown_key(r)
             bucket = bins_raw.setdefault(y, {})
-            bucket[nt] = bucket.get(nt, 0) + 1
+            bucket[bkey] = bucket.get(bkey, 0) + 1
 
         dense, yrange = _densify(bins_raw)
         decade = _to_decade_bins(dense) if dense else []
 
         per_attr[attr] = {
             'valid_count': valid_count,
-            'eligible_nodes': eligible,
-            'total_nodes': total_nodes,
+            'eligible_records': eligible,
+            'total_records': len(records),
             'parse_strategy': strategy,
             'parse_failures': failures,
             'sample_values': sample_values,
@@ -218,8 +219,44 @@ def compute_timeline(G, overrides=None):
             'bins_dense': True,
             'year_range': yrange,
         }
+    return per_attr
+
+
+def compute_timeline(G, overrides=None):
+    # Node-scope: attrs sniffed across all node-data dicts.
+    node_records = list(G.nodes(data=True))
+    node_attrs = sorted({
+        k for _, d in node_records for k in d
+        if any(h in k.lower() for h in TEMPORAL_HINTS)
+    })
+    per_attr_node = _per_attr_summary(
+        node_records,
+        node_attrs,
+        get_data=lambda r: r[1],
+        get_breakdown_key=lambda r: node_type(G, r[0]),
+        overrides=overrides,
+    )
+
+    # Edge-scope: attrs sniffed across edge-data dicts. Multigraph keys are stripped.
+    if G.is_multigraph():
+        edge_records = [(u, v, d) for u, v, _k, d in G.edges(data=True, keys=True)]
+    else:
+        edge_records = [(u, v, d) for u, v, d in G.edges(data=True)]
+    edge_attrs = sorted({
+        k for *_, d in edge_records for k in d
+        if any(h in k.lower() for h in TEMPORAL_HINTS)
+    })
+    per_attr_edge = _per_attr_summary(
+        edge_records,
+        edge_attrs,
+        get_data=lambda r: r[2],
+        get_breakdown_key=lambda r: r[2].get('Edge Type', 'Unknown'),
+        overrides=overrides,
+    )
 
     return {
-        'temporal_attrs': temporal_attrs,
-        'per_attr': per_attr,
+        'temporal_attrs_node': node_attrs,
+        'temporal_attrs_edge': edge_attrs,
+        'per_attr_node': per_attr_node,
+        'per_attr_edge': per_attr_edge,
     }

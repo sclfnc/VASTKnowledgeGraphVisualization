@@ -4,7 +4,9 @@ import * as d3 from 'd3'
 import { Grid3x3 } from 'lucide-vue-next'
 import { useTypeMixing } from '@/composables/useTypeMixing.js'
 import { useGraphNodes } from '@/composables/useGraphNodes.js'
+import { useGraphEdges } from '@/composables/useGraphEdges.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import { usePanel } from './usePanel.js'
@@ -24,8 +26,10 @@ const props = defineProps({
 const emit = defineEmits(['request-widen', 'request-shrink'])
 
 const { data, loading, error } = useTypeMixing(toRef(props, 'graphId'))
-const { data: allNodes } = useGraphNodes(toRef(props, 'graphId'))
+const { data: allNodes, nodes: nodesSoA } = useGraphNodes(toRef(props, 'graphId'))
+const { edges: edgesSoA } = useGraphEdges(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { activeEdgeMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
 const filters = useFiltersStore()
 const { controls, updateControl } = usePanel(props, 'type_mixing', data)
@@ -53,33 +57,64 @@ const allEdgeTypes = computed(() => data.value?.edge_types || [])
 const nodeTypes = computed(() => visibleSubset(filters.nodeTypes, allNodeTypes.value))
 const edgeTypes = computed(() => visibleSubset(filters.edgeTypes, allEdgeTypes.value))
 
+// Matrix is always recomputed client-side from edges SoA + activeEdgeMask:
+// no double codepath, edge mask (type/weight/selfLoop) propagates uniformly.
 const activeMatrix = computed(() => {
-  const d = data.value
-  if (!d) return null
+  const soaN = nodesSoA.value
+  const soaE = edgesSoA.value
+  const eMask = activeEdgeMask.value
+  if (!soaN || !soaE || !eMask) return null
+
+  const types = allNodeTypes.value
+  if (!types.length) return null
+
+  const out = {}
+  for (const t of types) {
+    out[t] = {}
+    for (const u of types) out[t][u] = 0
+  }
+
+  const localEdgeTypeFilter = (controls.value.mode === 'edges' && controls.value.edgeTypeFilter)
+    ? controls.value.edgeTypeFilter
+    : null
+  const directed = data.value?.directed ?? false
+
   if (controls.value.mode === 'edges') {
-    if (controls.value.edgeTypeFilter) {
-      // Local pick wins only if it survived the global filter.
-      if (!edgeTypes.value.includes(controls.value.edgeTypeFilter)) return d.edges.counts
-      return d.edges.by_edge_type?.[controls.value.edgeTypeFilter] || null
-    }
-    // Re-aggregate only when global filter is strictly narrower than the full set.
-    const visible = edgeTypes.value
-    if (visible.length === allEdgeTypes.value.length) return d.edges.counts
-    const out = {}
-    for (const t of allNodeTypes.value) {
-      out[t] = {}
-      for (const u of allNodeTypes.value) out[t][u] = 0
-    }
-    for (const et of visible) {
-      const M = d.edges.by_edge_type?.[et]
-      if (!M) continue
-      for (const t of allNodeTypes.value) for (const u of allNodeTypes.value) {
-        out[t][u] += M[t]?.[u] || 0
-      }
+    for (let i = 0; i < soaE.E; i++) {
+      if (!eMask.get(i)) continue
+      if (localEdgeTypeFilter && soaE.edgeTypes[soaE.type[i]] !== localEdgeTypeFilter) continue
+      const st = soaN.types[soaE.source[i]]
+      const dt = soaN.types[soaE.target[i]]
+      out[st][dt] = (out[st][dt] || 0) + 1
     }
     return out
   }
-  return d.nodes.counts
+
+  // 'nodes' mode: count distinct 1-hop neighbors per (src_type, dst_type).
+  // Undirected → symmetric (each edge contributes to both src→dst and dst→src).
+  // Nested Map avoids string-key fragility on type names with special chars.
+  const reached = new Map()  // Map<srcType, Map<dstType, Set<nodeIdx>>>
+  const add = (st, dt, nodeIdx) => {
+    let row = reached.get(st)
+    if (!row) { row = new Map(); reached.set(st, row) }
+    let s = row.get(dt)
+    if (!s) { s = new Set(); row.set(dt, s) }
+    s.add(nodeIdx)
+  }
+  for (let i = 0; i < soaE.E; i++) {
+    if (!eMask.get(i)) continue
+    const srcIdx = soaE.source[i], dstIdx = soaE.target[i]
+    const st = soaN.types[srcIdx], dt = soaN.types[dstIdx]
+    add(st, dt, dstIdx)
+    if (!directed) add(dt, st, srcIdx)
+  }
+  for (const [st, row] of reached) {
+    if (!(st in out)) continue
+    for (const [dt, s] of row) {
+      if (dt in out[st]) out[st][dt] = s.size
+    }
+  }
+  return out
 })
 
 function normalizeMatrix(M, types, mode) {
@@ -310,7 +345,7 @@ function renderAux() {
 
 function renderAll() { renderMatrix(); renderAux() }
 
-watch([data, controls, () => props.widened, nodeTypes, edgeTypes], () => nextTick(renderAll), { deep: true })
+watch([data, controls, () => props.widened, nodeTypes, edgeTypes, activeMatrix], () => nextTick(renderAll), { deep: true })
 
 useD3Chart([matrixContainer, auxContainer], renderAll)
 
@@ -384,7 +419,11 @@ const isFilteredEmpty = computed(() =>
             </span>
             <span v-if="controls.edgeTypeFilter && controls.mode === 'edges'" class="text-muted">· edge type: {{ controls.edgeTypeFilter }}</span>
           </div>
-          <p class="text-[10px] leading-tight text-muted px-1 text-center">
+          <p v-if="noNodesActive" class="text-[10px] italic text-amber-600 px-1 text-center">No data under current filters.</p>
+          <p v-else-if="edgeFilterActive" class="text-[10px] italic text-muted px-1 text-center">
+            Newman r computed on the full graph; matrix counts reflect the active edge subset.
+          </p>
+          <p v-else class="text-[10px] leading-tight text-muted px-1 text-center">
             Newman r computed on the full graph; matrix shows the currently visible type rows/columns.
           </p>
         </div>

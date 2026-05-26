@@ -11,7 +11,6 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import networkit as nk
-import networkx as nx
 
 from schema import compute_schema, load_node_link, node_type, percentile
 from registry import (
@@ -31,7 +30,9 @@ from centrality import centrality_response
 from components import compute_components
 from degree_fit import compute_degree_fit
 from edge_flow import compute_edge_flow
+from edge_index import get_edge_index, get_edge_index_map
 from ego import ego_subgraph, EgoTooLargeError, LRU_SIZE, SOFT_CAP_DEFAULT, VALID_DIRECTIONS
+from node_index import get_node_index
 from timeline import compute_timeline
 from type_mixing import compute_type_mixing
 
@@ -288,48 +289,26 @@ def get_centrality_status(graph_id: str):
     return JSONResponse(content=centrality_status.get(graph_id) or dict(EMPTY_CENTRALITY_STATUS))
 
 
-def _component_membership(G):
-    """Return (wcc_of, scc_of): node → 0-based id, size-descending. scc_of is None on undirected."""
-    if G.is_directed():
-        wcc = sorted(nx.weakly_connected_components(G), key=len, reverse=True)
-    else:
-        wcc = sorted(nx.connected_components(G), key=len, reverse=True)
-    wcc_of = {}
-    for cid, nodes in enumerate(wcc):
-        for n in nodes:
-            wcc_of[n] = cid
-
-    scc_of = None
-    if G.is_directed():
-        scc = sorted(nx.strongly_connected_components(G), key=len, reverse=True)
-        scc_of = {}
-        for cid, nodes in enumerate(scc):
-            for n in nodes:
-                scc_of[n] = cid
-
-    return wcc_of, scc_of
-
-
-def _compute_node_index(G):
-    """Per-node {id, type, degree, wcc_id[, scc_id]} sorted by degree desc; ids match /components/."""
-    wcc_of, scc_of = _component_membership(G)
-    records = [{
-        'id': str(n),
-        'type': node_type(G, n),
-        'degree': int(G.degree(n)),
-        'wcc_id': int(wcc_of[n]),
-        **({'scc_id': int(scc_of[n])} if scc_of is not None else {}),
-    } for n in G.nodes()]
-    records.sort(key=lambda r: r['degree'], reverse=True)
-    return records
-
-
-get_nodes_impl = cached_endpoint('node_index', _compute_node_index)
-
 @app.get("/nodes/{graph_id}", summary="Full node index (id, type, degree)")
 def get_nodes(graph_id: str):
     """Full node index, degree-sorted desc. ~600KB on MC1; powers client-side search."""
-    return get_nodes_impl(graph_id)
+    try:
+        return JSONResponse(content=get_node_index(graph_id))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing node index: {str(e)}")
+
+
+@app.get("/edges/{graph_id}", summary="Full edge index (SoA: source, target, type, weight)")
+def get_edges(graph_id: str):
+    """SoA edge index in G.edges canonical order; i-th record has edge_id = i."""
+    try:
+        return JSONResponse(content=get_edge_index(graph_id))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing edge index: {str(e)}")
 
 
 @app.get("/ego/{graph_id}/{node_id}", summary="k-hop ego subgraph around a node")
@@ -352,7 +331,8 @@ def get_ego(graph_id: str, node_id: str, k: int = 1, cap: int = SOFT_CAP_DEFAULT
 
     try:
         G = load_graph(graph_id)
-        result = ego_subgraph(G, node_id, k_clamped, cap_clamped, direction)
+        edge_map = get_edge_index_map(graph_id)
+        result = ego_subgraph(G, node_id, k_clamped, cap_clamped, direction, edge_index_map=edge_map)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not in graph")
     except EgoTooLargeError as e:

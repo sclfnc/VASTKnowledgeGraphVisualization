@@ -39,7 +39,7 @@ Telescope organises a panel registry. Currently implemented:
 | Ego | **Ego Comparison** | multi-ego (up to 4) union/intersection view with pie-wedge node encoding |
 | Mixing | **Type Mixing Matrix** | type × type heatmap, Newman assortativity, per-edge-type r bars on widen |
 | Mixing | **Edge Flow** | radial meta-graph: types on a circle, edge flows as colored arcs |
-| Temporal | **Activity Timeline** | stacked-by-type bars over years, brush writes a global temporal filter |
+| Temporal | **Activity Timeline · Nodes / Edges** | stacked-by-type bars over years, brush writes a scoped temporal filter (separate panel per scope) |
 
 Stub entries (~20) live in `ALL_SPECS` as roadmap reference, filtered from the UI via `PANEL_SPECS = ALL_SPECS.filter(p => p.status !== 'stub')`.
 
@@ -88,7 +88,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-The API exposes dataset endpoints (`POST /upload/`, `GET /datasets/`, `POST /datasets/load/{name}`), schema (`GET /schema/{graph_id}`), per-panel data endpoints (`/metrics/`, `/degree-fit/`, `/components/`, `/nodes/`, `/ego/`, `/type-mixing/`, `/edge-flow/`, `/timeline/`), centrality with async precompute pipeline (`/centrality-status/`, `/centrality/spectral/`, `/centrality/betweenness/`, `/centrality/closeness/`), and `GET /health/`. Registry and result caches are in-memory — restarting the server clears them. See `CLAUDE.md` for full endpoint contracts.
+The API exposes dataset endpoints (`POST /upload/`, `GET /datasets/`, `POST /datasets/load/{name}`), schema (`GET /schema/{graph_id}`), per-panel data endpoints (`/metrics/`, `/degree-fit/`, `/components/`, `/nodes/`, `/edges/`, `/ego/`, `/type-mixing/`, `/edge-flow/`, `/timeline/`), centrality with async precompute pipeline (`/centrality-status/`, `/centrality/spectral/`, `/centrality/betweenness/`, `/centrality/closeness/`), and `GET /health/`. Registry and result caches are in-memory — restarting the server clears them. See `CLAUDE.md` for full endpoint contracts.
 
 ### Frontend
 
@@ -124,6 +124,27 @@ These are normalized at load time to expose `Node Type` / `Edge Type` keys (Mr. 
 The current focus is the **filter & selection propagation refactor** (see `PROPAGATION.md` at repo root): wire all 10 panels to a global filter contract via a Uint32-packed bitset (`useFilteredModel` → `usePanelContext`), introduce per-panel Pin (lens-on-subset) and Isolation (full freeze), and surface a filter history with undo/redo arrows in `GraphContextBar`. Mask-only semantics: filters attenuate marks, never recompute metrics.
 
 After the propagation layer, the next batch of panels (stub → planned → implemented) covers triadic closure, k-core decomposition, assortativity, degree correlation, and community detection (Louvain / Label Propagation).
+
+---
+
+## Known limitations
+
+### Node attribute filtering not implemented
+
+The `GraphContextBar` exposes filters for **node type** and **degree** only. Filtering by arbitrary node attributes (e.g. `department = 5` on Email-Eu-Core, `release_year > 2000` on MovieLens) is not supported.
+
+This is a deliberate deferral, not an oversight. Adding it requires:
+1. Extending `filters.js` with a dynamic `nodeAttrs` map (`attrName → {kind, value/range}`).
+2. Making `useFilteredModel` consume `useGraphNodes` (currently separate) and apply per-attribute predicates against the full node data — O(N) per active attribute filter.
+3. Designing a generic UI that handles numeric ranges, categorical multi-selects, and boolean toggles from a schema-driven spec.
+
+Node **type** filtering carries none of this overhead — it is already implemented via pre-built `typeMasks` bitsets in `useFilteredModel`, with O(1) lookup per node. The cost difference between the two is structural, not incremental.
+
+Attribute-level filtering belongs in a dedicated task once the panel audit and visual redesign are complete.
+
+### Multigraph parallel edges in EgoComparison
+
+`mergeLayers` in `panels/layeredGraph.js` groups edges by `(source, target, type)`, so parallel edges on multigraphs collapse to a single visual record and reference only the first `edge_id` encountered. Acceptable trade-off for the multi-ego comparison use case (where parallel-edge resolution is not the focus). Single-ego view (`EgoNetworkPanel`) preserves every parallel edge.
 
 ---
 

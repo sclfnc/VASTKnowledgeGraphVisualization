@@ -19,6 +19,8 @@ export const useFiltersStore = defineStore('filters', () => {
   // panels that want to respect a temporal window. No current consumer.
   // Shape: null (no filter) | { attr: string, range: [int, int] (inclusive) }
   const temporalFilter = ref(null)
+  // null = all components; array of component ids (0-based, size-desc order) = filter active
+  const wccFilter = ref(null)
 
   function reset(schema) {
     nodeTypes.value = [...(schema?.node_types ?? [])]
@@ -35,7 +37,8 @@ export const useFiltersStore = defineStore('filters', () => {
     hideIsolated.value = false
     hideSelfLoops.value = false
     temporalFilter.value = null
+    wccFilter.value = null
   }
 
-  return { nodeTypes, edgeTypes, degree, weight, attributes, hops, hideIsolated, hideSelfLoops, temporalFilter, reset }
+  return { nodeTypes, edgeTypes, degree, weight, attributes, hops, hideIsolated, hideSelfLoops, temporalFilter, wccFilter, reset }
 })

@@ -19,15 +19,22 @@ const props = defineProps({
   graphId: { type: String, default: null },
   widened: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
+  mode: { type: String, default: 'node' },  // 'node' | 'edge'
 })
 
 defineEmits(['request-widen', 'request-shrink'])
 
 const { data, loading, error } = useTimeline(toRef(props, 'graphId'))
-const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { color: nodeTypeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const edgeTypeColorScale = computed(() => {
+  const ets = props.schema?.edge_types ?? []
+  const palette = d3.schemeTableau10.concat(d3.schemeSet3)
+  return d3.scaleOrdinal().domain(ets).range(palette)
+})
+const typeColor = (t) => props.mode === 'edge' ? edgeTypeColorScale.value(t) : nodeTypeColor(t)
 const filters = useFiltersStore()
 const { openTimelineSettings } = useTimelineSettingsModal()
-const { controls, updateControl } = usePanel(props, 'timeline', data)
+const { controls, updateControl } = usePanel(props, null, data)
 
 const chartContainer = ref(null)
 let tooltip = null
@@ -43,27 +50,43 @@ const BIN_OPTIONS = [
   { k: 'decade', label: 'Decade' },
 ]
 
-const activeAttr = computed(() => controls.value.attr || data.value?.temporal_attrs?.[0] || null)
-const activeAttrData = computed(() => activeAttr.value ? data.value?.per_attr?.[activeAttr.value] : null)
+const temporalAttrs = computed(() => {
+  const d = data.value
+  if (!d) return []
+  return props.mode === 'edge' ? (d.temporal_attrs_edge ?? []) : (d.temporal_attrs_node ?? [])
+})
+const perAttr = computed(() => {
+  const d = data.value
+  if (!d) return {}
+  return props.mode === 'edge' ? (d.per_attr_edge ?? {}) : (d.per_attr_node ?? {})
+})
+
+const activeAttr = computed(() => {
+  const list = temporalAttrs.value
+  if (controls.value.attr && list.includes(controls.value.attr)) return controls.value.attr
+  return list[0] || null
+})
+const activeAttrData = computed(() => activeAttr.value ? perAttr.value[activeAttr.value] : null)
 const activeBins = computed(() => {
   const a = activeAttrData.value
   if (!a) return []
   return controls.value.binSize === 'decade' ? (a.bins_decade || []) : (a.bins || [])
 })
 
-const isEmpty = computed(() => !loading.value && data.value && (data.value.temporal_attrs?.length ?? 0) === 0)
+const isEmpty = computed(() => !loading.value && data.value && temporalAttrs.value.length === 0)
 const isNoValid = computed(() => !loading.value && activeAttrData.value && activeAttrData.value.valid_count === 0)
 
+const recordLabel = computed(() => props.mode === 'edge' ? 'edges' : 'nodes')
 const coverageText = computed(() => {
   const a = activeAttrData.value
   if (!a) return ''
-  const pct = a.eligible_nodes ? ((a.valid_count / a.eligible_nodes) * 100).toFixed(0) : '?'
-  return `${a.valid_count.toLocaleString()} / ${a.eligible_nodes.toLocaleString()} valid (${pct}%) · strategy: ${a.parse_strategy} · failures: ${a.parse_failures}`
+  const pct = a.eligible_records ? ((a.valid_count / a.eligible_records) * 100).toFixed(0) : '?'
+  return `${a.valid_count.toLocaleString()} / ${a.eligible_records.toLocaleString()} valid (${pct}%) · strategy: ${a.parse_strategy} · failures: ${a.parse_failures}`
 })
 const coverageTooltipText = computed(() => {
   const a = activeAttrData.value
   if (!a) return ''
-  return `Of ${a.total_nodes.toLocaleString()} total nodes, ${a.eligible_nodes.toLocaleString()} carry this attribute; ${a.valid_count.toLocaleString()} parsed via ${a.parse_strategy}; ${a.parse_failures.toLocaleString()} unparseable values discarded.`
+  return `Of ${a.total_records.toLocaleString()} total ${recordLabel.value}, ${a.eligible_records.toLocaleString()} carry this attribute; ${a.valid_count.toLocaleString()} parsed via ${a.parse_strategy}; ${a.parse_failures.toLocaleString()} unparseable values discarded.`
 })
 
 function render() {
@@ -80,8 +103,10 @@ function render() {
 
   const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
 
-  // Bars sum only globally-visible types.
-  const types = visibleSubset(filters.nodeTypes, props.schema?.node_types ?? [])
+  // Bars sum only the globally-visible breakdown set (node types in 'node' mode, edge types in 'edge' mode).
+  const breakdownSet = props.mode === 'edge' ? filters.edgeTypes : filters.nodeTypes
+  const breakdownDomain = props.mode === 'edge' ? (props.schema?.edge_types ?? []) : (props.schema?.node_types ?? [])
+  const types = visibleSubset(breakdownSet, breakdownDomain)
   const visibleTotal = b => {
     if (!types.length) return b.total
     let s = 0
@@ -166,7 +191,7 @@ function render() {
       }
       const lo = yearsInRange[0]
       const hi = yearsInRange[yearsInRange.length - 1]
-      filters.temporalFilter = { attr: activeAttr.value, range: [lo, hi] }
+      filters.temporalFilter = { attr: activeAttr.value, scope: props.mode, range: [lo, hi] }
     })
 
   g.append('g').attr('class', 'brush').call(brush)
@@ -182,24 +207,24 @@ function binTooltip(b) {
 }
 
 function onBarClick(year) {
-  filters.temporalFilter = { attr: activeAttr.value, range: [year, year] }
+  filters.temporalFilter = { attr: activeAttr.value, scope: props.mode, range: [year, year] }
 }
 
-watch([data, controls, () => props.widened, () => filters.nodeTypes], () => nextTick(render), { deep: true })
+watch([data, controls, () => props.widened, () => filters.nodeTypes, () => filters.edgeTypes, () => props.mode], () => nextTick(render), { deep: true })
 useD3Chart(chartContainer, render)
 </script>
 
 <template>
   <div class="flex flex-col gap-1.5">
-    <Teleport v-if="controlsTarget && data?.temporal_attrs?.length" :to="`#${controlsTarget}`">
+    <Teleport v-if="controlsTarget && temporalAttrs.length" :to="`#${controlsTarget}`">
       <div class="grid grid-cols-2 auto-rows-min gap-1.5">
         <ControlSection title="Attribute" :col-span="2">
           <select
             class="input-base w-full text-xs px-2 py-1"
-            :value="controls.attr ?? data.temporal_attrs[0]"
+            :value="activeAttr ?? ''"
             @change="(e) => updateControl('attr', e.target.value)"
           >
-            <option v-for="a in data.temporal_attrs" :key="a" :value="a">{{ a }}</option>
+            <option v-for="a in temporalAttrs" :key="a" :value="a">{{ a }}</option>
           </select>
         </ControlSection>
 

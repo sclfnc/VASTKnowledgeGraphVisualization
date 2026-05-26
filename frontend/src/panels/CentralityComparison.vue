@@ -23,7 +23,7 @@ const props = defineProps({
 
 const all = useAllCentralities()
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
-const { activeNodeMask, isActive } = usePanelContextFromProps(props)
+const { activeNodeMask, isActive, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, null)
 const chartContainer = ref(null)
 
@@ -217,9 +217,10 @@ function renderChart() {
         <span>Closeness: {{ all.status.value.closeness }}</span>
       </div>
     </div>
-    <div v-else ref="chartContainer" class="chart-elev w-full" style="aspect-ratio: 1/1; position: relative;"></div>
-    <p v-if="branches === 'ready'" class="text-[10px] leading-tight text-muted px-1">
-      Correlations computed on the full graph; current filter attenuates non-matching marks in scatter cells.
+    <p v-if="branches === 'ready' && noNodesActive" class="text-[10px] italic text-amber-600 px-1">No data under current filters.</p>
+    <p v-else-if="branches === 'ready' && edgeFilterActive" class="text-[10px] italic text-muted px-1">
+      Correlations computed on the full graph; edge filter attenuates marks only.
     </p>
+    <div v-if="branches === 'ready'" ref="chartContainer" class="chart-elev w-full" style="aspect-ratio: 1/1; position: relative;"></div>
   </div>
 </template>

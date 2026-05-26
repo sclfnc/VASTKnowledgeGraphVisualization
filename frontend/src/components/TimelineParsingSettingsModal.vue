@@ -17,10 +17,21 @@ const { data } = useTimeline(graphIdRef)
 // Per-attribute local form state: { strategy: 'auto'|'int_year'|'unix_ts'|'iso_date'|'regex', pattern: string }
 const form = reactive({})
 
+// Union of node-scope + edge-scope temporal attributes (single override namespace).
+function allAttrs(payload) {
+  if (!payload) return []
+  return [...new Set([...(payload.temporal_attrs_node ?? []), ...(payload.temporal_attrs_edge ?? [])])]
+}
+
+function perAttrFor(payload, attr) {
+  if (!payload) return null
+  return payload.per_attr_node?.[attr] ?? payload.per_attr_edge?.[attr] ?? null
+}
+
 function syncFormFromStore(payload) {
   if (!payload) return
   const stored = overrides.getForGraph(graphStore.graphId)
-  for (const attr of payload.temporal_attrs ?? []) {
+  for (const attr of allAttrs(payload)) {
     const o = stored[attr]
     if (o?.strategy === 'regex') {
       form[attr] = { strategy: 'regex', pattern: o.pattern ?? '' }
@@ -130,29 +141,29 @@ function resetAll() {
         </div>
 
         <div v-if="!data" class="text-sm text-muted">Loading temporal attributes…</div>
-        <div v-else-if="!data.temporal_attrs?.length" class="text-sm text-muted italic">
+        <div v-else-if="!allAttrs(data).length" class="text-sm text-muted italic">
           No temporal attributes detected in this graph.
         </div>
 
         <div v-else class="flex flex-col gap-3">
           <section
-            v-for="attr in data.temporal_attrs"
+            v-for="attr in allAttrs(data)"
             :key="attr"
             class="rounded-lg border border-slate-200 p-3"
           >
             <div class="mb-2 flex items-center justify-between">
               <h3 class="text-sm font-semibold text-primary">{{ attr }}</h3>
               <span class="text-[10px] text-muted">
-                Detected: <code>{{ data.per_attr?.[attr]?.parse_strategy ?? 'n/a' }}</code>
+                Detected: <code>{{ perAttrFor(data, attr)?.parse_strategy ?? 'n/a' }}</code>
                 ·
-                {{ data.per_attr?.[attr]?.valid_count ?? 0 }} / {{ data.per_attr?.[attr]?.eligible_nodes ?? 0 }} parsed
+                {{ perAttrFor(data, attr)?.valid_count ?? 0 }} / {{ perAttrFor(data, attr)?.eligible_records ?? 0 }} parsed
               </span>
             </div>
 
             <p class="mb-2 text-[11px] text-secondary">
               Sample:
               <span
-                v-for="(s, i) in (data.per_attr?.[attr]?.sample_values ?? [])"
+                v-for="(s, i) in (perAttrFor(data, attr)?.sample_values ?? [])"
                 :key="i"
                 class="ml-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-700"
               >{{ s }}</span>
@@ -184,7 +195,7 @@ function resetAll() {
                   <div v-if="form[attr].pattern" class="text-[10px] text-muted">
                     <span class="text-secondary font-semibold">Preview:</span>
                     <span
-                      v-for="(s, i) in (data.per_attr?.[attr]?.sample_values ?? [])"
+                      v-for="(s, i) in (perAttrFor(data, attr)?.sample_values ?? [])"
                       :key="i"
                       class="ml-2"
                     >

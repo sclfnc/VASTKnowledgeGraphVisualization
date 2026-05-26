@@ -29,7 +29,7 @@ defineEmits(['request-widen', 'request-shrink'])
 
 const { controls, updateControl } = usePanel(props, 'ego_compare')
 const { data: allNodes } = useGraphNodes(toRef(props, 'graphId'))
-const { activeNodeMask, isActive: isActiveId } = usePanelContextFromProps(props)
+const { activeNodeMask, activeEdgeMask, isActive: isActiveId, isEdgeActive } = usePanelContextFromProps(props)
 
 // Selection store is unbounded; crop to MAX_LAYERS — pie encoding breaks above 4.
 const selection = useSelectionStore()
@@ -132,7 +132,10 @@ function renderNode(g, d) {
 function renderEdge(sel) {
   sel
     .attr('stroke', d => LAYER_PALETTE[Math.min(...d.layers)])
-    .attr('stroke-opacity', d => d.layers.size >= 2 ? 0.85 : 0.45)
+    .attr('stroke-opacity', d => {
+      if (!isEdgeActive(d.edge_id)) return 0.1
+      return d.layers.size >= 2 ? 0.85 : 0.45
+    })
     .attr('stroke-width', d => d.layers.size >= 2 ? 1.6 : 1)
 }
 
@@ -153,7 +156,7 @@ const { reconcile } = useForceGraph({
   onNodeClick,
 })
 
-watch(activeNodeMask, () => reconcile())
+watch([activeNodeMask, activeEdgeMask], () => reconcile())
 
 watch(chartContainer, (el) => {
   if (el && !tooltip) tooltip = makeTooltip(el)

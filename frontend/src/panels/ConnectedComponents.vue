@@ -8,6 +8,7 @@ import { useGraphNodes } from '@/composables/useGraphNodes.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
+import { useFiltersStore } from '@/stores/filters.js'
 import { Bitset } from '@/utils/bitset.js'
 import { makeTooltip, showTip, hideTip } from './shared.js'
 import { usePanel } from './usePanel.js'
@@ -30,8 +31,9 @@ const emit = defineEmits(['request-widen', 'request-shrink'])
 const { data, loading, error } = useComponents(toRef(props, 'graphId'))
 const { nodes: soa } = useGraphNodes(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
-const { activeNodeMask, selectedMask } = usePanelContextFromProps(props)
+const { activeNodeMask, selectedMask, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
+const filters = useFiltersStore()
 const { controls, updateControl } = usePanel(props, 'connectivity', data)
 const mainContainer = ref(null)
 const drillContainer = ref(null)
@@ -235,6 +237,17 @@ function clickComponent(comp) {
   selection.replace(ids)
 }
 
+function filterToComponent(comp) {
+  filters.wccFilter = [comp.id]
+}
+
+function filterTopN(n) {
+  const s = activeSummary.value
+  if (!s) return
+  const ids = s.components.slice(0, n).map(c => c.id)
+  filters.wccFilter = ids
+}
+
 // Active size keeps labels coherent with bubble area; comp.size stays in the tooltip.
 function formatLabel(comp, total) {
   const n = comp._active ?? activeSizeOf(comp)
@@ -254,7 +267,8 @@ function tooltipHtml(comp, total) {
     ? `${n.toLocaleString()} / ${comp.size.toLocaleString()} nodes (${pct}%)`
     : `${comp.size.toLocaleString()} nodes (${pct}%)`
   const sel = selN > 0 ? `<br><span style="color:#f59e0b">${selN} selected</span>` : ''
-  return `${head}<br>${body}${sel}`
+  const hint = `<br><span style="color:#94a3b8;font-size:10px">click: select · dblclick: filter</span>`
+  return `${head}<br>${body}${sel}${hint}`
 }
 
 function renderMain() {
@@ -301,6 +315,7 @@ function renderBubbles(container, totalW, totalH, comps) {
     .attr('transform', d => `translate(${d.x},${d.y})`)
     .style('cursor', 'pointer')
     .on('click', (_, d) => clickComponent(d.data))
+    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d.data) })
     .on('mouseover', (ev, d) => showTip(tooltip, ev, tooltipHtml(d.data, totalNodes)))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
@@ -397,6 +412,7 @@ function renderBars(container, totalW, totalH, comps) {
     .attr('opacity', d => selectedId.value == null || selectedId.value === d.id ? 1 : 0.3)
     .style('cursor', 'pointer')
     .on('click', (_, d) => clickComponent(d))
+    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d) })
     .on('mouseover', (ev, d) => showTip(tooltip, ev, tooltipHtml(d, totalNodes)))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
@@ -556,11 +572,30 @@ function renderDrill() {
             <span class="text-muted text-[10px] ml-auto">of {{ componentCount }}</span>
           </div>
         </ControlSection>
+
+        <ControlSection v-if="componentCount > 1" title="Focus">
+          <div class="flex flex-wrap gap-1.5 px-2 pb-2">
+            <button
+              v-for="n in [1, 3, 5].filter(n => n <= componentCount)" :key="n"
+              class="segmented-pill px-2 py-0.5 text-xs"
+              :class="filters.wccFilter?.length === n && filters.wccFilter.every((id, i) => id === i) ? 'segmented-pill--active' : ''"
+              @click="filterTopN(n)">
+              Top {{ n }}
+            </button>
+            <button
+              v-if="filters.wccFilter"
+              class="segmented-pill segmented-pill--danger px-2 py-0.5 text-xs"
+              @click="filters.wccFilter = null">
+              Clear
+            </button>
+          </div>
+        </ControlSection>
       </div>
     </Teleport>
 
     <div v-if="loading" class="text-sm text-secondary p-3 surface-recessed rounded-lg">Loading components…</div>
     <div v-if="error" class="text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">{{ error }}</div>
+    <p v-if="noNodesActive" class="text-[10px] italic text-amber-600 px-1">No data under current filters.</p>
 
     <div :class="widened && selectedComponent ? 'grid grid-cols-2 gap-6' : ''">
       <div ref="mainContainer" class="chart-elev w-full min-w-0" style="aspect-ratio: 4/3; position: relative;"></div>
