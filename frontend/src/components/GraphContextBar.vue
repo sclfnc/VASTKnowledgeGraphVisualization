@@ -1,18 +1,15 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, RotateCw, X } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { ChevronLeft, ChevronRight, ChevronDown, Eye, EyeOff, RotateCw, X, Check } from 'lucide-vue-next'
 import { useFiltersStore } from '../stores/filters.js'
 import { useSelectionStore } from '../stores/selection.js'
 import { useFilterHistoryStore } from '../stores/filterHistory.js'
 import { usePinsStore } from '../stores/pins.js'
 import { useSchema } from '../composables/useSchema.js'
 import { useNodeTypeColors } from '../composables/useNodeTypeColors.js'
-import { formatAttrSummary, formatCoverage } from '../panels/shared.js'
+import { useFilteredModel } from '../composables/useFilteredModel.js'
 import NumericFilter from './NumericFilter.vue'
 
-// Presentation cap for the Selected pill list. The selection store itself
-// stays unbounded (a single click on an aggregate mark may seed thousands of
-// ids); the cap only protects the DOM from blowing up.
 const SELECTION_PILL_CAP = 20
 
 const { schema } = useSchema()
@@ -21,57 +18,50 @@ const selection = useSelectionStore()
 const filterHistory = useFilterHistoryStore()
 const pins = usePinsStore()
 const { color: typeColor } = useNodeTypeColors(schema)
+const { activeNodeMask, activeEdgeMask } = useFilteredModel()
+const filteredNodeCount = computed(() => activeNodeMask.value?.popcount() ?? schema.value?.nodes ?? 0)
+const filteredEdgeCount = computed(() => activeEdgeMask.value?.popcount() ?? schema.value?.edges ?? 0)
 
-// Per-column attribute breakdown expand state. Independent so the user can
-// reveal Nodi attrs without dragging in the (often empty) Edge column.
-//
-// Future hook: when selection.ids.length === 1 the Nodi column should swap
-// into a node-specific mode showing the selected node's actual attribute
-// values instead of the global per-type summary. Additive — no rewrite.
-const nodesAttrsOpen = ref(false)
-const edgesAttrsOpen = ref(false)
+const isolatedAlreadyFiltered = computed(() => {
+  const range = filters.degree?.value
+  return Array.isArray(range) && range[0] > 0
+})
 
-const hasEdgeAttrs = computed(() =>
-  (schema.value?.edge_types_detail ?? []).some(t => t.attributes.length > 0)
-)
+const hasIsolated = computed(() => (schema.value?.degree_range?.[0] ?? 1) === 0)
+const hasSelfLoops = computed(() => (schema.value?.self_loops ?? 0) > 0)
+const multipleNodeTypes = computed(() => (schema.value?.node_types?.length ?? 0) > 1)
+const multipleEdgeTypes = computed(() => (schema.value?.edge_types?.length ?? 0) > 1)
 
-// Diff against the post-reset defaults: each line appears only when the
-// filter diverges from the schema-derived baseline. Empty list → "No filters".
-const filtersSummary = computed(() => {
-  const s = schema.value
-  if (!s) return ''
-  const parts = []
-  const totalNT = (s.node_types ?? []).length
-  if (filters.nodeTypes.length !== totalNT) parts.push(`${filters.nodeTypes.length}/${totalNT} node types`)
-  const totalET = (s.edge_types ?? []).length
-  if (totalET > 0 && filters.edgeTypes.length !== totalET) parts.push(`${filters.edgeTypes.length}/${totalET} edge types`)
-  const [dMin, dMax] = filters.degree.value
-  const [d0, d1] = s.degree_range ?? [0, 0]
-  if (dMin > d0) parts.push(`Degree ≥ ${dMin}`)
-  if (dMax < d1) parts.push(`Degree ≤ ${dMax}`)
-  if (s.weighted) {
-    const [wMin, wMax] = filters.weight.value
-    const [w0, w1] = s.weight_range ?? [0, 0]
-    if (wMin > w0) parts.push(`Weight ≥ ${wMin}`)
-    if (wMax < w1) parts.push(`Weight ≤ ${wMax}`)
-  }
-  if (filters.hideIsolated) parts.push('Hide isolated')
-  if (filters.hideSelfLoops) parts.push('Hide self-loops')
-  if (filters.temporalFilter) {
-    const [a, b] = filters.temporalFilter.range
-    parts.push(`${filters.temporalFilter.attr} ${a}–${b}`)
-  }
-  return parts.length === 0 ? 'No filters' : `Filters: ${parts.join(' · ')}`
+
+const wccFilterLabel = computed(() => {
+  const f = filters.wccFilter
+  if (!f || f.length === 0) return null
+  if (f.length === 1) return `WCC #${f[0] + 1}`
+  return `WCC: ${f.length} components`
 })
 
 const pinnedSelectionIds = computed(() => selection.ids.slice(0, SELECTION_PILL_CAP))
 const overflowSelectionCount = computed(() => Math.max(0, selection.ids.length - SELECTION_PILL_CAP))
 
-function nodeChipStyle(t, selected) {
-  const c = typeColor(t)
-  if (selected) return { backgroundColor: `${c}20`, borderColor: c, color: c }
-  return { borderColor: c, color: c }
-}
+// Dropdown open state
+const nodeTypesOpen = ref(false)
+const edgeTypesOpen = ref(false)
+
+const nodeTypesLabel = computed(() => {
+  const all = schema.value?.node_types?.length ?? 0
+  const active = filters.nodeTypes.length
+  if (all === 0) return null
+  if (active === all) return 'All types'
+  return `${active} / ${all} types`
+})
+
+const edgeTypesLabel = computed(() => {
+  const all = schema.value?.edge_types?.length ?? 0
+  const active = filters.edgeTypes.length
+  if (all === 0) return null
+  if (active === all) return 'All types'
+  return `${active} / ${all} types`
+})
 
 function toggleType(list, value) {
   const i = list.indexOf(value)
@@ -88,185 +78,223 @@ function resetAll() {
 </script>
 
 <template>
-  <div v-if="schema" class="card-elev rounded-2xl overflow-hidden">
+  <div v-if="schema" class="card-elev rounded-2xl">
 
-    <!-- Caption row: filter summary + undo/redo + Reset all. -->
-    <div class="flex items-center gap-3 border-b border-slate-200 px-4 py-2">
-      <span class="flex-1 truncate text-xs text-secondary">{{ filtersSummary }}</span>
-      <div class="flex items-center gap-1">
+    <!-- Top bar -->
+    <div class="flex items-center gap-4 border-b border-slate-200 px-4 py-2.5">
+      <div class="flex flex-col gap-0.5">
+        <span class="text-sm font-semibold text-primary leading-tight">{{ schema.name ?? 'Graph' }}</span>
+        <span class="text-xs text-muted">
+          {{ schema.directed ? 'directed' : 'undirected' }}
+          <template v-if="schema.weighted"> · weighted</template>
+          <template v-if="schema.multigraph"> · multigraph</template>
+          <template v-if="schema.bipartite"> · bipartite</template>
+          <template v-if="schema.acyclic === true"> · DAG</template>
+        </span>
+      </div>
+
+      <span v-if="filters.temporalFilter" class="flex items-center gap-1 text-xs font-medium text-sky-600">
+        <span class="text-[9px] uppercase tracking-wide opacity-70">{{ filters.temporalFilter.scope ?? 'node' }}</span>
+        {{ filters.temporalFilter.attr }}: {{ filters.temporalFilter.range[0] }}–{{ filters.temporalFilter.range[1] }}
+        <button class="text-muted hover:text-red-400" @click="filters.temporalFilter = null"><X :size="10" /></button>
+      </span>
+      <span v-if="wccFilterLabel" class="flex items-center gap-1 text-xs font-medium text-violet-600">
+        {{ wccFilterLabel }}
+        <button class="text-muted hover:text-red-400" @click="filters.wccFilter = null"><X :size="10" /></button>
+      </span>
+
+      <span v-if="filteredNodeCount === 0" class="flex items-center gap-1 text-xs font-medium text-red-500">
+        0 nodes match — adjust filters
+      </span>
+
+      <div class="ml-auto flex items-center gap-1">
         <button
-          class="rounded p-1 text-secondary transition hover:text-primary disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-secondary"
+          class="rounded p-1 text-secondary transition hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"
           :disabled="!filterHistory.canBack"
-          aria-label="Undo filter change"
           @click="filterHistory.back(schema)">
           <ChevronLeft :size="14" />
         </button>
         <button
-          class="rounded p-1 text-secondary transition hover:text-primary disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-secondary"
+          class="rounded p-1 text-secondary transition hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"
           :disabled="!filterHistory.canForward"
-          aria-label="Redo filter change"
           @click="filterHistory.forward(schema)">
           <ChevronRight :size="14" />
         </button>
-        <button
-          class="rounded px-2 py-0.5 text-xs text-secondary transition hover:text-red-500"
-          @click="resetAll">
-          Reset all
+        <button class="rounded px-2 py-0.5 text-xs text-secondary transition hover:text-red-500" @click="resetAll">
+          Reset
         </button>
       </div>
     </div>
 
-    <div class="grid grid-cols-[1fr_2fr]">
+    <div class="grid grid-cols-2 divide-x divide-slate-200">
 
-      <!-- Generale -->
-      <div class="flex flex-col gap-2 px-4 py-3">
-        <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">Generale</span>
-        <p class="text-sm font-bold text-primary leading-tight">{{ schema.name ?? 'Graph' }}</p>
-        <div class="flex flex-col gap-0.5 text-xs text-secondary">
-          <span><span class="font-semibold text-primary">{{ schema.nodes.toLocaleString() }}</span> nodi</span>
-          <span><span class="font-semibold text-primary">{{ schema.edges.toLocaleString() }}</span> archi</span>
-          <span>{{ schema.directed ? 'Directed' : 'Undirected' }}</span>
-          <span v-if="schema.multigraph">Multigraph</span>
-          <span v-if="schema.acyclic === true">DAG</span>
-          <span v-if="schema.bipartite">Bipartite</span>
-          <span v-if="filters.temporalFilter" class="text-sky-600 font-medium flex items-center gap-1">
-            {{ filters.temporalFilter.attr }}: {{ filters.temporalFilter.range[0] }}–{{ filters.temporalFilter.range[1] }}
-            <button class="text-muted hover:text-red-400"
-                    aria-label="Clear temporal filter"
-                    @click="filters.temporalFilter = null">
-              <X :size="10" />
-            </button>
+      <!-- NODI -->
+      <section class="flex flex-col gap-3 px-4 py-3">
+
+        <!-- Header with count -->
+        <div class="flex items-baseline gap-2">
+          <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">Nodes</span>
+          <span class="flex items-baseline gap-1 text-xs">
+            <span class="font-semibold text-primary tabular-nums">{{ filteredNodeCount.toLocaleString() }}</span>
+            <span class="text-muted">/ {{ schema.nodes.toLocaleString() }}</span>
           </span>
         </div>
-      </div>
 
-      <!-- Nodi + Archi: each column owns chips, filters, attr breakdown (and selection for Nodi) -->
-      <div class="flex divide-x divide-slate-200 border-l border-slate-200">
-
-        <!-- Nodi -->
-        <section class="flex flex-1 flex-col gap-2 px-4 py-3">
-          <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">Nodi</span>
-          <div v-if="schema.node_types?.length" class="flex flex-wrap gap-1">
-            <button
-              v-for="t in schema.node_types" :key="t"
-              class="type-chip px-2 py-0.5 text-xs font-medium"
-              :style="nodeChipStyle(t, filters.nodeTypes.includes(t))"
-              @click="toggleType(filters.nodeTypes, t)">
-              {{ t }}
-            </button>
-          </div>
-          <div class="flex flex-wrap items-end gap-x-4 gap-y-1.5">
-            <NumericFilter v-model="filters.degree" :range="schema.degree_range" label="Degree" />
-            <button
-              class="flex items-center gap-1.5 text-xs transition"
-              :class="filters.hideIsolated ? 'text-red-500 hover:text-red-600' : 'text-secondary hover:text-primary'"
-              @click="filters.hideIsolated = !filters.hideIsolated">
-              <component :is="filters.hideIsolated ? EyeOff : Eye" :size="12" />
-              <span>Isolated</span>
-            </button>
-          </div>
-
-          <!-- Attribute breakdown (collapsible) -->
+        <!-- Type dropdown -->
+        <div class="relative">
+          <p v-if="!multipleNodeTypes" class="text-xs text-muted italic">Single type — no filter</p>
           <button
-            class="flex items-center gap-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted transition hover:text-primary"
-            @click="nodesAttrsOpen = !nodesAttrsOpen">
-            <component :is="nodesAttrsOpen ? ChevronDown : ChevronRight" :size="12" />
-            <span>Attributes</span>
+            v-else
+            class="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-primary transition hover:border-slate-300"
+            @click.stop="nodeTypesOpen = !nodeTypesOpen; edgeTypesOpen = false">
+            <span :class="filters.nodeTypes.length < schema.node_types.length ? 'font-medium text-slate-700' : 'text-secondary'">
+              {{ nodeTypesLabel }}
+            </span>
+            <ChevronDown :size="11" class="text-muted transition-transform" :class="nodeTypesOpen ? 'rotate-180' : ''" />
           </button>
-          <div v-if="nodesAttrsOpen" class="flex flex-col gap-2 border-t border-slate-200 pt-2">
-            <div v-for="t in schema.node_types_detail" :key="t.name" class="flex flex-col gap-1">
-              <div class="flex items-baseline gap-2">
-                <span class="text-xs font-bold" :style="{ color: typeColor(t.name) }">{{ t.name }}</span>
-                <span class="text-[10px] text-muted tabular-nums">{{ t.count.toLocaleString() }}</span>
+
+          <!-- Dropdown panel -->
+          <div
+            v-if="nodeTypesOpen"
+            class="absolute left-0 top-full z-20 mt-1 max-h-56 w-52 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+            @click.stop>
+            <div class="p-1">
+              <!-- Select all / none row -->
+              <div class="flex items-center justify-between border-b border-slate-100 px-2 pb-1 mb-1">
+                <button class="text-[10px] text-secondary hover:text-primary" @click="filters.nodeTypes = [...schema.node_types]">All</button>
+                <button class="text-[10px] text-secondary hover:text-red-500" @click="filters.nodeTypes = []">None</button>
               </div>
-              <ul v-if="t.attributes.length" class="flex flex-col gap-0.5 pl-2 text-[11px]">
-                <li v-for="a in t.attributes" :key="a.name" class="flex flex-wrap items-baseline gap-x-1.5">
-                  <span class="font-medium text-primary">{{ a.name }}</span>
-                  <span class="text-[9px] uppercase tracking-wide text-muted">{{ a.kind }}</span>
-                  <span class="text-[10px] text-muted tabular-nums">{{ formatCoverage(a.coverage) }}</span>
-                  <span class="truncate text-secondary" :title="formatAttrSummary(a)">
-                    · {{ formatAttrSummary(a) }}
+              <div
+                v-for="t in schema.node_types" :key="t"
+                class="group flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-slate-50 transition">
+                <button class="flex items-center gap-2 flex-1 text-left text-xs" @click="toggleType(filters.nodeTypes, t)">
+                  <span
+                    class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border"
+                    :style="filters.nodeTypes.includes(t) ? { backgroundColor: typeColor(t), borderColor: typeColor(t) } : { borderColor: typeColor(t) }">
+                    <Check v-if="filters.nodeTypes.includes(t)" :size="9" class="text-white" />
                   </span>
-                </li>
-              </ul>
-              <span v-else class="pl-2 text-[10px] italic text-muted">no extra attributes</span>
-            </div>
-          </div>
-
-          <div v-if="selection.ids.length" class="flex flex-col gap-1 border-t border-slate-200 pt-2">
-            <div class="flex items-center justify-between gap-4">
-              <span class="text-xs font-medium text-secondary">Selected</span>
-              <button class="text-xs text-muted hover:text-red-400" @click="selection.clear()">clear</button>
-            </div>
-            <ul class="flex flex-wrap gap-1">
-              <li v-for="id in pinnedSelectionIds" :key="id" class="flex items-center gap-1 rounded-lg surface-recessed px-2 py-0.5 text-xs text-primary">
-                <span class="max-w-[7rem] truncate">{{ id }}</span>
-                <button class="text-muted hover:text-red-400" @click="selection.remove(id)"><X :size="12" /></button>
-              </li>
-              <li v-if="overflowSelectionCount > 0" class="flex items-center rounded-lg surface-recessed px-2 py-0.5 text-xs text-muted">
-                +{{ overflowSelectionCount }} more
-              </li>
-            </ul>
-          </div>
-        </section>
-
-        <!-- Archi -->
-        <section class="flex flex-1 flex-col gap-2 px-4 py-3">
-          <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">Archi</span>
-          <div v-if="schema.edge_types?.length" class="flex flex-wrap gap-1">
-            <button
-              v-for="t in schema.edge_types" :key="t"
-              class="type-chip px-2 py-0.5 text-xs font-medium"
-              :class="{ 'type-chip--active': filters.edgeTypes.includes(t) }"
-              @click="toggleType(filters.edgeTypes, t)">
-              {{ t }}
-            </button>
-          </div>
-          <div class="flex flex-wrap items-end gap-x-4 gap-y-1.5">
-            <NumericFilter v-if="schema.weighted" v-model="filters.weight" :range="schema.weight_range" label="Weight" />
-            <button
-              class="flex items-center gap-1.5 text-xs transition"
-              :class="filters.hideSelfLoops ? 'text-red-500 hover:text-red-600' : 'text-secondary hover:text-primary'"
-              @click="filters.hideSelfLoops = !filters.hideSelfLoops">
-              <RotateCw :size="12" />
-              <span>Self-loops</span>
-            </button>
-          </div>
-
-          <!-- Attribute breakdown (collapsible) -->
-          <button
-            class="flex items-center gap-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted transition hover:text-primary"
-            @click="edgesAttrsOpen = !edgesAttrsOpen">
-            <component :is="edgesAttrsOpen ? ChevronDown : ChevronRight" :size="12" />
-            <span>Attributes</span>
-          </button>
-          <div v-if="edgesAttrsOpen" class="flex flex-col gap-2 border-t border-slate-200 pt-2">
-            <div v-if="!hasEdgeAttrs" class="text-[11px] italic text-muted">
-              No additional edge attributes — all edges carry only Edge Type.
-            </div>
-            <template v-else>
-              <div v-for="t in schema.edge_types_detail" :key="t.name" class="flex flex-col gap-1">
-                <div class="flex items-baseline gap-2">
-                  <span class="text-xs font-bold text-primary">{{ t.name }}</span>
-                  <span class="text-[10px] text-muted tabular-nums">{{ t.count.toLocaleString() }}</span>
-                </div>
-                <ul v-if="t.attributes.length" class="flex flex-col gap-0.5 pl-2 text-[11px]">
-                  <li v-for="a in t.attributes" :key="a.name" class="flex flex-wrap items-baseline gap-x-1.5">
-                    <span class="font-medium text-primary">{{ a.name }}</span>
-                    <span class="text-[9px] uppercase tracking-wide text-muted">{{ a.kind }}</span>
-                    <span class="text-[10px] text-muted tabular-nums">{{ formatCoverage(a.coverage) }}</span>
-                    <span class="truncate text-secondary" :title="formatAttrSummary(a)">
-                      · {{ formatAttrSummary(a) }}
-                    </span>
-                  </li>
-                </ul>
-                <span v-else class="pl-2 text-[10px] italic text-muted">no extra attributes</span>
+                  <span :style="{ color: typeColor(t) }" class="font-medium">{{ t }}</span>
+                </button>
+                <button
+                  class="hidden group-hover:inline text-[9px] text-muted hover:text-primary shrink-0 transition"
+                  @click.stop="filters.nodeTypes = [t]">
+                  only
+                </button>
               </div>
-            </template>
+            </div>
           </div>
-        </section>
 
-      </div>
+          <!-- Click-outside overlay -->
+          <div v-if="nodeTypesOpen" class="fixed inset-0 z-10" @click="nodeTypesOpen = false" />
+        </div>
+
+        <!-- Degree + hide isolated -->
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <NumericFilter v-model="filters.degree" :range="schema.degree_range" label="Degree" />
+          <button
+            v-if="hasIsolated"
+            class="flex items-center gap-1.5 text-xs transition"
+            :class="isolatedAlreadyFiltered ? 'text-muted cursor-default' : filters.hideIsolated ? 'text-red-500 hover:text-red-600' : 'text-secondary hover:text-primary'"
+            :title="isolatedAlreadyFiltered ? 'Already filtered by degree' : ''"
+            :disabled="isolatedAlreadyFiltered"
+            @click="!isolatedAlreadyFiltered && (filters.hideIsolated = !filters.hideIsolated)">
+            <component :is="filters.hideIsolated || isolatedAlreadyFiltered ? EyeOff : Eye" :size="12" />
+            <span>Isolated</span>
+          </button>
+        </div>
+
+        <!-- Selection -->
+        <div v-if="selection.ids.length" class="flex flex-col gap-1 border-t border-slate-100 pt-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-secondary">Selected</span>
+            <button class="text-xs text-muted hover:text-red-400" @click="selection.clear()">clear</button>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li v-for="id in pinnedSelectionIds" :key="id"
+              class="flex items-center gap-1 rounded-lg surface-recessed px-2 py-0.5 text-xs text-primary">
+              <span class="max-w-[7rem] truncate">{{ id }}</span>
+              <button class="text-muted hover:text-red-400" @click="selection.remove(id)"><X :size="12" /></button>
+            </li>
+            <li v-if="overflowSelectionCount > 0"
+              class="flex items-center rounded-lg surface-recessed px-2 py-0.5 text-xs text-muted">
+              +{{ overflowSelectionCount }} more
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ARCHI -->
+      <section class="flex flex-col gap-3 px-4 py-3">
+
+        <!-- Header with count -->
+        <div class="flex items-baseline gap-2">
+          <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">Edges</span>
+          <span class="flex items-baseline gap-1 text-xs">
+            <span class="font-semibold text-primary tabular-nums">{{ filteredEdgeCount.toLocaleString() }}</span>
+            <span class="text-muted">/ {{ schema.edges.toLocaleString() }}</span>
+          </span>
+        </div>
+
+        <!-- Edge type dropdown -->
+        <div class="relative">
+          <p v-if="!multipleEdgeTypes" class="text-xs text-muted italic">Single type — no filter</p>
+          <button
+            v-else
+            class="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-primary transition hover:border-slate-300"
+            @click.stop="edgeTypesOpen = !edgeTypesOpen; nodeTypesOpen = false">
+            <span :class="filters.edgeTypes.length < schema.edge_types.length ? 'font-medium text-slate-700' : 'text-secondary'">
+              {{ edgeTypesLabel }}
+            </span>
+            <ChevronDown :size="11" class="text-muted transition-transform" :class="edgeTypesOpen ? 'rotate-180' : ''" />
+          </button>
+
+          <div
+            v-if="edgeTypesOpen"
+            class="absolute left-0 top-full z-20 mt-1 max-h-56 w-52 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+            @click.stop>
+            <div class="p-1">
+              <div class="flex items-center justify-between border-b border-slate-100 px-2 pb-1 mb-1">
+                <button class="text-[10px] text-secondary hover:text-primary" @click="filters.edgeTypes = [...schema.edge_types]">All</button>
+                <button class="text-[10px] text-secondary hover:text-red-500" @click="filters.edgeTypes = []">None</button>
+              </div>
+              <div
+                v-for="t in schema.edge_types" :key="t"
+                class="group flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-slate-50 transition">
+                <button class="flex items-center gap-2 flex-1 text-left text-xs" @click="toggleType(filters.edgeTypes, t)">
+                  <span
+                    class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border border-slate-300"
+                    :class="filters.edgeTypes.includes(t) ? 'bg-slate-700 border-slate-700' : ''">
+                    <Check v-if="filters.edgeTypes.includes(t)" :size="9" class="text-white" />
+                  </span>
+                  <span class="text-primary">{{ t }}</span>
+                </button>
+                <button
+                  class="hidden group-hover:inline text-[9px] text-muted hover:text-primary shrink-0 transition"
+                  @click.stop="filters.edgeTypes = [t]">
+                  only
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="edgeTypesOpen" class="fixed inset-0 z-10" @click="edgeTypesOpen = false" />
+        </div>
+
+        <!-- Weight + hide self-loops -->
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <NumericFilter v-if="schema.weighted" v-model="filters.weight" :range="schema.weight_range" label="Weight" />
+          <button
+            v-if="hasSelfLoops"
+            class="flex items-center gap-1.5 text-xs transition"
+            :class="filters.hideSelfLoops ? 'text-red-500 hover:text-red-600' : 'text-secondary hover:text-primary'"
+            @click="filters.hideSelfLoops = !filters.hideSelfLoops">
+            <RotateCw :size="12" />
+            <span>Self-loops</span>
+          </button>
+        </div>
+
+      </section>
+
     </div>
   </div>
 </template>

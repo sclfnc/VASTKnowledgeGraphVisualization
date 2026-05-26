@@ -1,7 +1,117 @@
 """Schema extraction + built-in dataset normalization (inject Node Type / Edge Type at load)."""
+import csv
+import gzip
+import os
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 
 import networkx as nx
+
+# Directory that holds raw dataset files shipped with the project.
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "graph_storage", "builtin_data")
+
+
+def _load_email_eu_core():
+    """
+    Email-Eu-Core directed graph (SNAP / Stanford).
+    Source : https://snap.stanford.edu/data/email-Eu-core.html
+    Licence: BSD  (https://snap.stanford.edu/snap/license.html)
+
+    1,005 nodes (university researchers), 25,571 directed edges.
+    Node attribute  : department (42 research departments, integer 0-41).
+    Edge attribute  : none beyond direction.
+    Gap coverage    : directed graph, multi-node-type (42 departments).
+    """
+    edges_file = os.path.join(_DATA_DIR, "email-eu-core.txt.gz")
+    dept_file  = os.path.join(_DATA_DIR, "email-eu-core-dept.txt.gz")
+
+    dept = {}
+    with gzip.open(dept_file, "rt") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            node_id, dept_id = line.split()
+            dept[int(node_id)] = int(dept_id)
+
+    G = nx.DiGraph()
+    with gzip.open(edges_file, "rt") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            src, dst = map(int, line.split())
+            G.add_edge(src, dst)
+
+    for n in G.nodes():
+        d = dept.get(n, -1)
+        G.nodes[n]["department"] = d
+        G.nodes[n]["Node Type"] = f"Dept {d}" if d >= 0 else "Unknown"
+
+    for *_, edata in G.edges(data=True):
+        edata["Edge Type"] = "Email"
+
+    return G
+
+
+def _load_movielens_small():
+    """
+    MovieLens Latest Small bipartite graph (GroupLens / University of Minnesota).
+    Source : https://grouplens.org/datasets/movielens/latest/
+    Licence: CC BY 4.0  (https://files.grouplens.org/datasets/movielens/ml-latest-small-README.html)
+
+    610 User nodes + 9,742 Movie nodes = 10,352 nodes total.
+    100,836 directed edges (User --[Rated]--> Movie).
+    Node attributes : Movie nodes carry `release_year` (int) and `genres` (str).
+    Edge attributes : `weight` = rating (0.5–5.0), `timestamp` (ISO-8601 date string).
+    Gap coverage    : weighted edges, temporal attribute on nodes (release_year),
+                      bipartite graph, large-scale centrality stress test.
+    """
+    ratings_file = os.path.join(_DATA_DIR, "ml-ratings.csv")
+    movies_file  = os.path.join(_DATA_DIR, "ml-movies.csv")
+
+    # Build movie metadata: movieId -> {release_year, genres}
+    movies = {}
+    with open(movies_file, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            mid = int(row["movieId"])
+            title = row["title"]
+            # Extract year from "Title (YYYY)" pattern.
+            year = None
+            if title.endswith(")") and "(" in title:
+                candidate = title[title.rfind("(") + 1:-1]
+                if candidate.isdigit():
+                    year = int(candidate)
+            movies[mid] = {
+                "release_year": year,
+                "genres": row["genres"].replace("|", ", "),
+            }
+
+    G = nx.DiGraph()
+
+    with open(ratings_file, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            uid  = f"u{row['userId']}"
+            mid  = int(row["movieId"])
+            mkey = f"m{mid}"
+            ts   = int(row["timestamp"])
+            date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+
+            if not G.has_node(uid):
+                G.add_node(uid, **{"Node Type": "User"})
+            if not G.has_node(mkey):
+                meta = movies.get(mid, {})
+                G.add_node(mkey,
+                           release_year=meta.get("release_year"),
+                           genres=meta.get("genres", ""),
+                           **{"Node Type": "Movie"})
+
+            G.add_edge(uid, mkey,
+                       weight=float(row["rating"]),
+                       rating_date=date_str,
+                       **{"Edge Type": "Rated"})
+
+    return G
 
 TEMPORAL_HINTS = ('date', 'year', 'time', 'timestamp')
 RESERVED_NODE_ATTRS = {'Node Type'}
@@ -185,23 +295,27 @@ def compute_schema(G, name='Graph'):
 
 # Built-in dataset registry — maps name to (loader_fn, description).
 BUILTIN_DATASETS = {
-    "karate":         (nx.karate_club_graph,          "Zachary's Karate Club"),
-    "les_miserables": (nx.les_miserables_graph,       "Les Misérables characters"),
-    "florentine":     (nx.florentine_families_graph,  "Florentine families"),
-    "davis":          (nx.davis_southern_women_graph, "Davis Southern Women"),
+    "karate":          (nx.karate_club_graph,          "Zachary's Karate Club"),
+    "les_miserables":  (nx.les_miserables_graph,       "Les Misérables characters"),
+    "florentine":      (nx.florentine_families_graph,  "Florentine families"),
+    "davis":           (nx.davis_southern_women_graph, "Davis Southern Women"),
+    "email_eu_core":   (_load_email_eu_core,           "Email Eu-Core"),
+    "movielens_small": (_load_movielens_small,         "MovieLens Small"),
 }
 
 # Inject Node/Edge Type so compute_schema treats built-ins uniformly.
 # 'from': read attribute (optional 'map' remap); 'const': fixed string.
 BUILTIN_TYPE_NORMALIZATION = {
-    "karate":         {'node': {'from': 'club'},
-                       'edge': {'const': 'Friendship'}},
-    "les_miserables": {'node': {'const': 'Character'},
-                       'edge': {'const': 'CoAppearance'}},
-    "florentine":     {'node': {'const': 'Family'},
-                       'edge': {'const': 'Marriage'}},
-    "davis":          {'node': {'from': 'bipartite', 'map': {0: 'Woman', 1: 'Event'}},
-                       'edge': {'const': 'Attended'}},
+    "karate":          {'node': {'from': 'club'},
+                        'edge': {'const': 'Friendship'}},
+    "les_miserables":  {'node': {'const': 'Character'},
+                        'edge': {'const': 'CoAppearance'}},
+    "florentine":      {'node': {'const': 'Family'},
+                        'edge': {'const': 'Marriage'}},
+    "davis":           {'node': {'from': 'bipartite', 'map': {0: 'Woman', 1: 'Event'}},
+                        'edge': {'const': 'Attended'}},
+    # email_eu_core and movielens_small inject Node/Edge Type directly in their
+    # loaders (_load_email_eu_core / _load_movielens_small) — no entry needed here.
 }
 
 
