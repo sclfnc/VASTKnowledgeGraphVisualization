@@ -368,8 +368,9 @@ function renderBubbles(container, totalW, totalH, comps) {
 
 function renderBars(container, totalW, totalH, comps) {
   const totalNodes = props.schema?.nodes ?? d3.sum(comps, c => c.size)
-  const innerW = totalW - MARGINS.left - MARGINS.right
-  const innerH = totalH - MARGINS.top - MARGINS.bottom
+  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
+  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
+  if (innerW < 50 || innerH < 50) return
 
   const svg = d3.select(container).append('svg').attr('width', totalW).attr('height', totalH)
   const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)

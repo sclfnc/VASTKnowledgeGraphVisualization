@@ -104,8 +104,9 @@ function frame() {
 function renderGenericScatter() {
   const { el, totalW, totalH } = frame()
   const MARGINS = { top: 8, right: 12, bottom: 38, left: 56 }
-  const innerW = totalW - MARGINS.left - MARGINS.right
-  const innerH = totalH - MARGINS.top - MARGINS.bottom
+  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
+  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
+  if (innerW < 50 || innerH < 50) return
 
   const svg = d3.select(el).append('svg').attr('width', totalW).attr('height', totalH)
   const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
@@ -233,8 +234,9 @@ function renderPageRankBars() {
 
   if (!filtered.length) return
 
-  const innerW = totalW - MARGINS.left - MARGINS.right
-  const innerH = totalH - MARGINS.top - MARGINS.bottom
+  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
+  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
+  if (innerW < 50 || innerH < 50) return
 
   const svg = d3.select(el).append('svg').attr('width', totalW).attr('height', totalH)
   const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
@@ -300,8 +302,9 @@ function computedShowTypes() {
 function renderEigenvectorDecay() {
   const { el, totalW, totalH } = frame()
   const MARGINS = { top: 12, right: 12, bottom: 38, left: 60 }
-  const innerW = totalW - MARGINS.left - MARGINS.right
-  const innerH = totalH - MARGINS.top - MARGINS.bottom
+  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
+  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
+  if (innerW < 50 || innerH < 50) return
 
   // Quantile shells are a proxy for hop-distance — edges aren't in this payload.
   const values = allValues.value
@@ -394,8 +397,9 @@ function renderEigenvectorDecay() {
 function renderBetweennessLorenz() {
   const { el, totalW, totalH } = frame()
   const MARGINS = { top: 12, right: 12, bottom: 38, left: 56 }
-  const innerW = totalW - MARGINS.left - MARGINS.right
-  const innerH = totalH - MARGINS.top - MARGINS.bottom
+  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
+  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
+  if (innerW < 50 || innerH < 50) return
 
   const values = allValues.value
   if (!values.length) return
@@ -499,15 +503,19 @@ function renderClosenessViolins() {
   }
 
   const MARGINS = { top: 12, right: 12, bottom: 50, left: 56 }
-  const innerW = totalW - MARGINS.left - MARGINS.right
-  const innerH = totalH - MARGINS.top - MARGINS.bottom
+  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
+  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
+  if (innerW < 50 || innerH < 50) return
+
+  const values = variant.values
+  if (!Array.isArray(values) || values.length === 0) return
 
   // Re-aggregate client-side using effective types (auto-promoted or raw).
   // Backend ships by_type keyed on raw `Node Type`; under auto_promotion that
   // collapses to a single bucket on Karate-like graphs.
   const byType = {}
   const counts = {}
-  for (const r of (variant.values || [])) {
+  for (const r of values) {
     const t = effNodeType(r)
     ;(byType[t] ??= []).push(r)
     counts[t] = (counts[t] || 0) + 1
@@ -526,7 +534,7 @@ function renderClosenessViolins() {
   const tooltip = makeTooltip(el)
 
   const xScale = d3.scaleBand().domain(types).range([0, innerW]).padding(0.2)
-  const allVals = variant.values.map(r => r.value)
+  const allVals = values.map(r => r.value)
   const yScale = d3.scaleLinear().domain([0, d3.max(allVals) || 1]).range([innerH, 0])
 
   drawGrid(g, d3.scaleLinear().domain([0, 1]).range([0, innerW]), yScale, innerW, innerH)

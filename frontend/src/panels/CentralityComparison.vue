@@ -104,8 +104,9 @@ function renderChart() {
   // Square matrix; PAD_OUT acts as uniform inset (no margins object).
   const { totalW, totalH } = svgFrame(chartContainer.value, { top: 0, right: 0, bottom: 0, left: 0 }, { fallbackW: 600 })
   const side = Math.min(totalW, totalH)
-  const inner = side - PAD_OUT * 2
-  const cell = (inner - PAD_IN * 3) / 4
+  const inner = Math.max(0, side - PAD_OUT * 2)
+  const cell = Math.max(0, (inner - PAD_IN * 3) / 4)
+  if (cell < 20) return  // matrix too cramped — card collapsed
 
   const svg = d3.select(chartContainer.value).append('svg').attr('width', totalW).attr('height', totalH)
   const root = svg.append('g').attr('transform', `translate(${PAD_OUT},${PAD_OUT})`)

@@ -277,8 +277,9 @@ function renderChart() {
 
   const totalW = chartContainer.value.clientWidth || 800
   const totalH = chartContainer.value.clientHeight || Math.round(totalW * 3 / 4)
-  const innerW = totalW - MARGINS.left - MARGINS.right
-  const lineH  = totalH - MARGINS.top - MARGINS.bottom
+  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
+  const lineH  = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
+  if (innerW < 50 || lineH < 50) return  // card too narrow to render meaningfully
 
   const svg = d3.select(chartContainer.value).append('svg').attr('width', totalW).attr('height', totalH)
   const tooltip = makeTooltip(chartContainer.value)

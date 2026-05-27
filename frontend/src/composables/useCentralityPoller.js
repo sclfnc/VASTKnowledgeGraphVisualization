@@ -39,7 +39,13 @@ export function useCentralityPoller(graphIdRef) {
     try {
       const res = await fetch(apiUrl(`/centrality/${measure}/${id}`), { signal: aborter?.signal })
       // We only call after status flipped to 'ready', so 202 shouldn't appear here.
-      if (!res.ok) return
+      if (!res.ok) {
+        if (id !== activeGraphId) return
+        // Surface the error so the UI can show "ready but no data" diagnostic
+        // instead of a permanent silent empty state.
+        error.value = { ...error.value, [measure]: `HTTP ${res.status}` }
+        return
+      }
       const payload = await res.json()
       if (id !== activeGraphId) return  // graph switched mid-flight
       data.value = { ...data.value, [measure]: payload?.data ?? null }

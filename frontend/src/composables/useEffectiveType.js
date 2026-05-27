@@ -94,28 +94,6 @@ export function useEffectiveType(graphId, schemaRef) {
     return toValue(schemaRef)?.edge_types ?? []
   })
 
-  // Re-aggregate a raw {rawType: number[]} dict (e.g. degree_by_type from
-  // /metrics/) into {effectiveType: number[]} using the SoA. Iterates nodes
-  // once; if no SoA or no promotion, returns the input unchanged.
-  function remapNodeByType(rawByType) {
-    const labels = nodeLabels.value
-    const soa = nodes.value
-    if (!labels || !soa || !rawByType) return rawByType
-    // soa.types[idx] is the raw type; labels[idx] is the effective one.
-    // We need to redistribute the values inside rawByType[rawType] into the
-    // effective buckets. Trust the original aggregation order: assume the
-    // backend produced rawByType[type] = [values for nodes of that raw type
-    // in some canonical order]. Without index-level info we can't re-bucket
-    // safely, so this helper is only useful when the caller passes per-node
-    // values and we re-iterate from soa.
-    const out = {}
-    for (let i = 0; i < soa.N; i++) {
-      const eff = labels[i]
-      out[eff] ??= []
-    }
-    return out   // empty buckets — caller must repopulate from per-node data
-  }
-
   // Build {effectiveType: T[]} from a per-node-index value array.
   // Use this in panels that have access to per-node data via SoA.
   function groupByEffectiveType(perIdxValues) {
@@ -125,14 +103,16 @@ export function useEffectiveType(graphId, schemaRef) {
       const soa = nodes.value
       if (!soa) return {}
       const out = {}
-      for (let i = 0; i < soa.N; i++) {
+      const len = Math.min(soa.N, perIdxValues?.length ?? 0)
+      for (let i = 0; i < len; i++) {
         const t = soa.types[i]
         ;(out[t] ??= []).push(perIdxValues[i])
       }
       return out
     }
     const out = {}
-    for (let i = 0; i < labels.length; i++) {
+    const len = Math.min(labels.length, perIdxValues?.length ?? 0)
+    for (let i = 0; i < len; i++) {
       const t = labels[i]
       ;(out[t] ??= []).push(perIdxValues[i])
     }
@@ -142,6 +122,6 @@ export function useEffectiveType(graphId, schemaRef) {
   return {
     nodeType, edgeType, nodeTypeAt, edgeTypeAt,
     nodeTypeList, edgeTypeList, promoted,
-    remapNodeByType, groupByEffectiveType,
+    groupByEffectiveType,
   }
 }

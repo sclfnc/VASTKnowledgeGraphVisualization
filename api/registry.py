@@ -1,6 +1,7 @@
 """In-memory registry of loaded graphs + per-endpoint result caches. Process-lifetime only."""
 import json
 import os
+import threading
 from collections import OrderedDict
 from types import MappingProxyType
 from typing import Dict, Any, Tuple
@@ -66,6 +67,22 @@ def graph_path(graph_id: str) -> str:
     return os.path.join(GRAPH_STORAGE_DIR, f"{graph_id}.json")
 
 
+# Per-graph load locks: prevent two concurrent requests from parsing the same
+# graph file twice (RAM spike + wasted CPU). The lock dict itself is mutated
+# under a coarse lock to avoid creating two locks for the same graph_id.
+_load_locks_mutex = threading.Lock()
+_load_locks: Dict[str, threading.Lock] = {}
+
+
+def _load_lock_for(graph_id: str) -> threading.Lock:
+    with _load_locks_mutex:
+        lock = _load_locks.get(graph_id)
+        if lock is None:
+            lock = threading.Lock()
+            _load_locks[graph_id] = lock
+        return lock
+
+
 def load_graph(graph_id: str):
     """Resolve graph_id → memoized NetworkX graph; 404 if unknown."""
     if graph_id not in graph_registry:
@@ -73,10 +90,15 @@ def load_graph(graph_id: str):
     cached = Caches['graph_object'].get(graph_id)
     if cached is not None:
         return cached
-    with open(graph_registry[graph_id]) as f:
-        G = load_node_link(json.load(f))
-    Caches['graph_object'][graph_id] = G
-    return G
+    # Serialize concurrent first-loads of the same graph (avoid double parse).
+    with _load_lock_for(graph_id):
+        cached = Caches['graph_object'].get(graph_id)
+        if cached is not None:
+            return cached
+        with open(graph_registry[graph_id]) as f:
+            G = load_node_link(json.load(f))
+        Caches['graph_object'][graph_id] = G
+        return G
 
 
 def invalidate_caches(graph_id: str) -> None:
@@ -91,6 +113,9 @@ def invalidate_caches(graph_id: str) -> None:
     for key in list(ego_subgraph_cache.keys()):
         if key[0] == graph_id:
             ego_subgraph_cache.pop(key, None)
+    # Drop the per-graph load lock too — no point keeping it if state is gone.
+    with _load_locks_mutex:
+        _load_locks.pop(graph_id, None)
 
 
 def register_graph(graph_id: str, file_path: str, name: str) -> None:

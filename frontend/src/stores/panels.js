@@ -34,13 +34,10 @@ export const usePanelsStore = defineStore('panels', () => {
     { deep: true }
   )
 
+  // The filter already preserves panels.value array order, which is the
+  // intended display order — a sort would be redundant.
   const orderedActive = computed(() =>
-    panels.value
-      .filter(p => p.active && p.component)
-      .sort((a, b) => {
-        const order = panels.value.filter(p => p.active).map(p => p.id)
-        return order.indexOf(a.id) - order.indexOf(b.id)
-      })
+    panels.value.filter(p => p.active && p.component)
   )
 
   const toggle = (p) => { if (!p.conditional) p.active = !p.active }

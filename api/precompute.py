@@ -51,14 +51,19 @@ async def _run(graph_id: str):
 
 
 async def cancel_all():
-    """Cancel and await each task before wiping its registries (avoids the cleanup/_run race)."""
+    """Cancel and await each task before wiping its registries (avoids the cleanup/_run race).
+
+    Only the centrality state (status/cache/locks/tasks) is wiped here; the
+    cached `graph_object` is **not** popped — keeping it avoids a needless
+    disk reload when the user reloads the same graph or revisits a previously
+    loaded graph. `register_graph` invalidates everything on (re)register.
+    """
     for gid, t in list(precompute_tasks.items()):
         t.cancel()
         try:
             await t
         except (asyncio.CancelledError, Exception):
             pass
-        Caches['graph_object'].pop(gid, None)
         centrality_status.pop(gid, None)
         centrality_cache.pop(gid, None)
         precompute_locks.pop(gid, None)

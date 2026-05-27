@@ -27,11 +27,17 @@ export class Bitset {
   clearAll() { this.words.fill(0) }
 
   andInPlace(o) {
+    if (o.n !== this.n) {
+      throw new Error(`Bitset.andInPlace: size mismatch ${this.n} vs ${o.n}`)
+    }
     const w = this.words, ow = o.words
     for (let k = 0; k < w.length; k++) w[k] &= ow[k]
   }
 
   orInPlace(o) {
+    if (o.n !== this.n) {
+      throw new Error(`Bitset.orInPlace: size mismatch ${this.n} vs ${o.n}`)
+    }
     const w = this.words, ow = o.words
     for (let k = 0; k < w.length; k++) w[k] |= ow[k]
   }

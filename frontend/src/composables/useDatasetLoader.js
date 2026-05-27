@@ -2,7 +2,6 @@
 import { apiUrl } from './useApi.js'
 import { useFetch } from './useFetch.js'
 import { useGraphStore } from '../stores/graph.js'
-import { GUIDE_PANELS_KEY } from '../stores/panels.js'
 
 export function useDatasetLoader() {
   const graphStore = useGraphStore()
@@ -11,7 +10,10 @@ export function useDatasetLoader() {
   async function call(input, init) {
     const data = await run(input, init)
     if (data?.graph_id) {
-      localStorage.removeItem(GUIDE_PANELS_KEY)
+      // User's previously active panels persist across dataset switches by
+      // design — a localStorage clear here would surprise the user. The panel
+      // store keeps `defaultActive: true` panels visible when entries are
+      // missing for the current set.
       graphStore.setGraphId(data.graph_id)
     }
     return data

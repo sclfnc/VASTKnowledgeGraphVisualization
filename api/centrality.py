@@ -73,12 +73,23 @@ def compute_spectral(G):
     pr_by_node = {idx_to_node[i]: s for i, s in enumerate(pr_scores)}
     pr_values, pr_by_type, pr_top = _build_values(G, pr_by_node)
 
-    # Eigenvector on LCC.
+    # Eigenvector on LCC. On an empty graph (no nodes / no components),
+    # max(empty) raises ValueError — short-circuit instead with zero scores.
     if G.is_directed():
-        cc_iter = nx.weakly_connected_components(G)
+        cc_list = list(nx.weakly_connected_components(G))
     else:
-        cc_iter = nx.connected_components(G)
-    lcc_nodes = max(cc_iter, key=len)
+        cc_list = list(nx.connected_components(G))
+    if not cc_list:
+        return {
+            'pagerank': {
+                'values': pr_values,
+                'by_type': pr_by_type,
+                'top_k': pr_top,
+                'count_per_type': _count_per_type(pr_values),
+            },
+            'eigenvector': {'values': [], 'by_type': {}, 'top_k': [], 'count_per_type': {}, 'excluded_nodes': 0},
+        }
+    lcc_nodes = max(cc_list, key=len)
     sub = G.subgraph(lcc_nodes).copy()
     # NetworKit eigenvector wants undirected + simple — avoid eigenvalue degeneracies.
     sub_simple = nx.Graph(sub)

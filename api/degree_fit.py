@@ -6,11 +6,14 @@ describe the same data the user sees and the per-point log-likelihoods are
 directly comparable across families. This trades the CSN tail-only purity
 for a single, honest "which shape best matches *these* data" answer.
 """
+import logging
 import warnings
 import numpy as np
 from scipy.stats import poisson
 
 from schema import node_type
+
+logger = logging.getLogger("telescope.degree_fit")
 
 # resolution of the theoretical curves shipped to the frontend
 GRID_SIZE = 200
@@ -63,7 +66,8 @@ def _fit_powerlaw(fit, k_max, n):
             "pmf": pmf,
             "ccdf": ccdf,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("power-law fit failed: %s", e)
         return None
 
 
@@ -82,7 +86,8 @@ def _fit_exponential(fit, k_max, n):
             "pmf": pmf,
             "ccdf": ccdf,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("exponential fit failed: %s", e)
         return None
 
 
@@ -102,7 +107,8 @@ def _fit_lognormal(fit, k_max, n):
             "pmf": pmf,
             "ccdf": ccdf,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("lognormal fit failed: %s", e)
         return None
 
 
@@ -128,7 +134,8 @@ def _fit_poisson(seq, k_max):
             "pmf": [float(p) for p in pmf],
             "ccdf": [float(c) for c in ccdf],
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("poisson fit failed: %s", e)
         return None
 
 
@@ -139,7 +146,8 @@ def fit_degree_sequence(seq):
     n = len(seq)
     try:
         fit = _fit_with_library(seq)
-    except Exception:
+    except Exception as e:
+        logger.warning("powerlaw.Fit() raised: %s", e)
         fit = None
 
     return {

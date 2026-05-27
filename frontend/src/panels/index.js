@@ -56,8 +56,9 @@ const ALL_SPECS = [
     explanation: DEGREE_EXPLANATION,
     component: DegreeDistribution,
     contextualizeExplanation: (schema, data) => {
+      if (!data) return null  // PanelFocus has no data; fall back to static explanation
       const nodeCount = schema.nodes
-      const avgDegree = (data?.avg_degree || 0).toFixed(2)
+      const avgDegree = (data.avg_degree || 0).toFixed(2)
       return `Degree distribution of your ${nodeCount} nodes. Average degree: ${avgDegree}. ${DEGREE_EXPLANATION}`
     },
     controlsSchema: {
@@ -91,7 +92,7 @@ const ALL_SPECS = [
     explanation: `Connected components reveal whether the graph is one piece or many. The largest one (LCC) typically dominates real-world networks: if it covers most nodes, the graph is essentially connected. The number of components, their sizes, and how many nodes are isolated tell you how fragmented the structure is. For directed graphs, weakly connected components (WCC) ignore direction; strongly connected components (SCC) require a directed path both ways.`,
     contextualizeExplanation: (schema, data) => {
       const wcc = data?.wcc
-      if (!wcc) return ''
+      if (!wcc) return null  // PanelFocus / pre-fetch → fall back to static
       const lcc = wcc.lcc_size
       const total = schema?.nodes ?? 0
       const frac = total ? ((lcc / total) * 100).toFixed(1) : '?'
@@ -187,6 +188,7 @@ const ALL_SPECS = [
     },
     controlsSchema: ATTR_SCHEMA_CONTROLS,
   },
+
 
   // 2. Centrality
   {
@@ -465,7 +467,8 @@ const ALL_SPECS = [
     componentProps: { mode: 'node' },
     explanation: `Timeline of node-level temporal attributes (creation dates, release years, etc.). Each bar is one year (or decade); the stacked breakdown shows which node types dominate each period. The brush writes a temporal filter with scope='node' that future readers can opt into.`,
     contextualizeExplanation: (schema, data) => {
-      if (!data || !data.temporal_attrs_node?.length) return 'No node-level temporal attributes in this graph.'
+      if (!data) return null  // PanelFocus → static fallback
+      if (!data.temporal_attrs_node?.length) return 'No node-level temporal attributes in this graph.'
       return `Node temporal attributes: ${data.temporal_attrs_node.join(', ')}.`
     },
     controlsSchema: {
@@ -485,7 +488,8 @@ const ALL_SPECS = [
     componentProps: { mode: 'edge' },
     explanation: `Timeline of edge-level temporal attributes (transaction dates, rating timestamps, etc.). Stack is by edge type. Brush writes a temporal filter with scope='edge'.`,
     contextualizeExplanation: (schema, data) => {
-      if (!data || !data.temporal_attrs_edge?.length) return 'No edge-level temporal attributes in this graph.'
+      if (!data) return null  // PanelFocus → static fallback
+      if (!data.temporal_attrs_edge?.length) return 'No edge-level temporal attributes in this graph.'
       return `Edge temporal attributes: ${data.temporal_attrs_edge.join(', ')}.`
     },
     controlsSchema: {

@@ -39,6 +39,10 @@ def _bfs_layers(G, ego, k, hard_cap, hard_timeout_ms, direction='out'):
         neighbors = G.neighbors
     successors = neighbors
 
+    # Periodic timeout check inside the inner loop too, so a single hub with
+    # 100k+ neighbors can't run away before reaching the next outer iteration.
+    TIMEOUT_CHECK_STRIDE = 1024
+    inner_counter = 0
     for depth in range(1, k + 1):
         next_frontier = []
         for u in frontier:
@@ -52,6 +56,14 @@ def _bfs_layers(G, ego, k, hard_cap, hard_timeout_ms, direction='out'):
                         f"Ego too large at k={k}: {len(visited)} neighbors. "
                         "Reduce k-hop or pick a less central node."
                     )
+                inner_counter += 1
+                if inner_counter >= TIMEOUT_CHECK_STRIDE:
+                    inner_counter = 0
+                    if (time.monotonic() - start) > deadline_s:
+                        raise EgoTooLargeError(
+                            f"BFS exceeded {hard_timeout_ms}ms at depth {depth}. "
+                            "Reduce k-hop or pick a less central node."
+                        )
             if (time.monotonic() - start) > deadline_s:
                 raise EgoTooLargeError(
                     f"BFS exceeded {hard_timeout_ms}ms at depth {depth}. "

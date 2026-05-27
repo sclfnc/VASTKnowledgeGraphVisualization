@@ -19,12 +19,22 @@ def builtin_summary(name: str):
     """
     Lazy-built, cached summary of a built-in dataset. Drives the onboarding
     picker so it can show structural flags without a follow-up /schema/ call.
+
+    Loader can fail if its disk asset (CSV/gzip) is missing — surfaced as a
+    503 rather than a generic 500 so the client can show "this built-in is
+    unavailable" instead of "server error".
     """
     cached = builtin_summary_cache.get(name)
     if cached is not None:
         return cached
     loader_fn, _ = BUILTIN_DATASETS[name]
-    graph = loader_fn()
+    try:
+        graph = loader_fn()
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Built-in dataset '{name}' asset missing: {e}",
+        )
     schema = compute_schema(graph, name=name.replace('_', ' ').title())
     summary = {
         'nodes': schema['nodes'],
@@ -63,7 +73,13 @@ def load_builtin_payload(name: str):
             detail=f"Unknown dataset '{name}'. Available: {list(BUILTIN_DATASETS)}",
         )
     loader_fn, _ = BUILTIN_DATASETS[name]
-    graph = loader_fn()
+    try:
+        graph = loader_fn()
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Built-in dataset '{name}' asset missing: {e}",
+        )
 
     graph_id = f"builtin_{name}"
     file_path = graph_path(graph_id)

@@ -18,17 +18,28 @@ from schema import compute_schema, effective_type_label
 
 
 def _compute_node_labels(G, node_order, promo):
-    """promo is `{attr, kind}` (or None). Returns list aligned to node_order."""
+    """promo is `{attr, kind}` (or None). Returns list aligned to node_order.
+
+    Defensive: if every node lacks the promoted attr (graph mutated since the
+    schema was cached, or stale `auto_promoted`), returns None instead of an
+    array of "Unknown" labels — frontend then falls back to raw type cleanly.
+    """
     if not promo:
         return None
     attr = promo['attr']
     kind = promo['kind']
-    return [effective_type_label(G.nodes[n].get(attr), kind, attr) for n in node_order]
+    labels = [effective_type_label(G.nodes[n].get(attr), kind, attr) for n in node_order]
+    if all(l == 'Unknown' for l in labels):
+        return None
+    return labels
 
 
 def _compute_edge_labels(G, promo):
     """promo is `{attr, kind}` (or None). Returns list aligned to the canonical
-    edge walk order (the same order used to assign edge_id in /edges/)."""
+    edge walk order (the same order used to assign edge_id in /edges/).
+
+    Same defensive None-on-all-Unknown as `_compute_node_labels`.
+    """
     if not promo:
         return None
     attr = promo['attr']
@@ -39,6 +50,8 @@ def _compute_edge_labels(G, promo):
     for record in iterator:
         data = record[-1]
         labels.append(effective_type_label(data.get(attr), kind, attr))
+    if all(l == 'Unknown' for l in labels):
+        return None
     return labels
 
 
