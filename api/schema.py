@@ -117,6 +117,14 @@ TEMPORAL_HINTS = ('date', 'year', 'time', 'timestamp')
 RESERVED_NODE_ATTRS = {'Node Type'}
 RESERVED_EDGE_ATTRS = {'Edge Type'}
 
+# Attributes already exposed as top-level structural filters in the frontend
+# (`filters.degree`, `filters.weight`). They stay visible in schema/attr
+# schema views, but the filter index excludes them so the UI doesn't render
+# a duplicate per-type slider. Keep in sync with `AttributeFilters.vue`
+# Degree filtering / Weight filtering sections.
+STRUCTURAL_NODE_FILTERS = set()         # `degree` is computed, not a node attr
+STRUCTURAL_EDGE_FILTERS = {'weight'}
+
 # Caps the categorical filter payload — beyond this we ship a truncated list.
 MAX_CATEGORICAL_VALUES = 50
 
@@ -219,11 +227,19 @@ def effective_type_label(value, attr_kind, attr_name):
 
 
 def _numeric_is_binary(values_iter, attr_name):
-    """Stream-count distinct values of `attr_name`; bail at 3."""
+    """Stream-count distinct values of `attr_name`; bail at 3.
+
+    NaN values are skipped: `nan != nan` would let multiple NaN instances
+    appear as distinct elements in the set and produce a false-positive
+    binary classification.
+    """
+    import math
     seen = set()
     for d in values_iter:
         v = d.get(attr_name)
         if v is None:
+            continue
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
             continue
         seen.add(v)
         if len(seen) > 2:
@@ -279,8 +295,13 @@ def compute_schema(G, name='Graph'):
     node_types = sorted({d.get('Node Type', 'Unknown') for _, d in nodes_data})
     edge_types = sorted({d.get('Edge Type', 'Unknown') for d in edge_data})
 
-    # weighted requires ≥ 2 distinct weight values.
-    weights = [d['weight'] for d in edge_data if 'weight' in d]
+    # weighted requires ≥ 2 distinct weight values. NaN/inf filtered out:
+    # they break min/max and produce JSON-non-compliant output.
+    import math
+    weights = [d['weight'] for d in edge_data
+               if 'weight' in d and isinstance(d['weight'], (int, float))
+               and not isinstance(d['weight'], bool)
+               and not (math.isnan(d['weight']) or math.isinf(d['weight']))]
     distinct_weights = set(weights)
     weighted = len(distinct_weights) > 1
     weight_range = [min(weights), max(weights)] if weighted else None
@@ -385,6 +406,8 @@ BUILTIN_DATASETS = {
 
 def load_node_link(data):
     """Accept both legacy 'links' (NetworkX <3.4) and new 'edges' (≥3.4) keys."""
+    if not isinstance(data, dict):
+        raise ValueError("payload must be a JSON object, not " + type(data).__name__)
     if 'links' in data:
         return nx.node_link_graph(data, edges='links')
     if 'edges' in data:

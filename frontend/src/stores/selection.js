@@ -1,4 +1,9 @@
 // Cross-panel selection store. Unbounded — consumers cap on read (e.g. EgoComparison).
+//
+// Two parallel channels: `ids` for nodes, `edgeIds` for edges. They share the
+// same shape (string[]) and the same mutator API (add/remove/toggle/replace/clear),
+// but are kept separate because most consumers care about exactly one of the
+// two. `clearAll` wipes both at once.
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
@@ -12,35 +17,64 @@ export const SELECTION_CAPS = {
   connectivity: 500,
 }
 
-export const useSelectionStore = defineStore('selection', () => {
-  const ids = ref([])
+function makeChannel() {
+  const list = ref([])
 
   function add(id) {
     const sid = String(id)
-    if (!ids.value.includes(sid)) ids.value.push(sid)
+    if (!list.value.includes(sid)) list.value.push(sid)
   }
-
   function remove(id) {
     const sid = String(id)
-    const i = ids.value.indexOf(sid)
-    if (i !== -1) ids.value.splice(i, 1)
+    const i = list.value.indexOf(sid)
+    if (i !== -1) list.value.splice(i, 1)
   }
-
   function toggle(id) {
     const sid = String(id)
-    const i = ids.value.indexOf(sid)
-    if (i === -1) ids.value.push(sid)
-    else ids.value.splice(i, 1)
+    const i = list.value.indexOf(sid)
+    if (i === -1) list.value.push(sid)
+    else list.value.splice(i, 1)
   }
-
   function clear() {
-    ids.value = []
+    list.value = []
   }
-
-  // Destructive replace; callers must cap (store stays unbounded).
   function replace(next) {
-    ids.value = Array.from(next, (id) => String(id))
+    const seen = new Set()
+    const out = []
+    for (const id of next) {
+      const sid = String(id)
+      if (!seen.has(sid)) { seen.add(sid); out.push(sid) }
+    }
+    list.value = out
+  }
+  return { list, add, remove, toggle, clear, replace }
+}
+
+export const useSelectionStore = defineStore('selection', () => {
+  const nodes = makeChannel()
+  const edges = makeChannel()
+
+  function clearAll() {
+    nodes.clear()
+    edges.clear()
   }
 
-  return { ids, add, remove, toggle, clear, replace }
+  return {
+    // Node channel — kept under the historic names so existing callers don't move.
+    ids: nodes.list,
+    add: nodes.add,
+    remove: nodes.remove,
+    toggle: nodes.toggle,
+    clear: nodes.clear,
+    replace: nodes.replace,
+    // Edge channel — explicit `edge*` prefix.
+    edgeIds: edges.list,
+    addEdge: edges.add,
+    removeEdge: edges.remove,
+    toggleEdge: edges.toggle,
+    clearEdges: edges.clear,
+    replaceEdges: edges.replace,
+    // Wipe both channels at once (cross-graph teardown).
+    clearAll,
+  }
 })

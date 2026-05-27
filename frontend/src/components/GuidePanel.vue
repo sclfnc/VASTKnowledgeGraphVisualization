@@ -23,7 +23,10 @@ defineEmits(['remove', 'focus', 'toggle-expand', 'toggle-controls', 'request-wid
 // Panels that don't carry per-node marks (or are already driven by selection)
 // hide the Pin affordance entirely. Updating this set is the single place
 // where the contract on "which panels are pinnable" is declared.
-const PIN_HIDDEN_IDS = new Set(['ego', 'ego_compare', 'node_attrs', 'edge_attrs', 'timeline_node', 'timeline_edge'])
+const PIN_HIDDEN_IDS = new Set([
+  'ego', 'ego_compare', 'node_attrs', 'edge_attrs',
+  'timeline_node', 'timeline_edge',
+])
 
 const pins = usePinsStore()
 const selection = useSelectionStore()

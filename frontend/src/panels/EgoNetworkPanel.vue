@@ -38,27 +38,43 @@ const { data: allNodes } = injectGraphNodes(toRef(props, 'graphId'))
 // Alters attenuate under the global filter; ego is immune (it's the focus).
 const { activeNodeMask, activeEdgeMask, isActive: isActiveId, isEdgeActive } = usePanelContextFromProps(props)
 
-// Local nav stack (top = active); seeded by selection.ids[0], doesn't write back.
+// Local nav stack (top = active). Two-way coupling with the global selection:
+//   - On external selection changes (sidebar / other panel / cross-graph
+//     teardown) the head of `selection.ids` is mirrored into the stack head;
+//     this resets the breadcrumb because external sources don't carry a stack.
+//   - On local navigation (push/pop/jump/pick) we broadcast the new head into
+//     selection. `isLocalUpdate` short-circuits the watch so the broadcast
+//     doesn't bounce back and clobber the stack.
 const egoStack = ref([])
 const activeEgoId = computed(() => egoStack.value[egoStack.value.length - 1] ?? null)
+let isLocalUpdate = false
 
 watch(
   () => selectedRef.value[0] ?? null,
   (head) => {
+    if (isLocalUpdate) { isLocalUpdate = false; return }
     if (!head) { egoStack.value = []; return }
-    if (egoStack.value[0] !== head) egoStack.value = [head]
+    if (activeEgoId.value !== head) egoStack.value = [head]
   },
   { immediate: true },
 )
 
+function broadcastHead() {
+  const head = activeEgoId.value
+  isLocalUpdate = true
+  if (head) selection.replace([head])
+  else selection.clear()
+}
+
 function pushEgo(id) {
   const sid = String(id)
-  if (egoStack.value[egoStack.value.length - 1] === sid) return
+  if (activeEgoId.value === sid) return
   egoStack.value.push(sid)
+  broadcastHead()
 }
-function jumpTo(idx) { egoStack.value = egoStack.value.slice(0, idx + 1) }
-function goBack() { if (egoStack.value.length > 1) egoStack.value.pop() }
-function pickSuggestion(id) { egoStack.value = [String(id)] }
+function jumpTo(idx) { egoStack.value = egoStack.value.slice(0, idx + 1); broadcastHead() }
+function goBack() { if (egoStack.value.length > 1) { egoStack.value.pop(); broadcastHead() } }
+function pickSuggestion(id) { egoStack.value = [String(id)]; broadcastHead() }
 
 const egoIdRef = computed(() => activeEgoId.value)
 const kRef = computed(() => controls.value.k)
@@ -161,6 +177,11 @@ function onNodeClick(d) {
   pushEgo(d.id)
 }
 
+function onEdgeClick(d) {
+  if (d.edge_id === undefined || d.edge_id === null) return
+  selection.replaceEdges([d.edge_id])
+}
+
 // Arrowhead marker: re-registered on every rebuild (composable wipes the SVG).
 function onSvgBuild({ svg }) {
   if (!isDirected.value) return
@@ -210,6 +231,7 @@ const { reconcile } = useForceGraph({
   renderEdge,
   getRadius: nodeRadius,
   onNodeClick,
+  onEdgeClick,
   onSvgBuild,
   renderOverlay,
   overlayTick,

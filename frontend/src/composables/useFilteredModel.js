@@ -95,6 +95,25 @@ export function useFilteredModel(graphId) {
       mask.andInPlace(passMask)
     }
 
+    // v2: temporal filter (single brushed window from ActivityTimeline).
+    // Shape: { attr, scope, range:[lo,hi] }. Applied iff scope === 'node'.
+    // Bypasses the per-type machinery: a temporal brush is global on the attr
+    // regardless of which types carry it. We OR the matching bitsets across
+    // every (type, attr) entry in the index — node passes iff any bucket
+    // contains it.
+    const tf = filters.temporalFilter
+    if (tf && tf.scope === 'node' && Array.isArray(tf.range) && attrIndex.ready.value) {
+      const tfMask = new Bitset(N)
+      const payload = attrIndex.data.value?.node_attrs ?? {}
+      const spec = { kind: 'date', range: tf.range }
+      for (const type of Object.keys(payload)) {
+        if (!payload[type]?.[tf.attr]) continue
+        const bs = attrIndex.bitsetFor('node', type, tf.attr, spec)
+        if (bs) tfMask.orInPlace(bs)
+      }
+      mask.andInPlace(tfMask)
+    }
+
     return mask
   })
 
@@ -168,6 +187,20 @@ export function useFilteredModel(graphId) {
         passMask.orInPlace(allowed)
       }
       mask.andInPlace(passMask)
+    }
+
+    // v2: temporal filter, edge scope. Same OR-across-types pattern as nodes.
+    const tfEdge = filters.temporalFilter
+    if (tfEdge && tfEdge.scope === 'edge' && Array.isArray(tfEdge.range) && attrIndex.ready.value) {
+      const tfMask = new Bitset(E)
+      const payload = attrIndex.data.value?.edge_attrs ?? {}
+      const spec = { kind: 'date', range: tfEdge.range }
+      for (const type of Object.keys(payload)) {
+        if (!payload[type]?.[tfEdge.attr]) continue
+        const bs = attrIndex.bitsetFor('edge', type, tfEdge.attr, spec)
+        if (bs) tfMask.orInPlace(bs)
+      }
+      mask.andInPlace(tfMask)
     }
 
     // Step 5: AND with node mask — edge active iff both endpoints survive

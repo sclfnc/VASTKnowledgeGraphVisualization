@@ -25,15 +25,22 @@ export function useSchema() {
   const isolation = useIsolationStore()
   const { data: schema, error, run } = useFetch()
 
+  // Race guard: on rapid graphId switches we don't want a late effective-types
+  // fetch (whose useFetch sibling is race-safe internally) to override the
+  // filters.reset of a newer graph. Each `load` invocation captures its own
+  // generation; if the global gen has advanced, the late branch bails.
+  let loadGen = 0
+
   // Wipe state referencing the previous graph's indices/ids/N-sized Bitsets.
   function tearDownCrossGraphState() {
-    selection.clear()
+    selection.clearAll()
     pins.clearAll()
     isolation.clearAll()
     filterHistory.clearAll()
   }
 
   async function load(id) {
+    const myGen = ++loadGen
     if (!id) {
       schema.value = null
       filters.reset(null)
@@ -42,6 +49,7 @@ export function useSchema() {
     }
     tearDownCrossGraphState()
     const result = await run(apiUrl(`/schema/${id}`))
+    if (myGen !== loadGen) return  // a newer graph took over
 
     // If the graph has auto-promoted types, pre-fetch the effective labels
     // before filters.reset(). Otherwise filters.nodeTypes would be seeded
@@ -56,6 +64,7 @@ export function useSchema() {
       } catch (_e) {
         // Fall back to raw types — propagation still works, just less coherent.
       }
+      if (myGen !== loadGen) return
     }
     filters.reset(result, effective)
     // baseline() seeds history with the post-reset state and arms the $subscribe.
@@ -70,10 +79,17 @@ export function useSchema() {
 // Read-only access to the schema provided by GuideView. Returns
 // `{schema: Ref, error: Ref}` (same shape as useSchema). Falls back to a
 // fresh instance only as a safety net for components mounted outside
-// GuideView (DatasetView etc.).
+// GuideView (DatasetView etc.) — but the fallback installs a second watcher
+// with side-effects (filter reset + history baseline + teardown). Warn in
+// dev so this trap is visible.
 export function injectSchema() {
   const provided = inject(INJECT_KEY, null)
   if (provided) return provided
+  if (import.meta.env?.DEV) {
+    console.warn('[injectSchema] no provider found — instantiating a fallback useSchema(). '
+      + 'This will fire filters.reset + filterHistory.baseline on graphId change. '
+      + 'Provide SCHEMA_KEY from GuideView to consume the singleton instead.')
+  }
   return useSchema()
 }
 

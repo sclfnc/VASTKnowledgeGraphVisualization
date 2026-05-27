@@ -1,4 +1,5 @@
 """Telescope FastAPI backend — wiring only; domain logic lives in dedicated modules."""
+import asyncio
 import hashlib
 import json
 import logging
@@ -36,6 +37,8 @@ from edge_index import get_edge_index, get_edge_index_map
 from effective_types import get_effective_types
 from ego import ego_subgraph, EgoTooLargeError, LRU_SIZE, SOFT_CAP_DEFAULT, VALID_DIRECTIONS
 from node_index import get_node_index
+from node_inspect import inspect_node, list_neighbors
+from edge_inspect import inspect_edge
 from timeline import compute_timeline
 from type_mixing import compute_type_mixing
 
@@ -50,12 +53,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# CORS: vite picks a port in 5173–5180 range based on what's free; matching
+# all of them avoids breakage when an old dev process holds the canonical port.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost", "http://localhost:5173",
-        "http://127.0.0.1", "http://127.0.0.1:5173", "http://127.0.0.1:8000",
-    ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,7 +99,7 @@ def cached_endpoint(cache_name: str, compute_fn):
 @app.post("/upload/", summary="Upload a NetworkX graph JSON file")
 async def upload_graph(file: UploadFile = File(...), name: str = Form(None)):
     """Async because UploadFile.read() is async."""
-    if not file.filename.lower().endswith('.json'):
+    if not (file.filename or '').lower().endswith('.json'):
         raise HTTPException(status_code=400, detail="File must have .json extension")
 
     try:
@@ -120,8 +122,13 @@ async def upload_graph(file: UploadFile = File(...), name: str = Form(None)):
 
         graph_id = str(uuid.uuid4())
         file_path = graph_path(graph_id)
-        with open(file_path, 'wb') as f:
-            f.write(contents)
+
+        # Sync disk write moved to executor: blocking the event loop on multi-MB
+        # uploads stalled every other request handler.
+        def _write_bytes(path, data):
+            with open(path, 'wb') as f:
+                f.write(data)
+        await asyncio.get_running_loop().run_in_executor(None, _write_bytes, file_path, contents)
 
         # Order: drain → register → kickoff (registering first would race with cleanup).
         await precompute.cancel_all()
@@ -153,9 +160,16 @@ def list_datasets():
 
 @app.post("/datasets/load/{name}", summary="Load a built-in NetworkX dataset")
 async def load_builtin_dataset(name: str):
-    """Async because we await the precompute cancellation before registering."""
+    """Async because we await the precompute cancellation before registering.
+
+    The built-in loader does NX construction + JSON dump synchronously; for
+    large built-ins (MovieLens ~100k edges) it would stall the event loop, so
+    we hand it off to the default threadpool.
+    """
     await precompute.cancel_all()
-    graph_id = datasets.load_builtin_payload(name)
+    graph_id = await asyncio.get_running_loop().run_in_executor(
+        None, datasets.load_builtin_payload, name,
+    )
     precompute.kickoff(graph_id)
     return JSONResponse(status_code=201, content={
         "graph_id": graph_id,
@@ -252,7 +266,10 @@ def _overrides_key(overrides_json: Optional[str]) -> str:
         parsed = json.loads(overrides_json)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="overrides must be valid JSON")
-    canonical = json.dumps(parsed, sort_keys=True)
+    try:
+        canonical = json.dumps(parsed, sort_keys=True)
+    except TypeError as e:
+        raise HTTPException(status_code=400, detail=f"overrides contains non-JSON-serializable values: {e}")
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
@@ -381,6 +398,64 @@ def get_ego(graph_id: str, node_id: str, k: int = 1, cap: int = SOFT_CAP_DEFAULT
     if len(ego_subgraph_cache) > LRU_SIZE:
         ego_subgraph_cache.popitem(last=False)
     return JSONResponse(content=result)
+
+
+@app.get("/node-inspect/{graph_id}/{node_id}", summary="Per-node inspector payload")
+def get_node_inspect(graph_id: str, node_id: str):
+    """Compact JSON envelope for the NodeInspector panel: identity + attributes
+    + structural counters + small neighbor sample. Not cached — sync compute is
+    O(degree), and these requests follow user clicks, not bulk operations."""
+    if graph_id not in graph_registry:
+        raise HTTPException(status_code=404, detail="Graph ID not found")
+    try:
+        G = load_graph(graph_id)
+        edge_map = get_edge_index_map(graph_id)
+        return JSONResponse(content=inspect_node(G, node_id, edge_index_map=edge_map))
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not in graph")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error inspecting node: {str(e)}")
+
+
+@app.get("/node-neighbors/{graph_id}/{node_id}", summary="Paginated neighbor list for the inspector")
+def get_node_neighbors(graph_id: str, node_id: str, offset: int = 0, limit: int = 50,
+                       direction: str = 'all'):
+    """Paginated companion to /node-inspect/. Sorted by degree desc; supports
+    direction filter ('all' | 'in' | 'out') for directed graphs."""
+    if graph_id not in graph_registry:
+        raise HTTPException(status_code=404, detail="Graph ID not found")
+    if direction not in ('all', 'in', 'out'):
+        raise HTTPException(status_code=400,
+                            detail=f"Invalid direction '{direction}'. Must be 'all', 'in', or 'out'.")
+    try:
+        G = load_graph(graph_id)
+        edge_map = get_edge_index_map(graph_id)
+        return JSONResponse(content=list_neighbors(
+            G, node_id, edge_map, direction=direction, offset=offset, limit=limit))
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not in graph")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing neighbors: {str(e)}")
+
+
+@app.get("/edge-inspect/{graph_id}/{edge_id}", summary="Per-edge inspector payload")
+def get_edge_inspect(graph_id: str, edge_id: int):
+    """Resolve edge_id (canonical /edges/ index) into source/target + raw attrs."""
+    if graph_id not in graph_registry:
+        raise HTTPException(status_code=404, detail="Graph ID not found")
+    try:
+        G = load_graph(graph_id)
+        return JSONResponse(content=inspect_edge(graph_id, G, edge_id))
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Edge id {edge_id} out of range")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error inspecting edge: {str(e)}")
 
 
 @app.get("/health/", summary="Health check")

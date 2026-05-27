@@ -1,4 +1,4 @@
-// Ring buffer of filter snapshots for undo/redo in GraphContextBar.
+// Ring buffer of filter snapshots for undo/redo in GraphHeaderStrip.
 // Mutations push debounced (500ms) via $subscribe; back/forward gate with isRestoring.
 // Scope is `filters` only — selection/pins/isolation have separate undo semantics.
 import { defineStore } from 'pinia'

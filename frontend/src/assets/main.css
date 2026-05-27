@@ -116,25 +116,45 @@
          <button class="segmented-pill segmented-pill--active">…</button>
        </div> */
   .segmented-track {
-    border: 1px solid rgb(226 232 240 / 0.9);
+    border: 1px solid rgb(203 213 225); /* slate-300 — visible against light sidebar */
     background: var(--surface-recessed);
     border-radius: 9999px;
-    padding: 2px;
+    /* No padding: track is intentionally tight against the pills. The
+       active pill uses transform + negative margin to "dominate" the track
+       (read as a button sitting on a recessed slot). */
+    padding: 0;
+    overflow: visible;
   }
   .segmented-pill {
     border-radius: 9999px;
-    color: var(--text-secondary);
-    transition: background-color 150ms, color 150ms, box-shadow 150ms;
+    /* Mid-slate: legible against the recessed track without competing with
+       the active pill's full primary color. The visual difference between
+       active/inactive is carried mostly by the raised + bold treatment. */
+    color: rgb(71 85 105); /* slate-600 */
+    position: relative;            /* enable z-index for the active state */
+    transition: color 150ms, font-weight 150ms, box-shadow 150ms, transform 150ms;
   }
+  /* Hover: weight bump only — no background swap so non-active pills stay
+     visually subordinate to the active one. Color brightens too, but
+     stays in the same hue family. */
   .segmented-pill:hover {
-    background: var(--elev-light);
     color: var(--text-primary);
+    font-weight: 600;
   }
   .segmented-pill--active,
   .segmented-pill--active:hover {
-    background: var(--elev-light);
+    background: #ffffff;
     color: var(--text-primary);
-    box-shadow: inset 0 0 0 1px rgb(226 232 240); /* slate-200 — outlines the active pill */
+    font-weight: 600;
+    /* Active pill reads as raised on top of the track. Negative margin
+       pulls it ~2px beyond the track edges; scale visually enlarges; z-index
+       keeps it above sibling hover. */
+    margin: -2px;
+    transform: scale(1.06);
+    z-index: 1;
+    box-shadow:
+      0 1px 3px rgb(15 23 42 / 0.12),
+      0 0 0 1px rgb(226 232 240);
   }
   .segmented-pill--danger:hover {
     color: rgb(239 68 68); /* red-500 — destructive accent, not in token set */
@@ -164,7 +184,11 @@
   .segmented-track--dark .segmented-pill--active:hover {
     background: var(--surface-dark-elevated);
     color: var(--text-on-dark-primary);
-    box-shadow: inset 0 0 0 1px var(--border-dark);
+    /* Same raised-pill behavior as the light variant; transform + z-index
+       inherited from the base rule, only the shadow tone changes. */
+    box-shadow:
+      0 1px 3px rgb(0 0 0 / 0.4),
+      0 0 0 1px var(--border-dark);
   }
 
   /* Selectable chip used to toggle membership in a set (e.g. node/edge types,
@@ -227,6 +251,48 @@
     background-color: rgb(148 163 184);                                                /* slate-400 */
     color: rgb(71 85 105);                                                             /* slate-600 */
     font-style: italic;
+  }
+
+  /* ──────────────────────────────────────────────────────────────────
+     @vueform/slider re-skin: align the default chunky green slider with
+     the dashboard palette (slate primary, recessed track, slim handle).
+     Overrides the library's CSS variables — minimal selector specificity
+     so a panel-local override still wins if ever needed.
+     ────────────────────────────────────────────────────────────────── */
+  .slider-target {
+    --slider-bg: rgb(226 232 240);              /* slate-200 — recessed track */
+    --slider-connect-bg: rgb(71 85 105);        /* slate-600 — filled range */
+    --slider-connect-bg-disabled: rgb(203 213 225);
+    --slider-handle-bg: rgb(255 255 255);
+    --slider-handle-border: 1px solid rgb(71 85 105); /* slate-600 */
+    --slider-handle-shadow: 0 1px 2px rgb(15 23 42 / 0.15);
+    --slider-handle-shadow-active: 0 0 0 4px rgb(71 85 105 / 0.15);
+    /* Tooltips disabled: editable input boxes replace them. */
+    --slider-handle-width: 14px;
+    --slider-handle-height: 14px;
+    --slider-handle-radius: 9999px;
+    --slider-height: 4px;                       /* slim track */
+    --slider-radius: 9999px;
+  }
+  .slider-target .slider-handle {
+    cursor: grab;
+  }
+  .slider-target .slider-handle:active {
+    cursor: grabbing;
+  }
+
+  /* Strip the native spinner arrows from <input type="number"> when paired
+     with a slider — they steal width and never get used. Apply via the
+     `.no-spin` utility, not globally, so plain numeric inputs elsewhere
+     keep their default affordance. */
+  .no-spin::-webkit-outer-spin-button,
+  .no-spin::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .no-spin {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 
   .scrollbar-slim {

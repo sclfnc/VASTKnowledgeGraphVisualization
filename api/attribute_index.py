@@ -28,12 +28,15 @@ Built **eagerly** by `get_attribute_index(graph_id)` on first read. Schema
 is consulted to pick the right `kind` per attribute (it already infers
 categorical / numeric / boolean / temporal via `_classify_attr`).
 """
+import math
 from collections import defaultdict
 
 from registry import Caches, load_graph
 from schema import (
     RESERVED_NODE_ATTRS,
     RESERVED_EDGE_ATTRS,
+    STRUCTURAL_NODE_FILTERS,
+    STRUCTURAL_EDGE_FILTERS,
     _classify_attr,
     node_type,
 )
@@ -57,9 +60,19 @@ def _bucket_categorical(values_by_idx):
 
 
 def _bucket_numeric(values_by_idx):
-    """Returns sorted list of [idx, value] pairs (ascending by value)."""
-    pairs = [[idx, float(v)] for idx, v in values_by_idx
-             if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    """Returns sorted list of [idx, value] pairs (ascending by value).
+
+    NaN values are filtered out — they break sort ordering, range comparisons,
+    and produce JSON-non-compliant output.
+    """
+    pairs = []
+    for idx, v in values_by_idx:
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            continue
+        fv = float(v)
+        if math.isnan(fv) or math.isinf(fv):
+            continue
+        pairs.append([idx, fv])
     pairs.sort(key=lambda p: p[1])
     return pairs
 
@@ -183,7 +196,7 @@ def _build_node_index(G, node_order, exclude=None):
         t = node_type(G, n)
         by_type[t].append((idx_of[n], data))
     return _build_group(by_type, {
-        'reserved': RESERVED_NODE_ATTRS,
+        'reserved': RESERVED_NODE_ATTRS | STRUCTURAL_NODE_FILTERS,
         'exclude_attrs': exclude or set(),
     })
 
@@ -201,7 +214,7 @@ def _build_edge_index(G, exclude=None):
         t = data.get('Edge Type', 'Unknown')
         by_type[t].append((edge_id, data))
     return _build_group(by_type, {
-        'reserved': RESERVED_EDGE_ATTRS,
+        'reserved': RESERVED_EDGE_ATTRS | STRUCTURAL_EDGE_FILTERS,
         'exclude_attrs': exclude or set(),
     })
 

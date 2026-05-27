@@ -2,9 +2,12 @@
 // EXTENSION: about modal — branding, project context, stack, author, progress.
 import { onMounted, onUnmounted } from 'vue'
 import { Telescope, X, Github } from 'lucide-vue-next'
+import { useAppVersion } from '../composables/useAppVersion.js'
 
 defineProps({ open: { type: Boolean, default: false } })
 const emit = defineEmits(['close'])
+
+const appVersion = useAppVersion()
 
 const onKeydown = (e) => { if (e.key === 'Escape') emit('close') }
 onMounted(() => window.addEventListener('keydown', onKeydown))
@@ -127,7 +130,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
         <div class="flex items-center justify-between">
           <p class="text-xs italic text-muted">Work in progress — prototype.</p>
-          <p class="text-xs text-muted">v0.5.5 · 2026-05-25</p>
+          <p class="text-xs text-muted">v{{ appVersion }}</p>
         </div>
       </div>
     </div>

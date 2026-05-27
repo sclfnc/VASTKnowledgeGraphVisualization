@@ -15,7 +15,13 @@ const explanation = computed(() => {
   if (!props.panel) return ''
   const contextualize = props.panel.contextualizeExplanation
   if (contextualize && typeof contextualize === 'function') {
-    return contextualize(props.schema, {})
+    // We don't have the panel's data payload here (the panel re-mounts inside
+    // the modal and fetches its own); call contextualize with null so the
+    // implementations can detect "no data" and fall back to static text. If
+    // the result is empty/falsy, fall through to the panel's static
+    // `explanation` for a usable theory drawer.
+    const contextual = contextualize(props.schema, null)
+    if (contextual) return contextual
   }
   return props.panel.explanation || 'Explanation coming soon.'
 })

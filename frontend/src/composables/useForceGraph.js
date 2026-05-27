@@ -2,7 +2,7 @@
 // Reconciliation: surviving nodes keep x/y; new ones spawn near centroid; edges rebuilt every time.
 // graphRef change → reconcile; linkDistance/chargeStrength change → live tweak; resize → recenter+restart.
 // Hooks: renderNode(g,d) on enter+update; renderEdge(sel) post-join; getRadius(d) for collide;
-// onNodeClick(d); onSvgBuild({svg}) once per rebuild for <defs>; renderOverlay/overlayTick for parallel layers.
+// onNodeClick(d) / onEdgeClick(d); onSvgBuild({svg}) once per rebuild for <defs>; renderOverlay/overlayTick for parallel layers.
 import { onBeforeUnmount, watch, toValue } from 'vue'
 import * as d3 from 'd3'
 
@@ -17,6 +17,7 @@ export function useForceGraph({
   renderEdge,
   getRadius = () => DEFAULT_RADIUS,
   onNodeClick = null,
+  onEdgeClick = null,
   onSvgBuild = null,
   renderOverlay = null,
   overlayTick = null,
@@ -46,6 +47,10 @@ export function useForceGraph({
   function rebuild() {
     const el = toValue(containerRef)
     if (!el) return
+    // Stop any in-flight simulation before re-creating it: otherwise the old
+    // sim keeps ticking in background until GC reclaims it (CPU + memory leak
+    // on rapid container toggles).
+    if (simulation) { simulation.stop(); simulation = null }
     if (svgSel) { svgSel.remove(); svgSel = null }
     currentW = el.clientWidth || 1
     currentH = el.clientHeight || 1
@@ -112,6 +117,9 @@ export function useForceGraph({
     const linkSel = linksG.selectAll('line').data(simLinks, d => `${d.source.id ?? d.source}|${d.target.id ?? d.target}|${d.type}`)
     linkSel.exit().remove()
     const linkEnter = linkSel.enter().append('line')
+    if (onEdgeClick) {
+      linkEnter.style('cursor', 'pointer').on('click', (_e, d) => onEdgeClick(d))
+    }
     renderEdge(linkEnter.merge(linkSel))
 
     // Both enter and update receive renderNode — inner shape can change post-mount.
