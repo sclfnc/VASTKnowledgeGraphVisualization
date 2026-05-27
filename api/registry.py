@@ -33,6 +33,12 @@ Caches: Dict[str, Dict[str, Any]] = {
     'type_mixing': {},
     # Value is `Dict[overrides_key, payload]`; .pop() still wipes the whole graph_id entry.
     'timeline': {},
+    # Per-(type, attr) precomputed index for v2 filter pipeline.
+    'attribute_index': {},
+    # Per-item effective_type labels (auto- or manually-promoted attribute);
+    # value is `Dict[(node_attr, edge_attr) override key, payload]` so manual
+    # promotion (Phase 7+) slots in without backend touches.
+    'effective_types': {},
 }
 
 # Ego LRU keyed by (graph_id, node_id, k, cap); OrderedDict for move_to_end + popitem(last=False).

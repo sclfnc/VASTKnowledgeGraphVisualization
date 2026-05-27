@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import networkit as nk
 
 from schema import compute_schema, load_node_link, node_type, percentile
@@ -29,8 +30,10 @@ import datasets
 from centrality import centrality_response
 from components import compute_components
 from degree_fit import compute_degree_fit
+from attribute_index import get_attribute_index
 from edge_flow import compute_edge_flow
 from edge_index import get_edge_index, get_edge_index_map
+from effective_types import get_effective_types
 from ego import ego_subgraph, EgoTooLargeError, LRU_SIZE, SOFT_CAP_DEFAULT, VALID_DIRECTIONS
 from node_index import get_node_index
 from timeline import compute_timeline
@@ -57,6 +60,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Compress responses ≥ 1KB. /attribute-index/ on MovieLens is ~2.7MB raw and
+# compresses to a few hundred KB; same for /nodes/ on MC1 (~600KB).
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.on_event("startup")
@@ -309,6 +316,34 @@ def get_edges(graph_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error computing edge index: {str(e)}")
+
+
+@app.get("/attribute-index/{graph_id}",
+         summary="Per-(type, attribute) precomputed index for v2 filter pipeline")
+def get_attribute_index_endpoint(graph_id: str):
+    """{node_attrs, edge_attrs} keyed by type, then attr; powers per-type attr filters."""
+    try:
+        return JSONResponse(content=get_attribute_index(graph_id))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing attribute index: {str(e)}")
+
+
+@app.get("/effective-types/{graph_id}",
+         summary="Effective type labels per node/edge (auto- or user-promoted attr)")
+def get_effective_types_endpoint(graph_id: str,
+                                 node_attr: Optional[str] = None,
+                                 edge_attr: Optional[str] = None):
+    """`{node: [labels|null], edge: [labels|null], promoted: {...}}`. Empty
+    query params = use schema.auto_promoted. Phase 7+ will accept manual
+    overrides via the same params."""
+    try:
+        return JSONResponse(content=get_effective_types(graph_id, node_attr, edge_attr))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing effective types: {str(e)}")
 
 
 @app.get("/ego/{graph_id}/{node_id}", summary="k-hop ego subgraph around a node")

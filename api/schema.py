@@ -204,6 +204,73 @@ def _attributes_for_group(items, reserved):
     return out
 
 
+def effective_type_label(value, attr_kind, attr_name):
+    """Stringify a promoted attribute's value to use as the effective type label.
+
+    Categorical: raw value (already a string the user can read).
+    Numeric / boolean: prefix with `<attr> = <value>` so the dashboard doesn't
+    show bare `0` / `1` / `True` as type labels.
+    """
+    if value is None:
+        return 'Unknown'
+    if attr_kind == 'categorical':
+        return str(value)
+    return f"{attr_name} = {value}"
+
+
+def _numeric_is_binary(values_iter, attr_name):
+    """Stream-count distinct values of `attr_name`; bail at 3."""
+    seen = set()
+    for d in values_iter:
+        v = d.get(attr_name)
+        if v is None:
+            continue
+        seen.add(v)
+        if len(seen) > 2:
+            return False
+    return len(seen) == 2
+
+
+def _eligible_for_promotion(a, total_count, values_iter_factory):
+    """An attr can be auto-promoted iff it has full coverage and is plausibly
+    a type discriminator:
+      - categorical: distinct ≥ 2 (any low-/mid-cardinality is fine).
+      - boolean: both True and False values present (distinct = 2 by nature).
+      - numeric: distinct = 2 — captures the bipartite-indicator case
+        (Davis' `bipartite ∈ {0,1}`). Higher-cardinality numeric attrs
+        (weights, scores, frequencies) are not types — refuse.
+
+    `values_iter_factory()` yields the data dicts of the scope (nodes or
+    edges) — used only by the numeric branch to count distinct values.
+    """
+    if a['count'] != total_count or not a['summary']:
+        return False
+    if a['kind'] == 'categorical':
+        return a['summary'].get('distinct', 0) >= 2
+    if a['kind'] == 'boolean':
+        return a['summary'].get('true', 0) > 0 and a['summary'].get('false', 0) > 0
+    if a['kind'] == 'numeric':
+        rng = a['summary']
+        if rng.get('min') is None or rng.get('max') is None or rng['min'] == rng['max']:
+            return False
+        return _numeric_is_binary(values_iter_factory(), a['name'])
+    return False
+
+
+def _compute_auto_promotion(types_detail, total_count, values_iter_factory):
+    """Auto-promote rule (see FILTERS_V2.md §9.2): if there is a single global
+    type AND exactly one eligible attribute, return `{attr, kind}`; else None.
+    """
+    if len(types_detail) != 1:
+        return None
+    attrs = types_detail[0].get('attributes', [])
+    eligible = [a for a in attrs if _eligible_for_promotion(a, total_count, values_iter_factory)]
+    if len(eligible) != 1:
+        return None
+    pick = eligible[0]
+    return {'attr': pick['name'], 'kind': pick['kind']}
+
+
 def compute_schema(G, name='Graph'):
     nodes_data = list(G.nodes(data=True))
     edge_data = [d for _, _, d in G.edges(data=True)]
@@ -271,6 +338,17 @@ def compute_schema(G, name='Graph'):
         for t in edge_types
     ]
 
+    auto_promoted = {
+        'node': _compute_auto_promotion(
+            node_types_detail, len(nodes_data),
+            lambda: (d for _, d in nodes_data),
+        ),
+        'edge': _compute_auto_promotion(
+            edge_types_detail, len(edge_data),
+            lambda: iter(edge_data),
+        ),
+    }
+
     return {
         'name': name,
         'nodes': G.number_of_nodes(),
@@ -289,6 +367,7 @@ def compute_schema(G, name='Graph'):
         'degree_range': degree_range,
         'weight_range': weight_range,
         'attributes': attributes,
+        'auto_promoted': auto_promoted,
         'warnings': [],
     }
 
@@ -302,43 +381,6 @@ BUILTIN_DATASETS = {
     "email_eu_core":   (_load_email_eu_core,           "Email Eu-Core"),
     "movielens_small": (_load_movielens_small,         "MovieLens Small"),
 }
-
-# Inject Node/Edge Type so compute_schema treats built-ins uniformly.
-# 'from': read attribute (optional 'map' remap); 'const': fixed string.
-BUILTIN_TYPE_NORMALIZATION = {
-    "karate":          {'node': {'from': 'club'},
-                        'edge': {'const': 'Friendship'}},
-    "les_miserables":  {'node': {'const': 'Character'},
-                        'edge': {'const': 'CoAppearance'}},
-    "florentine":      {'node': {'const': 'Family'},
-                        'edge': {'const': 'Marriage'}},
-    "davis":           {'node': {'from': 'bipartite', 'map': {0: 'Woman', 1: 'Event'}},
-                        'edge': {'const': 'Attended'}},
-    # email_eu_core and movielens_small inject Node/Edge Type directly in their
-    # loaders (_load_email_eu_core / _load_movielens_small) — no entry needed here.
-}
-
-
-def normalize_builtin_types(name, G):
-    spec = BUILTIN_TYPE_NORMALIZATION.get(name)
-    if not spec:
-        return
-    nspec = spec.get('node')
-    if nspec:
-        for _, d in G.nodes(data=True):
-            if 'const' in nspec:
-                d['Node Type'] = nspec['const']
-            else:
-                v = d.get(nspec['from'])
-                d['Node Type'] = nspec.get('map', {}).get(v, str(v))
-    espec = spec.get('edge')
-    if espec:
-        for *_, d in G.edges(data=True):
-            if 'const' in espec:
-                d['Edge Type'] = espec['const']
-            else:
-                v = d.get(espec['from'])
-                d['Edge Type'] = espec.get('map', {}).get(v, str(v))
 
 
 def load_node_link(data):

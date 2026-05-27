@@ -12,7 +12,7 @@ import networkx as nx
 from fastapi import HTTPException
 
 from registry import builtin_summary_cache, graph_path, register_graph
-from schema import BUILTIN_DATASETS, compute_schema, normalize_builtin_types
+from schema import BUILTIN_DATASETS, compute_schema
 
 
 def builtin_summary(name: str):
@@ -25,7 +25,6 @@ def builtin_summary(name: str):
         return cached
     loader_fn, _ = BUILTIN_DATASETS[name]
     graph = loader_fn()
-    normalize_builtin_types(name, graph)
     schema = compute_schema(graph, name=name.replace('_', ' ').title())
     summary = {
         'nodes': schema['nodes'],
@@ -65,7 +64,6 @@ def load_builtin_payload(name: str):
         )
     loader_fn, _ = BUILTIN_DATASETS[name]
     graph = loader_fn()
-    normalize_builtin_types(name, graph)
 
     graph_id = f"builtin_{name}"
     file_path = graph_path(graph_id)
