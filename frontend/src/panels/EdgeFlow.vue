@@ -3,14 +3,15 @@ import { ref, computed, toRef, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
 import { Spline } from 'lucide-vue-next'
 import { useEdgeFlow } from '@/composables/useEdgeFlow.js'
-import { useGraphNodes } from '@/composables/useGraphNodes.js'
-import { useGraphEdges } from '@/composables/useGraphEdges.js'
+import { injectGraphNodes } from '@/composables/useGraphNodes.js'
+import { injectGraphEdges } from '@/composables/useGraphEdges.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, idsOfTypes } from './shared.js'
+import { makeTooltip, showTip, hideTip } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlSwitch from './controls/ControlSwitch.vue'
 
@@ -25,9 +26,10 @@ const props = defineProps({
 const emit = defineEmits(['request-widen', 'request-shrink'])
 
 const { data, loading, error } = useEdgeFlow(toRef(props, 'graphId'))
-const { data: allNodes, nodes: nodesSoA } = useGraphNodes(toRef(props, 'graphId'))
-const { edges: edgesSoA } = useGraphEdges(toRef(props, 'graphId'))
+const { nodes: nodesSoA } = injectGraphNodes(toRef(props, 'graphId'))
+const { edges: edgesSoA } = injectGraphEdges(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { nodeTypeAt, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { activeEdgeMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
 const { controls, updateControl } = usePanel(props, 'edge_flow', data)
@@ -45,8 +47,8 @@ const liveFlows = computed(() => {
   const acc = new Map()  // Map<st, Map<et, Map<dt, count>>>
   for (let i = 0; i < soaE.E; i++) {
     if (!eMask.get(i)) continue
-    let st = soaN.types[soaE.source[i]]
-    let dt = soaN.types[soaE.target[i]]
+    let st = nodeTypeAt(soaE.source[i])
+    let dt = nodeTypeAt(soaE.target[i])
     if (!directed && st > dt) { const tmp = st; st = dt; dt = tmp }
     const et = soaE.edgeTypes[soaE.type[i]]
     let byEt = acc.get(st)
@@ -115,12 +117,27 @@ const outgoingPerType = computed(() => {
   return m
 })
 
+// Per-effective-type node count, derived from SoA. Backend payload's
+// `node_counts` is keyed by raw type and would be wrong under auto-promotion.
+const effectiveNodeCounts = computed(() => {
+  const soa = nodesSoA.value
+  if (!soa) return {}
+  const out = {}
+  for (let i = 0; i < soa.N; i++) {
+    const t = nodeTypeAt(i)
+    out[t] = (out[t] || 0) + 1
+  }
+  return out
+})
+
 const visibleTypes = computed(() => {
-  // Only types that participate in at least one visible flow; empty → all node_types.
+  // Only types that participate in at least one visible flow; empty → all types.
+  // Type list uses effective labels when auto-promoted (e.g. Karate's club).
   const used = new Set()
   for (const f of filteredFlows.value) { used.add(f.src_type); used.add(f.dst_type) }
-  if (!used.size) return data.value?.node_types ?? []
-  return (data.value?.node_types ?? []).filter(t => used.has(t))
+  const all = nodeTypeList.value.length ? nodeTypeList.value : (data.value?.node_types ?? [])
+  if (!used.size) return all
+  return all.filter(t => used.has(t))
 })
 
 function isDirected() { return !!data.value?.directed }
@@ -151,7 +168,7 @@ function renderMain() {
   const cx = MARGINS.left + innerW / 2
   const cy = MARGINS.top + innerH / 2
   const radius = Math.max(30, Math.min(innerW, innerH) / 2 - 60)
-  const nodeCounts = data.value.node_counts || {}
+  const nodeCounts = effectiveNodeCounts.value
   const maxCount = d3.max(types, t => nodeCounts[t] || 0) || 1
   const sizeScale = d3.scaleSqrt().domain([0, maxCount]).range([12, 40])
 
@@ -302,17 +319,29 @@ function tooltipFlow(f) {
   return `<b>${f.src_type}</b> ${arrow}<i>${f.edge_type}</i>${arrow} <b>${f.dst_type}</b><br>${f.count.toLocaleString()} edges (${pct}% of shown)`
 }
 function tooltipType(t) {
-  const count = data.value?.node_counts?.[t] ?? 0
+  const count = effectiveNodeCounts.value[t] ?? 0
   return `<b>${t}</b><br>${count.toLocaleString()} nodes`
 }
 
+function _idsOfEffectiveTypes(wanted, cap) {
+  const soa = nodesSoA.value
+  if (!soa) return []
+  const want = wanted instanceof Set ? wanted : new Set(Array.isArray(wanted) ? wanted : [wanted])
+  const out = []
+  for (let i = 0; i < soa.N; i++) {
+    if (want.has(nodeTypeAt(i))) {
+      out.push(soa.ids[i])
+      if (out.length >= cap) break
+    }
+  }
+  return out
+}
+
 function selectFlow(f) {
-  if (!allNodes.value) return
-  selection.replace(idsOfTypes(allNodes.value, [f.src_type, f.dst_type], SELECTION_CAP))
+  selection.replace(_idsOfEffectiveTypes([f.src_type, f.dst_type], SELECTION_CAP))
 }
 function selectType(t) {
-  if (!allNodes.value) return
-  selection.replace(idsOfTypes(allNodes.value, t, SELECTION_CAP))
+  selection.replace(_idsOfEffectiveTypes(t, SELECTION_CAP))
 }
 
 // Flows table (drill-down on widen).
@@ -377,7 +406,7 @@ function toggleWiden() {
             @change="(e) => updateControl('srcTypeFilter', e.target.value === '' ? null : e.target.value)"
           >
             <option value="">All</option>
-            <option v-for="t in (data?.node_types || [])" :key="t" :value="t">{{ t }}</option>
+            <option v-for="t in (nodeTypeList.length ? nodeTypeList : (data?.node_types || []))" :key="t" :value="t">{{ t }}</option>
           </select>
         </ControlSection>
 
@@ -388,7 +417,7 @@ function toggleWiden() {
             @change="(e) => updateControl('dstTypeFilter', e.target.value === '' ? null : e.target.value)"
           >
             <option value="">All</option>
-            <option v-for="t in (data?.node_types || [])" :key="t" :value="t">{{ t }}</option>
+            <option v-for="t in (nodeTypeList.length ? nodeTypeList : (data?.node_types || []))" :key="t" :value="t">{{ t }}</option>
           </select>
         </ControlSection>
 

@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import * as d3 from 'd3'
 import { useCentrality } from '@/composables/useCentrality.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import { useSelectionStore } from '@/stores/selection.js'
@@ -31,6 +32,7 @@ const props = defineProps({
 
 const { data, status } = useCentrality(props.measure)
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { nodeType: effNodeType, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, data)
 const filters = useFiltersStore()
 const { hideIsolated } = storeToRefs(filters)
@@ -183,13 +185,13 @@ function renderGenericScatter() {
     .attr('cx', d => xScale(d.degree))
     .attr('cy', d => yScale(d.value))
     .attr('r', d => ringSet.has(d.id) ? 4.5 : 3)
-    .attr('fill', d => typeColor(d.type))
+    .attr('fill', d => typeColor(effNodeType(d)))
     .attr('stroke', d => ringSet.has(d.id) ? '#0f172a' : (selectedSet.has(d.id) ? '#0f172a' : 'none'))
     .attr('stroke-width', d => ringSet.has(d.id) || selectedSet.has(d.id) ? 1.5 : 0)
     .attr('opacity', d => isActive(d.id) ? 0.7 : ATTENUATED_OPACITY)
     .style('cursor', 'pointer')
     .on('mouseover', (ev, d) => showTip(tooltip, ev,
-      `<strong>${d.id}</strong><br>${d.type}<br>deg ${d.degree} · ${labelFor.value} ${FORMATTERS.exponential(d.value)}`))
+      `<strong>${d.id}</strong><br>${effNodeType(d)}<br>deg ${d.degree} · ${labelFor.value} ${FORMATTERS.exponential(d.value)}`))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
     .on('click', (_, d) => toggleSelected(d.id))
@@ -225,7 +227,7 @@ function renderPageRankBars() {
 
   const allowedTypes = computedShowTypes()
   const filtered = allValues.value
-    .filter(r => allowedTypes.has(r.type))
+    .filter(r => allowedTypes.has(effNodeType(r)))
     .sort((a, b) => b.value - a.value)
     .slice(0, controls.value.topN || 20)
 
@@ -264,13 +266,13 @@ function renderPageRankBars() {
     .attr('y', d => yScale(d.id))
     .attr('width', d => xScale(d.value / denom))
     .attr('height', yScale.bandwidth())
-    .attr('fill', d => typeColor(d.type))
+    .attr('fill', d => typeColor(effNodeType(d)))
     .attr('stroke', d => selectedSet.has(d.id) ? '#0f172a' : 'none')
     .attr('stroke-width', d => selectedSet.has(d.id) ? 1.5 : 0)
     .attr('opacity', d => isActive(d.id) ? 0.85 : ATTENUATED_OPACITY)
     .style('cursor', 'pointer')
     .on('mouseover', (ev, d) => showTip(tooltip, ev,
-      `<strong>${d.id}</strong><br>${d.type}<br>PR ${FORMATTERS.exponential(d.value)}<br>${((d.value / denom) * 100).toFixed(2)}% of total`))
+      `<strong>${d.id}</strong><br>${effNodeType(d)}<br>PR ${FORMATTERS.exponential(d.value)}<br>${((d.value / denom) * 100).toFixed(2)}% of total`))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
     .on('click', (_, d) => toggleSelected(d.id))
@@ -283,12 +285,12 @@ function renderPageRankBars() {
     .attr('font-size', 10).attr('fill', '#475569')
     .text(d => `${((d.value / denom) * 100).toFixed(2)}%`)
 
-  drawTypeLegend(svg, totalW, [...new Set(filtered.map(r => r.type))], typeColor)
+  drawTypeLegend(svg, totalW, [...new Set(filtered.map(r => effNodeType(r)))], typeColor)
 }
 
 // null / empty array means "all" — keeps payload compact.
 function computedShowTypes() {
-  const all = props.schema?.node_types ?? []
+  const all = nodeTypeList.value.length ? nodeTypeList.value : (props.schema?.node_types ?? [])
   const sel = controls.value.showTypes
   if (!sel || sel.length === 0) return new Set(all)
   return new Set(sel)
@@ -464,18 +466,18 @@ function renderBetweennessLorenz() {
       .attr('cx', d => xScale(d.x))
       .attr('cy', d => yScale(d.y))
       .attr('r', 5)
-      .attr('fill', d => typeColor(d.type))
+      .attr('fill', d => typeColor(effNodeType(d)))
       .attr('stroke', d => selectedSet.has(d.id) ? '#0f172a' : '#fff')
       .attr('stroke-width', 1.5)
       .attr('opacity', d => isActive(d.id) ? 1 : ATTENUATED_OPACITY)
       .style('cursor', 'pointer')
       .on('mouseover', (ev, d) => showTip(tooltip, ev,
-        `<strong>${d.id}</strong><br>${d.type}<br>Betw ${FORMATTERS.exponential(d.value)}<br>cum frac ${(d.x * 100).toFixed(1)}%`))
+        `<strong>${d.id}</strong><br>${effNodeType(d)}<br>Betw ${FORMATTERS.exponential(d.value)}<br>cum frac ${(d.x * 100).toFixed(1)}%`))
       .on('mousemove', (ev) => showTip(tooltip, ev, null))
       .on('mouseout', () => hideTip(tooltip))
       .on('click', (_, d) => toggleSelected(d.id))
 
-    drawTypeLegend(svg, totalW, [...new Set(marks.map(r => r.type))], typeColor)
+    drawTypeLegend(svg, totalW, [...new Set(marks.map(r => effNodeType(r)))], typeColor)
   }
 }
 
@@ -500,8 +502,16 @@ function renderClosenessViolins() {
   const innerW = totalW - MARGINS.left - MARGINS.right
   const innerH = totalH - MARGINS.top - MARGINS.bottom
 
-  const byType = variant.by_type || {}
-  const counts = variant.count_per_type || {}
+  // Re-aggregate client-side using effective types (auto-promoted or raw).
+  // Backend ships by_type keyed on raw `Node Type`; under auto_promotion that
+  // collapses to a single bucket on Karate-like graphs.
+  const byType = {}
+  const counts = {}
+  for (const r of (variant.values || [])) {
+    const t = effNodeType(r)
+    ;(byType[t] ??= []).push(r)
+    counts[t] = (counts[t] || 0) + 1
+  }
   let types = Object.keys(byType)
   if (controls.value.closeSort === 'alpha') {
     types.sort((a, b) => a.localeCompare(b))
@@ -600,7 +610,7 @@ function renderClosenessViolins() {
 }
 
 function typesInData() {
-  return [...new Set(allValues.value.map(r => r.type))]
+  return [...new Set(allValues.value.map(r => effNodeType(r)))]
 }
 
 function toggleSelected(id) {
@@ -639,7 +649,7 @@ function isTypeShown(t) {
   return cur.includes(t)
 }
 function togglePageRankType(t) {
-  const all = props.schema?.node_types ?? []
+  const all = nodeTypeList.value.length ? nodeTypeList.value : (props.schema?.node_types ?? [])
   const cur = (!controls.value.showTypes || controls.value.showTypes.length === 0)
     ? [...all]
     : [...controls.value.showTypes]
@@ -676,7 +686,7 @@ function togglePageRankType(t) {
         <ControlSection v-if="isPageRank && controls.view === 'specific'" title="Show types">
           <div class="flex flex-wrap gap-1">
             <button
-              v-for="t in (props.schema?.node_types || [])" :key="t"
+              v-for="t in (nodeTypeList.length ? nodeTypeList : (props.schema?.node_types || []))" :key="t"
               class="type-chip px-1.5 py-0 text-[10px]"
               :class="{ 'type-chip--active': isTypeShown(t) }"
               :style="isTypeShown(t)

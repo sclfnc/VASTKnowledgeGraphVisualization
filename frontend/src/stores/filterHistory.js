@@ -8,6 +8,13 @@ import { useFiltersStore } from './filters.js'
 const MAX = 20
 const DEBOUNCE_MS = 500
 
+// JSON deep clone — survives Pinia's reactive Proxies (structuredClone does not).
+// Store values are plain objects/arrays/primitives in v2 (categorical uses
+// `values: string[]`, not Set), so JSON round-trip is lossless and safe.
+function deepClone(x) {
+  return x == null ? x : JSON.parse(JSON.stringify(x))
+}
+
 function snapshotFrom(f) {
   return {
     nodeTypes: [...f.nodeTypes],
@@ -17,11 +24,23 @@ function snapshotFrom(f) {
     hideIsolated: f.hideIsolated,
     hideSelfLoops: f.hideSelfLoops,
     hops: f.hops,
-    attributes: structuredClone(f.attributes),
+    attributes: deepClone(f.attributes),
     temporalFilter: f.temporalFilter
       ? { attr: f.temporalFilter.attr, scope: f.temporalFilter.scope ?? 'node', range: [...f.temporalFilter.range] }
       : null,
+    nodeAttrs: deepClone(f.nodeAttrs ?? {}),
+    edgeAttrs: deepClone(f.edgeAttrs ?? {}),
   }
+}
+
+function _restoreAttrs(snapAttrs, validTypes) {
+  // Drop types absent from current schema. Keep all attrs within surviving types.
+  const out = {}
+  for (const [t, constraints] of Object.entries(snapAttrs ?? {})) {
+    if (validTypes && validTypes.size && !validTypes.has(t)) continue
+    out[t] = deepClone(constraints)
+  }
+  return out
 }
 
 function restoreInto(f, snap, schema) {
@@ -35,10 +54,12 @@ function restoreInto(f, snap, schema) {
   f.hideIsolated = snap.hideIsolated
   f.hideSelfLoops = snap.hideSelfLoops
   f.hops = snap.hops
-  f.attributes = structuredClone(snap.attributes)
+  f.attributes = deepClone(snap.attributes)
   f.temporalFilter = snap.temporalFilter
     ? { attr: snap.temporalFilter.attr, scope: snap.temporalFilter.scope ?? 'node', range: [...snap.temporalFilter.range] }
     : null
+  f.nodeAttrs = _restoreAttrs(snap.nodeAttrs, validNT)
+  f.edgeAttrs = _restoreAttrs(snap.edgeAttrs, validET)
 }
 
 export const useFilterHistoryStore = defineStore('filterHistory', () => {

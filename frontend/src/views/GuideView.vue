@@ -4,13 +4,30 @@ import { storeToRefs } from 'pinia'
 import GuidePanel from '../components/GuidePanel.vue'
 import PanelFocus from '../components/PanelFocus.vue'
 import GraphContextBar from '../components/GraphContextBar.vue'
-import { useSchema } from '../composables/useSchema.js'
+import {
+  useSchema, SCHEMA_KEY,
+} from '../composables/useSchema.js'
 import { useGraphStore } from '../stores/graph.js'
 import { usePanelsStore } from '../stores/panels.js'
 import { useCentralityPoller } from '../composables/useCentralityPoller.js'
+import { useGraphNodes, GRAPH_NODES_KEY } from '../composables/useGraphNodes.js'
+import { useGraphEdges, GRAPH_EDGES_KEY } from '../composables/useGraphEdges.js'
+import { useEffectiveTypes, EFFECTIVE_TYPES_KEY } from '../composables/useEffectiveTypes.js'
+import { useAttributeIndex, ATTRIBUTE_INDEX_KEY } from '../composables/useAttributeIndex.js'
 
-const { schema } = useSchema()
+// Single instances of every per-graph resource; descendants reach them via
+// inject*() wrappers exported next to each composable. Without this, each
+// panel + each composable would fire its own fetch — on MC1 that's 600KB
+// /nodes/ ×7+ panels = wasted bandwidth and parser time.
+const schemaInstance = useSchema()
+const { schema } = schemaInstance
+provide(SCHEMA_KEY, schemaInstance)
+
 const { graphId } = storeToRefs(useGraphStore())
+provide(GRAPH_NODES_KEY, useGraphNodes(graphId))
+provide(GRAPH_EDGES_KEY, useGraphEdges(graphId))
+provide(EFFECTIVE_TYPES_KEY, useEffectiveTypes(graphId))
+provide(ATTRIBUTE_INDEX_KEY, useAttributeIndex(graphId))
 const panelsStore = usePanelsStore()
 const { orderedActive } = storeToRefs(panelsStore)
 const { toggle } = panelsStore

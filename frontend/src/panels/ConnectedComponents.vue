@@ -4,8 +4,9 @@ import * as d3 from 'd3'
 import Slider from '@vueform/slider'
 import '@vueform/slider/themes/default.css'
 import { useComponents } from '@/composables/useComponents.js'
-import { useGraphNodes } from '@/composables/useGraphNodes.js'
+import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
 import { useFiltersStore } from '@/stores/filters.js'
@@ -29,8 +30,9 @@ const props = defineProps({
 const emit = defineEmits(['request-widen', 'request-shrink'])
 
 const { data, loading, error } = useComponents(toRef(props, 'graphId'))
-const { nodes: soa } = useGraphNodes(toRef(props, 'graphId'))
+const { nodes: soa } = injectGraphNodes(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { nodeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { activeNodeMask, selectedMask, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
 const filters = useFiltersStore()
@@ -105,14 +107,26 @@ function activeByTypeOf(comp) {
   const masks = componentMasks.value
   const act = activeNodeMask.value
   const s = soa.value
-  if (!masks || !s) return comp.by_type
+  // Re-aggregate via SoA + nodeTypeAt so the drill-down uses the effective
+  // type (auto-promoted attr or raw `Node Type`).
+  if (!masks || !s) {
+    if (!s) return comp.by_type
+    const cm = (componentMasks.value || new Map()).get(comp.id)
+    if (!cm) return comp.by_type
+    const out = {}
+    for (const idx of cm) {
+      const t = nodeTypeAt(idx)
+      out[t] = (out[t] || 0) + 1
+    }
+    return out
+  }
   const cm = masks.get(comp.id)
   if (!cm) return {}
   const tmp = cm.clone()
   if (act) tmp.andInPlace(act)
   const out = {}
   for (const idx of tmp) {
-    const t = s.types[idx]
+    const t = nodeTypeAt(idx)
     out[t] = (out[t] || 0) + 1
   }
   return out

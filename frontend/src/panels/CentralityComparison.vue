@@ -5,6 +5,7 @@ import { ref, computed, toRef, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
 import { useAllCentralities } from '@/composables/useAllCentralities.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
@@ -23,6 +24,7 @@ const props = defineProps({
 
 const all = useAllCentralities()
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { nodeType: effNodeType } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { activeNodeMask, isActive, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, null)
 const chartContainer = ref(null)
@@ -156,10 +158,10 @@ function renderChart() {
           .attr('cx', d => xs(d[kCol]))
           .attr('cy', d => ys(d[kRow]))
           .attr('r', 1.6)
-          .attr('fill', d => typeColor(d.type))
+          .attr('fill', d => typeColor(effNodeType(d)))
           .attr('opacity', d => isActive(d.id) ? 0.55 : ATTENUATED_OPACITY)
           .on('mouseover', (ev, d) => showTip(tooltip, ev,
-            `<strong>${d.id}</strong><br>${d.type}<br>${MEASURE_LABELS[kCol]} ${FORMATTERS.exponential(d[kCol])}<br>${MEASURE_LABELS[kRow]} ${FORMATTERS.exponential(d[kRow])}`))
+            `<strong>${d.id}</strong><br>${effNodeType(d)}<br>${MEASURE_LABELS[kCol]} ${FORMATTERS.exponential(d[kCol])}<br>${MEASURE_LABELS[kRow]} ${FORMATTERS.exponential(d[kRow])}`))
           .on('mousemove', (ev) => showTip(tooltip, ev, null))
           .on('mouseout', () => hideTip(tooltip))
       } else {
@@ -180,7 +182,7 @@ function renderChart() {
     }
   }
 
-  const types = [...new Set(m.map(r => r.type))]
+  const types = [...new Set(m.map(r => effNodeType(r)))]
   drawTypeLegend(svg, totalW, types, typeColor)
 
   svg.append('text')

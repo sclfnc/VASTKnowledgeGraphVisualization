@@ -5,19 +5,24 @@ import { useFiltersStore } from '../stores/filters.js'
 import { useSelectionStore } from '../stores/selection.js'
 import { useFilterHistoryStore } from '../stores/filterHistory.js'
 import { usePinsStore } from '../stores/pins.js'
-import { useSchema } from '../composables/useSchema.js'
+import { injectSchema } from '../composables/useSchema.js'
 import { useNodeTypeColors } from '../composables/useNodeTypeColors.js'
+import { useEffectiveType } from '../composables/useEffectiveType.js'
 import { useFilteredModel } from '../composables/useFilteredModel.js'
+import { useGraphStore } from '../stores/graph.js'
+import { storeToRefs } from 'pinia'
 import NumericFilter from './NumericFilter.vue'
 
 const SELECTION_PILL_CAP = 20
 
-const { schema } = useSchema()
+const { schema } = injectSchema()
+const { graphId } = storeToRefs(useGraphStore())
 const filters = useFiltersStore()
 const selection = useSelectionStore()
 const filterHistory = useFilterHistoryStore()
 const pins = usePinsStore()
 const { color: typeColor } = useNodeTypeColors(schema)
+const { nodeTypeList, edgeTypeList } = useEffectiveType(graphId, schema)
 const { activeNodeMask, activeEdgeMask } = useFilteredModel()
 const filteredNodeCount = computed(() => activeNodeMask.value?.popcount() ?? schema.value?.nodes ?? 0)
 const filteredEdgeCount = computed(() => activeEdgeMask.value?.popcount() ?? schema.value?.edges ?? 0)
@@ -29,8 +34,15 @@ const isolatedAlreadyFiltered = computed(() => {
 
 const hasIsolated = computed(() => (schema.value?.degree_range?.[0] ?? 1) === 0)
 const hasSelfLoops = computed(() => (schema.value?.self_loops ?? 0) > 0)
-const multipleNodeTypes = computed(() => (schema.value?.node_types?.length ?? 0) > 1)
-const multipleEdgeTypes = computed(() => (schema.value?.edge_types?.length ?? 0) > 1)
+// Effective types (auto-promoted or raw); falls back to schema arrays
+// before /effective-types/ resolves. `multipleXxxTypes` drives whether
+// the chip group is even shown.
+const effectiveNodeTypes = computed(() =>
+  nodeTypeList.value.length ? nodeTypeList.value : (schema.value?.node_types ?? []))
+const effectiveEdgeTypes = computed(() =>
+  edgeTypeList.value.length ? edgeTypeList.value : (schema.value?.edge_types ?? []))
+const multipleNodeTypes = computed(() => effectiveNodeTypes.value.length > 1)
+const multipleEdgeTypes = computed(() => effectiveEdgeTypes.value.length > 1)
 
 
 const wccFilterLabel = computed(() => {
@@ -48,7 +60,7 @@ const nodeTypesOpen = ref(false)
 const edgeTypesOpen = ref(false)
 
 const nodeTypesLabel = computed(() => {
-  const all = schema.value?.node_types?.length ?? 0
+  const all = effectiveNodeTypes.value.length
   const active = filters.nodeTypes.length
   if (all === 0) return null
   if (active === all) return 'All types'
@@ -56,7 +68,7 @@ const nodeTypesLabel = computed(() => {
 })
 
 const edgeTypesLabel = computed(() => {
-  const all = schema.value?.edge_types?.length ?? 0
+  const all = effectiveEdgeTypes.value.length
   const active = filters.edgeTypes.length
   if (all === 0) return null
   if (active === all) return 'All types'
@@ -147,7 +159,7 @@ function resetAll() {
             v-else
             class="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-primary transition hover:border-slate-300"
             @click.stop="nodeTypesOpen = !nodeTypesOpen; edgeTypesOpen = false">
-            <span :class="filters.nodeTypes.length < schema.node_types.length ? 'font-medium text-slate-700' : 'text-secondary'">
+            <span :class="filters.nodeTypes.length < effectiveNodeTypes.length ? 'font-medium text-slate-700' : 'text-secondary'">
               {{ nodeTypesLabel }}
             </span>
             <ChevronDown :size="11" class="text-muted transition-transform" :class="nodeTypesOpen ? 'rotate-180' : ''" />
@@ -161,11 +173,11 @@ function resetAll() {
             <div class="p-1">
               <!-- Select all / none row -->
               <div class="flex items-center justify-between border-b border-slate-100 px-2 pb-1 mb-1">
-                <button class="text-[10px] text-secondary hover:text-primary" @click="filters.nodeTypes = [...schema.node_types]">All</button>
+                <button class="text-[10px] text-secondary hover:text-primary" @click="filters.nodeTypes = [...effectiveNodeTypes]">All</button>
                 <button class="text-[10px] text-secondary hover:text-red-500" @click="filters.nodeTypes = []">None</button>
               </div>
               <div
-                v-for="t in schema.node_types" :key="t"
+                v-for="t in effectiveNodeTypes" :key="t"
                 class="group flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-slate-50 transition">
                 <button class="flex items-center gap-2 flex-1 text-left text-xs" @click="toggleType(filters.nodeTypes, t)">
                   <span
@@ -242,7 +254,7 @@ function resetAll() {
             v-else
             class="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-primary transition hover:border-slate-300"
             @click.stop="edgeTypesOpen = !edgeTypesOpen; nodeTypesOpen = false">
-            <span :class="filters.edgeTypes.length < schema.edge_types.length ? 'font-medium text-slate-700' : 'text-secondary'">
+            <span :class="filters.edgeTypes.length < effectiveEdgeTypes.length ? 'font-medium text-slate-700' : 'text-secondary'">
               {{ edgeTypesLabel }}
             </span>
             <ChevronDown :size="11" class="text-muted transition-transform" :class="edgeTypesOpen ? 'rotate-180' : ''" />
@@ -254,11 +266,11 @@ function resetAll() {
             @click.stop>
             <div class="p-1">
               <div class="flex items-center justify-between border-b border-slate-100 px-2 pb-1 mb-1">
-                <button class="text-[10px] text-secondary hover:text-primary" @click="filters.edgeTypes = [...schema.edge_types]">All</button>
+                <button class="text-[10px] text-secondary hover:text-primary" @click="filters.edgeTypes = [...effectiveEdgeTypes]">All</button>
                 <button class="text-[10px] text-secondary hover:text-red-500" @click="filters.edgeTypes = []">None</button>
               </div>
               <div
-                v-for="t in schema.edge_types" :key="t"
+                v-for="t in effectiveEdgeTypes" :key="t"
                 class="group flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-slate-50 transition">
                 <button class="flex items-center gap-2 flex-1 text-left text-xs" @click="toggleType(filters.edgeTypes, t)">
                   <span

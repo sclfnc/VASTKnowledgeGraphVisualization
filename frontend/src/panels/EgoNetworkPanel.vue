@@ -5,8 +5,9 @@ import * as d3 from 'd3'
 import { ArrowLeft, ChevronRight } from 'lucide-vue-next'
 import NodeSearchInput from '@/components/NodeSearchInput.vue'
 import { useEgoSubgraph } from '@/composables/useEgoSubgraph.js'
-import { useGraphNodes } from '@/composables/useGraphNodes.js'
+import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore } from '@/stores/selection.js'
 import { useForceGraph } from '@/composables/useForceGraph.js'
@@ -32,7 +33,8 @@ const selection = useSelectionStore()
 const { ids: selectedRef } = storeToRefs(selection)
 const { controls, updateControl } = usePanel(props, 'ego')
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
-const { data: allNodes } = useGraphNodes(toRef(props, 'graphId'))
+const { nodeType: effNodeType } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
+const { data: allNodes } = injectGraphNodes(toRef(props, 'graphId'))
 // Alters attenuate under the global filter; ego is immune (it's the focus).
 const { activeNodeMask, activeEdgeMask, isActive: isActiveId, isEdgeActive } = usePanelContextFromProps(props)
 
@@ -121,16 +123,17 @@ function nodeRadius(n) {
 
 function tooltipHtml(d) {
   const dist = d.distance instanceof Map ? d.distance.get(0) : d.distance
-  return `<b>${d.id}</b><br/>${d.type}<br/>degree ${d.degree}<br/>distance ${dist}`
+  return `<b>${d.id}</b><br/>${effNodeType(d)}<br/>degree ${d.degree}<br/>distance ${dist}`
 }
 
 function renderNode(g, d) {
   g.selectAll('*').remove()
   const r = nodeRadius(d)
   const isEgo = d.isEgoOf?.has(0) || d.id === activeEgoId.value
+  const t = effNodeType(d)
   const fill = isEgo
-    ? typeColor(d.type)
-    : (controls.value.highlight === 'degree' ? degScale.value(d.degree) : typeColor(d.type))
+    ? typeColor(t)
+    : (controls.value.highlight === 'degree' ? degScale.value(d.degree) : typeColor(t))
   // Ego stays at full opacity even when filtered out.
   const opacity = isEgo ? 1 : (isActiveId(d.id) ? 1 : 0.2)
   g.append('circle')

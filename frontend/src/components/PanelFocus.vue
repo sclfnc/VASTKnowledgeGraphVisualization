@@ -6,8 +6,8 @@ import { X } from 'lucide-vue-next'
 
 const props = defineProps({
   panel: { type: Object, default: null },
-  schema: { type: Object, required: true },
-  graphId: { type: String, required: true },
+  schema: { type: Object, default: null },
+  graphId: { type: String, default: null },
 })
 const emit = defineEmits(['close'])
 

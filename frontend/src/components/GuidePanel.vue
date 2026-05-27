@@ -9,8 +9,8 @@ import { usePanelContextFromProps } from '../composables/usePanelContext.js'
 
 const props = defineProps({
   panelSpec:    { type: Object, required: true },
-  schema:       { type: Object, required: true },
-  graphId:      { type: String, required: true },
+  schema:       { type: Object, default: null },
+  graphId:      { type: String, default: null },
   expanded:     { type: Boolean, default: false },
   widened:      { type: Boolean, default: false },
   controlsOpen: { type: Boolean, default: false },

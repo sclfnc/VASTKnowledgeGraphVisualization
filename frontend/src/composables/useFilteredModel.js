@@ -6,15 +6,19 @@
 // Pin/Isolation are applied later in usePanelContext.
 import { computed } from 'vue'
 import { useFiltersStore } from '@/stores/filters.js'
-import { useGraphNodes } from './useGraphNodes.js'
-import { useGraphEdges } from './useGraphEdges.js'
+import { injectGraphNodes } from './useGraphNodes.js'
+import { injectGraphEdges } from './useGraphEdges.js'
+import { injectAttributeIndex } from './useAttributeIndex.js'
+import { injectEffectiveTypes } from './useEffectiveTypes.js'
 import { Bitset } from '@/utils/bitset.js'
 import { lowerBound, upperBound } from '@/utils/binsearch.js'
 
 export function useFilteredModel(graphId) {
   const filters = useFiltersStore()
-  const { nodes } = useGraphNodes(graphId)
-  const { edges } = useGraphEdges(graphId)
+  const { nodes } = injectGraphNodes(graphId)
+  const { edges } = injectGraphEdges(graphId)
+  const attrIndex = injectAttributeIndex(graphId)
+  const { data: effData } = injectEffectiveTypes(graphId)
 
   const activeNodeMask = computed(() => {
     const soa = nodes.value
@@ -23,10 +27,20 @@ export function useFilteredModel(graphId) {
 
     const mask = new Bitset(N)
     const selectedTypes = filters.nodeTypes
+    const effNodeLabels = effData.value?.node
     if (selectedTypes && selectedTypes.length > 0) {
-      for (const t of selectedTypes) {
-        const m = typeMasks.get(t)
-        if (m) mask.orInPlace(m)
+      if (effNodeLabels) {
+        // Effective labels: iterate once, set bit if node's effective type is selected.
+        const wanted = new Set(selectedTypes)
+        for (let i = 0; i < N; i++) {
+          if (wanted.has(effNodeLabels[i])) mask.set(i)
+        }
+      } else {
+        // No promotion: raw typeMasks suffice (OR over selected types).
+        for (const t of selectedTypes) {
+          const m = typeMasks.get(t)
+          if (m) mask.orInPlace(m)
+        }
       }
     }
 
@@ -56,6 +70,31 @@ export function useFilteredModel(graphId) {
       }
     }
 
+    // v2: per-type attribute filters. A node passes iff EITHER its type has
+    // no constraints (untouched), OR its type has constraints and the node
+    // matches ALL of them (AND across attrs of the same type).
+    const nodeAttrs = filters.nodeAttrs
+    if (nodeAttrs && Object.keys(nodeAttrs).length > 0 && attrIndex.ready.value) {
+      const passMask = new Bitset(N)
+      // Types not in nodeAttrs: all their nodes pass.
+      for (const [t, tMask] of typeMasks) {
+        if (!(t in nodeAttrs)) passMask.orInPlace(tMask)
+      }
+      // Types in nodeAttrs: build per-attr bitset, AND together, AND with type mask, OR into passMask.
+      for (const [t, constraints] of Object.entries(nodeAttrs)) {
+        const tMask = typeMasks.get(t)
+        if (!tMask) continue   // unknown type → no nodes
+        const allowed = tMask.clone()
+        for (const [attr, spec] of Object.entries(constraints)) {
+          const bs = attrIndex.bitsetFor('node', t, attr, spec)
+          if (bs) allowed.andInPlace(bs)
+          else { allowed.clearAll(); break }
+        }
+        passMask.orInPlace(allowed)
+      }
+      mask.andInPlace(passMask)
+    }
+
     return mask
   })
 
@@ -67,13 +106,25 @@ export function useFilteredModel(graphId) {
     const mask = new Bitset(E)
     mask.setAll()
 
-    // Step 1: edge type filter (OR of typeMasks for selected types)
+    // Step 1: edge type filter (OR of typeMasks for selected types — or
+    // effective-label match when edge auto-promotion is active).
     const selectedEdgeTypes = filters.edgeTypes
-    if (selectedEdgeTypes && selectedEdgeTypes.length < edgeTypes.length) {
+    const effEdgeLabels = effData.value?.edge
+    const totalEdgeTypes = effEdgeLabels
+      ? new Set(effEdgeLabels).size
+      : edgeTypes.length
+    if (selectedEdgeTypes && selectedEdgeTypes.length < totalEdgeTypes) {
       const typeMask = new Bitset(E)
-      for (const t of selectedEdgeTypes) {
-        const m = typeMasks.get(t)
-        if (m) typeMask.orInPlace(m)
+      if (effEdgeLabels) {
+        const wanted = new Set(selectedEdgeTypes)
+        for (let i = 0; i < E; i++) {
+          if (wanted.has(effEdgeLabels[i])) typeMask.set(i)
+        }
+      } else {
+        for (const t of selectedEdgeTypes) {
+          const m = typeMasks.get(t)
+          if (m) typeMask.orInPlace(m)
+        }
       }
       mask.andInPlace(typeMask)
     }
@@ -98,7 +149,28 @@ export function useFilteredModel(graphId) {
       }
     }
 
-    // Step 4: AND with node mask — edge active iff both endpoints survive
+    // Step 4: v2 per-type edge attribute filters. Same shape as the node side.
+    const edgeAttrs = filters.edgeAttrs
+    if (edgeAttrs && Object.keys(edgeAttrs).length > 0 && attrIndex.ready.value) {
+      const passMask = new Bitset(E)
+      for (const [t, tMask] of typeMasks) {
+        if (!(t in edgeAttrs)) passMask.orInPlace(tMask)
+      }
+      for (const [t, constraints] of Object.entries(edgeAttrs)) {
+        const tMask = typeMasks.get(t)
+        if (!tMask) continue
+        const allowed = tMask.clone()
+        for (const [attr, spec] of Object.entries(constraints)) {
+          const bs = attrIndex.bitsetFor('edge', t, attr, spec)
+          if (bs) allowed.andInPlace(bs)
+          else { allowed.clearAll(); break }
+        }
+        passMask.orInPlace(allowed)
+      }
+      mask.andInPlace(passMask)
+    }
+
+    // Step 5: AND with node mask — edge active iff both endpoints survive
     const nodeMask = activeNodeMask.value
     if (nodeMask) {
       for (let i = 0; i < E; i++) {

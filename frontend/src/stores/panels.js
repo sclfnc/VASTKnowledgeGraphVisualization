@@ -2,7 +2,7 @@
 // Sidebar and GuideView both consume this store, so the sidebar can stay
 // mounted in Graph mode (showing the same list, just not currently rendered).
 import { defineStore } from 'pinia'
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, markRaw } from 'vue'
 import { PANEL_SPECS, SECTIONS } from '../panels/index.js'
 import { useLocalStorage } from '../composables/useLocalStorage.js'
 
@@ -14,8 +14,14 @@ export const usePanelsStore = defineStore('panels', () => {
     PANEL_SPECS.filter(p => p.defaultActive).map(p => p.id)
   )
 
+  // markRaw the Vue component reference: Pinia's reactive proxy would otherwise
+  // wrap it, triggering "Vue received a Component that was made a reactive object".
   const panels = ref(
-    PANEL_SPECS.map(p => ({ ...p, active: activeIds.value.includes(p.id) }))
+    PANEL_SPECS.map(p => ({
+      ...p,
+      component: p.component ? markRaw(p.component) : p.component,
+      active: activeIds.value.includes(p.id),
+    }))
   )
   // sections must be a ref — storeToRefs() in consumers drops non-reactive
   // properties, so a plain `SECTIONS` exported as state would arrive as

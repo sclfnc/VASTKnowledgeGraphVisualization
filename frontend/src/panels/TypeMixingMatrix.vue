@@ -3,15 +3,16 @@ import { ref, computed, toRef, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
 import { Grid3x3 } from 'lucide-vue-next'
 import { useTypeMixing } from '@/composables/useTypeMixing.js'
-import { useGraphNodes } from '@/composables/useGraphNodes.js'
-import { useGraphEdges } from '@/composables/useGraphEdges.js'
+import { injectGraphNodes } from '@/composables/useGraphNodes.js'
+import { injectGraphEdges } from '@/composables/useGraphEdges.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, visibleSubset, idsOfTypes, svgFrame, FORMATTERS } from './shared.js'
+import { makeTooltip, showTip, hideTip, visibleSubset, svgFrame, FORMATTERS } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 
@@ -26,9 +27,10 @@ const props = defineProps({
 const emit = defineEmits(['request-widen', 'request-shrink'])
 
 const { data, loading, error } = useTypeMixing(toRef(props, 'graphId'))
-const { data: allNodes, nodes: nodesSoA } = useGraphNodes(toRef(props, 'graphId'))
-const { edges: edgesSoA } = useGraphEdges(toRef(props, 'graphId'))
+const { nodes: nodesSoA } = injectGraphNodes(toRef(props, 'graphId'))
+const { edges: edgesSoA } = injectGraphEdges(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { nodeTypeAt, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { activeEdgeMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
 const filters = useFiltersStore()
@@ -52,7 +54,8 @@ const NORM_OPTIONS = [
 ]
 
 // Rows/cols collapse to the visible set; Newman r stays anchored to the full graph.
-const allNodeTypes = computed(() => data.value?.node_types || [])
+// `nodeTypeList` returns the effective labels (auto-promoted) or raw types.
+const allNodeTypes = computed(() => nodeTypeList.value.length ? nodeTypeList.value : (data.value?.node_types || []))
 const allEdgeTypes = computed(() => data.value?.edge_types || [])
 const nodeTypes = computed(() => visibleSubset(filters.nodeTypes, allNodeTypes.value))
 const edgeTypes = computed(() => visibleSubset(filters.edgeTypes, allEdgeTypes.value))
@@ -83,9 +86,9 @@ const activeMatrix = computed(() => {
     for (let i = 0; i < soaE.E; i++) {
       if (!eMask.get(i)) continue
       if (localEdgeTypeFilter && soaE.edgeTypes[soaE.type[i]] !== localEdgeTypeFilter) continue
-      const st = soaN.types[soaE.source[i]]
-      const dt = soaN.types[soaE.target[i]]
-      out[st][dt] = (out[st][dt] || 0) + 1
+      const st = nodeTypeAt(soaE.source[i])
+      const dt = nodeTypeAt(soaE.target[i])
+      if (st in out && dt in out[st]) out[st][dt] += 1
     }
     return out
   }
@@ -104,7 +107,7 @@ const activeMatrix = computed(() => {
   for (let i = 0; i < soaE.E; i++) {
     if (!eMask.get(i)) continue
     const srcIdx = soaE.source[i], dstIdx = soaE.target[i]
-    const st = soaN.types[srcIdx], dt = soaN.types[dstIdx]
+    const st = nodeTypeAt(srcIdx), dt = nodeTypeAt(dstIdx)
     add(st, dt, dstIdx)
     if (!directed) add(dt, st, srcIdx)
   }
@@ -281,8 +284,17 @@ function cellTooltip(src, dst, raw, normalized) {
 }
 
 function selectCell(src, dst) {
-  if (!allNodes.value) return
-  selection.replace(idsOfTypes(allNodes.value, [src, dst], SELECTION_CAP))
+  const soa = nodesSoA.value
+  if (!soa) return
+  const wanted = new Set([src, dst])
+  const out = []
+  for (let i = 0; i < soa.N; i++) {
+    if (wanted.has(nodeTypeAt(i))) {
+      out.push(soa.ids[i])
+      if (out.length >= SELECTION_CAP) break
+    }
+  }
+  selection.replace(out)
 }
 
 // Aux per-edge-type r bars (widened mode).

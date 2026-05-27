@@ -3,7 +3,7 @@
 // Selection follows the live store unless isolated.
 import { computed, toRef } from 'vue'
 import { useFilteredModel } from './useFilteredModel.js'
-import { useGraphNodes } from './useGraphNodes.js'
+import { injectGraphNodes } from './useGraphNodes.js'
 import { useIsolationStore } from '@/stores/isolation.js'
 import { usePinsStore } from '@/stores/pins.js'
 import { useSelectionStore } from '@/stores/selection.js'
@@ -19,7 +19,7 @@ export function usePanelContext(panelId, graphId) {
   const pins = usePinsStore()
   const selection = useSelectionStore()
   const live = useFilteredModel(graphId)
-  const { nodes } = useGraphNodes(graphId)
+  const { nodes } = injectGraphNodes(graphId)
 
   const isolated = computed(() => isolation.isFrozen(panelId))
   const pinned = computed(() => pins.isPinned(panelId))

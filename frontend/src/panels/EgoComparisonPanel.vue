@@ -4,8 +4,9 @@ import { storeToRefs } from 'pinia'
 import * as d3 from 'd3'
 import { X, Plus } from 'lucide-vue-next'
 import NodeSearchInput from '@/components/NodeSearchInput.vue'
-import { useGraphNodes } from '@/composables/useGraphNodes.js'
+import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { useEgoSubgraph } from '@/composables/useEgoSubgraph.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, MAX_LAYERS } from '@/stores/selection.js'
 import { useForceGraph } from '@/composables/useForceGraph.js'
@@ -28,7 +29,8 @@ const props = defineProps({
 defineEmits(['request-widen', 'request-shrink'])
 
 const { controls, updateControl } = usePanel(props, 'ego_compare')
-const { data: allNodes } = useGraphNodes(toRef(props, 'graphId'))
+const { data: allNodes } = injectGraphNodes(toRef(props, 'graphId'))
+const { nodeType: effNodeType } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { activeNodeMask, activeEdgeMask, isActive: isActiveId, isEdgeActive } = usePanelContextFromProps(props)
 
 // Selection store is unbounded; crop to MAX_LAYERS — pie encoding breaks above 4.
@@ -98,7 +100,7 @@ function tooltipHtml(d) {
   const layerList = [...d.layers].sort((a, b) => a - b)
     .map(li => `<span style="display:inline-block;width:8px;height:8px;background:${LAYER_PALETTE[li]};border-radius:50%;margin-right:2px"></span>${egos.value[li]}`)
     .join('<br/>')
-  return `<b>${d.id}</b><br/>${d.type}<br/>degree ${d.degree}<br/>in ${d.layers.size} ego${d.layers.size === 1 ? '' : 's'}:<br/>${layerList}`
+  return `<b>${d.id}</b><br/>${effNodeType(d)}<br/>degree ${d.degree}<br/>in ${d.layers.size} ego${d.layers.size === 1 ? '' : 's'}:<br/>${layerList}`
 }
 
 function renderNode(g, d) {

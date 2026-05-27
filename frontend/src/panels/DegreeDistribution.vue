@@ -1,9 +1,10 @@
 <script setup>
 import { ref, watch, toRef, computed } from 'vue'
 import * as d3 from 'd3'
-import { useGraphNodes } from '@/composables/useGraphNodes.js'
+import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { useDegreeFit } from '@/composables/useDegreeFit.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore } from '@/stores/selection.js'
 import {
@@ -24,11 +25,12 @@ const props = defineProps({
 })
 
 // Histogram derived live from SoA; fits stay anchored to the full graph (CSN framework).
-const { nodes, loading, error } = useGraphNodes(toRef(props, 'graphId'))
+const { nodes, loading, error } = injectGraphNodes(toRef(props, 'graphId'))
 const { data: fit } = useDegreeFit(toRef(props, 'graphId'))
 const { activeNodeMask, selectedMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
+const { nodeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 
 // baseline = full graph, active = global mask; both rebuilt O(N) per change.
 const baselineData = computed(() => {
@@ -37,7 +39,7 @@ const baselineData = computed(() => {
   const seq = Array.from(soa.degrees)
   const byType = {}
   for (let i = 0; i < soa.N; i++) {
-    const t = soa.types[i]
+    const t = nodeTypeAt(i)
     ;(byType[t] ??= []).push(soa.degrees[i])
   }
   return { seq, byType, stats: summaryStats(seq) }
@@ -53,7 +55,7 @@ const activeData = computed(() => {
     if (!mask.get(i)) continue
     const d = soa.degrees[i]
     seq.push(d)
-    const t = soa.types[i]
+    const t = nodeTypeAt(i)
     ;(byType[t] ??= []).push(d)
   }
   return { seq, byType, stats: summaryStats(seq) }
@@ -69,7 +71,7 @@ const selectedDegrees = computed(() => {
   for (let i = 0; i < soa.N; i++) {
     if (!sm.get(i)) continue
     const d = soa.degrees[i]
-    const t = soa.types[i]
+    const t = nodeTypeAt(i)
     if (!byType.has(t)) byType.set(t, new Set())
     byType.get(t).add(d)
     all.add(d)
@@ -254,7 +256,7 @@ function selectIdsForBin(k, type = null) {
   for (let i = 0; i < soa.N; i++) {
     if (!mask.get(i)) continue
     if (soa.degrees[i] !== k) continue
-    if (type && soa.types[i] !== type) continue
+    if (type && nodeTypeAt(i) !== type) continue
     ids.push(soa.ids[i])
   }
   selection.replace(ids)

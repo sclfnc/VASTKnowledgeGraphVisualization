@@ -1,10 +1,18 @@
 // Reactive fetch of /nodes/{id} with a derived SoA view.
 // `data` is the raw AoS payload (legacy consumers); `nodes` is the SoA
 // (typed arrays + per-type Bitset + idToIdx) consumed by the propagation layer.
-import { computed, watch, toValue } from 'vue'
+//
+// Singleton pattern: GuideView calls `useGraphNodes(graphId)` once and
+// `provide('graphNodes', …)`. Consumers should call `injectGraphNodes()`
+// to share the single fetch + parsed SoA. Direct calls to `useGraphNodes`
+// outside GuideView (e.g. DatasetView, unit tests) still work and create
+// an isolated instance.
+import { computed, inject, watch, toValue } from 'vue'
 import { apiUrl } from './useApi.js'
 import { useFetch } from './useFetch.js'
 import { Bitset } from '@/utils/bitset.js'
+
+const INJECT_KEY = 'graphNodes'
 
 function buildSoA(rows) {
   const N = rows.length
@@ -55,3 +63,14 @@ export function useGraphNodes(graphId) {
 
   return { data, loading, error, nodes }
 }
+
+// Consumer-side accessor. Reads the singleton provided by GuideView; falls
+// back to a fresh instance (with graphId from the graph store) when the
+// provide is missing — keeps DatasetView and tests working.
+export function injectGraphNodes(graphIdFallback) {
+  const provided = inject(INJECT_KEY, null)
+  if (provided) return provided
+  return useGraphNodes(graphIdFallback)
+}
+
+export { INJECT_KEY as GRAPH_NODES_KEY }
