@@ -9,19 +9,7 @@ import EgoComparisonPanel from './EgoComparisonPanel.vue'
 import EdgeFlow from './EdgeFlow.vue'
 import TypeMixingMatrix from './TypeMixingMatrix.vue'
 import ActivityTimeline from './ActivityTimeline.vue'
-import AttributeSchema from './AttributeSchema.vue'
 import NotImplementedStub from './NotImplementedStub.vue'
-
-// Shared defaults for the parametric AttributeSchema panel (node / edge variants).
-const ATTR_SCHEMA_CONTROLS = {
-  view:            { default: 'matrix' },
-  highlightShared: { default: false },
-  minCoverage:     { default: 0 },
-}
-
-const ATTR_SCHEMA_NODE_EXPLANATION = `Each node type carries its own bundle of attributes — sparse or dense, shared or unique. The matrix shows coverage per (type, attribute) pair: an empty cell means the attribute is undefined for that type, a saturated cell means every node of that type carries it. Hover any cell for the value summary (range / top categories / true ratio / date span). Attribute-first view flips the layout to reveal which attributes are shared across types, useful to spot cross-type comparable dimensions (e.g. release_date on both Song and Album). The shared-highlight switch makes multi-type attributes visually distinct so you can pivot the matrix mentally without changing view.`
-
-const ATTR_SCHEMA_EDGE_EXPLANATION = `Most knowledge graphs reduce edges to a single Edge Type label, but real domains carry richer edge metadata: weight, timestamp, confidence, source, etc. The matrix shows coverage per (edge type, attribute) pair so you can see at a glance which relationships have extra annotations and which don't. When all edge types carry only Edge Type — common for VAST-style graphs — the panel says so explicitly rather than rendering an empty grid. Attribute-first view becomes useful as soon as more than one edge type shares an attribute (e.g. a timestamp present on multiple kinds of interaction).`
 
 // Shared defaults for the 4 single-measure centrality panels; per-measure overrides spread below.
 const CENTRALITY_BASE_CONTROLS = {
@@ -99,14 +87,8 @@ const ALL_SPECS = [
     controlsSchema: {
       view:           { default: 'bubbles' },
       mode:           { default: 'wcc' },
-      labelMode:      { default: 'absolute' },
-      hideSingletons: { default: false },
-      logX:           { default: true },
-      filterMode:     { default: 'range' },
-      sizeMin:        { default: null },
-      sizeMax:        { default: null },
-      rankTop:        { default: null },
-      rankBottom:     { default: null },
+      rankMode:       { default: 'top' },
+      rankN:          { default: null },
     },
   },
 
@@ -148,43 +130,6 @@ const ALL_SPECS = [
     status: 'stub',
     component: NotImplementedStub,
     controlsSchema: {},
-  },
-
-  {
-    id: 'node_attrs',
-    label: 'Node Attribute Schema',
-    section: 'Descriptive Metrics',
-    conditional: false,
-    defaultActive: false,
-    status: 'implemented',
-    component: AttributeSchema,
-    componentProps: { mode: 'node' },
-    explanation: ATTR_SCHEMA_NODE_EXPLANATION,
-    contextualizeExplanation: (schema) => {
-      const types = schema?.node_types_detail ?? []
-      const nAttrs = new Set(types.flatMap(t => t.attributes.map(a => a.name))).size
-      return `${types.length} node types × ${nAttrs} distinct attributes. ${ATTR_SCHEMA_NODE_EXPLANATION}`
-    },
-    controlsSchema: ATTR_SCHEMA_CONTROLS,
-  },
-
-  {
-    id: 'edge_attrs',
-    label: 'Edge Attribute Schema',
-    section: 'Descriptive Metrics',
-    conditional: false,
-    defaultActive: false,
-    status: 'implemented',
-    component: AttributeSchema,
-    componentProps: { mode: 'edge' },
-    explanation: ATTR_SCHEMA_EDGE_EXPLANATION,
-    contextualizeExplanation: (schema) => {
-      const types = schema?.edge_types_detail ?? []
-      const nAttrs = new Set(types.flatMap(t => t.attributes.map(a => a.name))).size
-      if (!nAttrs) return `${types.length} edge types, no additional attributes. ${ATTR_SCHEMA_EDGE_EXPLANATION}`
-      return `${types.length} edge types × ${nAttrs} distinct attributes. ${ATTR_SCHEMA_EDGE_EXPLANATION}`
-    },
-    controlsSchema: ATTR_SCHEMA_CONTROLS,
   },
 
 

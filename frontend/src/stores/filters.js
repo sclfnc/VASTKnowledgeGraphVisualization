@@ -9,6 +9,7 @@
 //   numeric     → {kind:'numeric',     range: [lo, hi]}
 //   boolean     → {kind:'boolean',     value: true | false}
 //   date        → {kind:'date',        range: [yearLo, yearHi]}
+//   text        → {kind:'text',        query: string, mode: 'contains' | 'equals'}  (high-cardinality identifiers)
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 

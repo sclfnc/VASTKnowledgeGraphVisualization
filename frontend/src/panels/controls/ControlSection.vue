@@ -9,7 +9,7 @@ defineProps({
 
 <template>
   <div
-    class="rounded-md bg-white border border-slate-200 px-2 py-1.5 flex flex-col gap-1"
+    class="rounded-md bg-white px-2 py-1.5 flex flex-col gap-1"
     :class="colSpan == 2 ? 'col-span-2' : ''"
   >
     <div class="flex items-center justify-between">

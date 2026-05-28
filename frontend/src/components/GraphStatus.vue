@@ -23,6 +23,21 @@ import { useNodeNeighbors } from '../composables/useNodeNeighbors.js'
 import { useEdgeInspect } from '../composables/useEdgeInspect.js'
 import { useSelectionStore } from '../stores/selection.js'
 
+// `section` slices this block so the sidebar can place its parts in different
+// zones: 'identity' (name + flags, thin shared-header row), 'counts' (compact
+// Nodes/Edges line), 'inspector' (selected node/edge detail). Default 'all'
+// keeps the legacy single-block rendering.
+const props = defineProps({
+  section: {
+    type: String,
+    default: 'all',
+    validator: v => ['all', 'identity', 'counts', 'inspector-node', 'inspector-edge'].includes(v),
+  },
+})
+const showCounts = computed(() => ['all', 'counts'].includes(props.section))
+const showNodeInspector = computed(() => ['all', 'inspector-node'].includes(props.section))
+const showEdgeInspector = computed(() => ['all', 'inspector-edge'].includes(props.section))
+
 const { schema } = injectSchema()
 const { graphId } = storeToRefs(useGraphStore())
 const { activeNodeMask, activeEdgeMask } = useFilteredModel(graphId)
@@ -214,35 +229,29 @@ const edgeAttrEntries = computed(() => {
 </script>
 
 <template>
-  <div v-if="schema" class="rounded-md border border-slate-200 bg-white px-3 py-2 flex flex-col gap-1">
-    <!-- Graph name -->
-    <div class="flex items-baseline gap-2">
-      <span class="text-sm font-semibold text-primary leading-tight truncate">{{ schema.name ?? 'Graph' }}</span>
-    </div>
-
-    <!-- Structural flags -->
-    <p class="text-[10px] text-secondary">
+  <!-- Identity: thin one-line row for the shared header (name + flags). -->
+  <div v-if="schema && section === 'identity'" class="flex items-baseline gap-1.5 px-1 min-w-0">
+    <span class="text-xs font-semibold text-primary leading-tight truncate">{{ schema.name ?? 'Graph' }}</span>
+    <span class="text-[10px] text-secondary shrink-0 truncate">
       <span v-for="(f, i) in structuralFlags" :key="f">
         <template v-if="i > 0"> · </template>{{ f }}
       </span>
-    </p>
+    </span>
+  </div>
 
-    <!-- Counts -->
-    <div class="mt-1 flex flex-col gap-0.5 text-xs">
-      <div class="flex items-baseline justify-between">
+  <!-- Counts (compact single row) — the "summary" block. -->
+  <div v-else-if="schema && showCounts" class="rounded-md border border-slate-200 bg-white px-3 py-2 flex flex-col gap-1">
+    <div class="flex items-baseline justify-between gap-2 text-xs tabular-nums">
+      <span class="inline-flex items-baseline gap-1">
         <span class="text-[10px] uppercase tracking-wide text-secondary">Nodes</span>
-        <span class="tabular-nums">
-          <strong class="text-primary">{{ filteredNodeCount.toLocaleString() }}</strong>
-          <span class="text-secondary"> / {{ schema.nodes.toLocaleString() }}</span>
-        </span>
-      </div>
-      <div class="flex items-baseline justify-between">
+        <strong class="text-primary">{{ filteredNodeCount.toLocaleString() }}</strong>
+        <span class="text-secondary">/ {{ schema.nodes.toLocaleString() }}</span>
+      </span>
+      <span class="inline-flex items-baseline gap-1">
         <span class="text-[10px] uppercase tracking-wide text-secondary">Edges</span>
-        <span class="tabular-nums">
-          <strong class="text-primary">{{ filteredEdgeCount.toLocaleString() }}</strong>
-          <span class="text-secondary"> / {{ schema.edges.toLocaleString() }}</span>
-        </span>
-      </div>
+        <strong class="text-primary">{{ filteredEdgeCount.toLocaleString() }}</strong>
+        <span class="text-secondary">/ {{ schema.edges.toLocaleString() }}</span>
+      </span>
     </div>
 
     <!-- Auto-promotion caption -->
@@ -254,9 +263,12 @@ const edgeAttrEntries = computed(() => {
     <p v-if="noNodesActive" class="mt-1 text-[10px] font-medium text-red-500">
       0 nodes match current filters
     </p>
+  </div>
 
-    <!-- Node inspector — only when something is selected. -->
-    <div v-if="selectedIds.length" class="mt-2 border-t border-slate-200 pt-2">
+  <!-- Node inspector card — rendered in the Nodes group when a node is selected. -->
+  <div v-else-if="schema && showNodeInspector && selectedIds.length"
+       class="rounded-md border border-slate-200 bg-white px-3 py-2">
+    <div>
       <button
         class="flex w-full items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-secondary hover:text-primary"
         @click="inspectorOpen = !inspectorOpen">
@@ -429,9 +441,12 @@ const edgeAttrEntries = computed(() => {
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Edge inspector — only when an edge is selected. -->
-    <div v-if="selectedEdgeIds.length" class="mt-2 border-t border-slate-200 pt-2">
+  <!-- Edge inspector card — rendered in the Edges group when an edge is selected. -->
+  <div v-else-if="schema && showEdgeInspector && selectedEdgeIds.length"
+       class="rounded-md border border-slate-200 bg-white px-3 py-2">
+    <div>
       <button
         class="flex w-full items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-secondary hover:text-primary"
         @click="edgeInspectorOpen = !edgeInspectorOpen">

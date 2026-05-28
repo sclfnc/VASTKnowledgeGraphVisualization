@@ -35,6 +35,7 @@ function specKey(scope, type, attr, spec) {
   if (spec.kind === 'numeric') return `${scope}|${type}|${attr}|num|${spec.range?.[0]}..${spec.range?.[1]}`
   if (spec.kind === 'boolean') return `${scope}|${type}|${attr}|bool|${spec.value}`
   if (spec.kind === 'date' || spec.kind === 'temporal') return `${scope}|${type}|${attr}|tmp|${spec.range?.[0]}..${spec.range?.[1]}`
+  if (spec.kind === 'text') return `${scope}|${type}|${attr}|txt|${spec.mode ?? 'contains'}|${(spec.query ?? '').toLowerCase()}`
   return null
 }
 
@@ -106,6 +107,15 @@ export function useAttributeIndex(graphId) {
       const li = lo == null ? 0 : lowerBound(years, lo)
       const ui = hi == null ? sorted.length : upperBound(years, hi)
       for (let k = li; k < ui; k++) mask.set(sorted[k][0])
+    } else if (entry.kind === 'text' && spec.kind === 'text') {
+      // entry.values is [[idx, str], ...] (not bucketed); scan locally.
+      const q = (spec.query ?? '').toLowerCase()
+      if (!q) return null   // empty query → no constraint (handled by caller)
+      const equals = spec.mode === 'equals'
+      for (const [idx, val] of entry.values) {
+        const s = String(val).toLowerCase()
+        if (equals ? s === q : s.includes(q)) mask.set(idx)
+      }
     } else {
       return null
     }

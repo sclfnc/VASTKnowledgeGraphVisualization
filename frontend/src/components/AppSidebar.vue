@@ -4,12 +4,13 @@
 // (node + edge attribute filters). The two modes are mutually exclusive
 // because the user rarely needs both at once: layout decisions in
 // Contents, exploration in Filters. Light theme; full-height; fixed.
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Telescope, ListTree, SlidersHorizontal, Info, Database } from 'lucide-vue-next'
 import { useGraphStore } from '../stores/graph.js'
 import { useSidebarsStore } from '../stores/sidebars.js'
+import { useSelectionStore } from '../stores/selection.js'
 import { useAboutModal } from '../composables/useAboutModal.js'
 import { injectSchema } from '../composables/useSchema.js'
 import GuideContents from './GuideContents.vue'
@@ -20,11 +21,26 @@ import AttributeFilters from '../panels/AttributeFilters.vue'
 
 const graphStore = useGraphStore()
 const sidebars = useSidebarsStore()
+const selection = useSelectionStore()
 const { mode: sidebarMode } = storeToRefs(sidebars)
 const { graphId } = storeToRefs(graphStore)
+const { ids: selectedIds, edgeIds: selectedEdgeIds } = storeToRefs(selection)
 const { openAbout } = useAboutModal()
 const { schema } = injectSchema()
 const router = useRouter()
+
+// The node/edge inspector lives in the Filters body. When a selection is made
+// from the grid while the user is on Contents, surface it by switching to
+// Filters — but only on the rising edge (empty → non-empty), so we never trap
+// the user in Filters if they intentionally went back to Contents.
+watch(
+  () => selectedIds.value.length + selectedEdgeIds.value.length,
+  (count, prev) => {
+    if (count > 0 && (prev ?? 0) === 0 && sidebarMode.value === 'contents') {
+      sidebars.setMode('filters')
+    }
+  },
+)
 
 const MODE_OPTIONS = [
   { k: 'contents', label: 'Contents', icon: ListTree },
@@ -72,7 +88,10 @@ function onChangeDataset() {
       <!-- Row 1: Graph/Guide toggle (140px track). -->
       <ModeToggle v-if="graphId" />
 
-      <GraphStatus v-if="graphId" />
+      <!-- Graph identity: thin always-visible row (name + flags). Counts and
+           the node/edge inspector moved into the Filters body to keep the
+           shared header light and Contents clean. -->
+      <GraphStatus v-if="graphId" section="identity" />
 
       <!-- Row 2: Contents/Filters toggle (210px, matches ModeToggle + footer pair). -->
       <div v-if="graphId && graphStore.mode === 'guide'"
@@ -94,15 +113,25 @@ function onChangeDataset() {
          class="scrollbar-slim flex-1 min-h-0 overflow-y-auto px-4">
       <GuideContents v-if="sidebarMode === 'contents'" />
       <div v-else class="flex flex-col gap-3">
+        <!-- 1. Summary: filtered/total counts for nodes + edges. -->
+        <GraphStatus section="counts" />
+
+        <!-- 2. Active filters: chips + undo/redo/reset. -->
         <GraphHeaderStrip />
-        <section>
+
+        <!-- 3. Nodes group: selected-node inspector (when any) + node filters. -->
+        <section class="flex flex-col gap-1.5">
           <h3 class="text-[10px] font-semibold uppercase tracking-wider text-secondary">Nodes</h3>
-          <p class="text-[10px] italic text-muted mb-1.5">Only meaningful filters are shown.</p>
+          <GraphStatus section="inspector-node" />
+          <p class="text-[10px] italic text-muted">Only meaningful filters are shown.</p>
           <AttributeFilters :schema="schema" :graph-id="graphId" mode="node" />
         </section>
-        <section>
+
+        <!-- 4. Edges group: selected-edge inspector (when any) + edge filters. -->
+        <section class="flex flex-col gap-1.5">
           <h3 class="text-[10px] font-semibold uppercase tracking-wider text-secondary">Edges</h3>
-          <p class="text-[10px] italic text-muted mb-1.5">Only meaningful filters are shown.</p>
+          <GraphStatus section="inspector-edge" />
+          <p class="text-[10px] italic text-muted">Only meaningful filters are shown.</p>
           <AttributeFilters :schema="schema" :graph-id="graphId" mode="edge" />
         </section>
       </div>

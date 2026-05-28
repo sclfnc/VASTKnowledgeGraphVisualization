@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import GuidePanel from '../components/GuidePanel.vue'
 import PanelFocus from '../components/PanelFocus.vue'
@@ -17,6 +17,15 @@ const { graphId } = storeToRefs(useGraphStore())
 const panelsStore = usePanelsStore()
 const { orderedActive } = storeToRefs(panelsStore)
 const { toggle } = panelsStore
+
+// A panel persisted as active (localStorage) may be unavailable on the current
+// graph (e.g. attribute-schema panels when no type carries extra attributes).
+// Skip rendering those — the spec's `available(schema)` predicate decides.
+const renderable = computed(() =>
+  orderedActive.value.filter(
+    p => typeof p.available !== 'function' || p.available(schema.value)
+  )
+)
 
 const focused = ref(null)
 const expandedId = ref(null)
@@ -54,13 +63,13 @@ function requestShrink(id) { if (widenedId.value === id) widenedId.value = null 
 
 <template>
   <div class="flex min-w-0 flex-col gap-3">
-    <div v-if="!orderedActive.length" class="flex h-48 items-center justify-center text-sm text-muted">
+    <div v-if="!renderable.length" class="flex h-48 items-center justify-center text-sm text-muted">
       Select a panel from Contents ←
     </div>
 
     <div class="grid auto-rows-min grid-cols-3 gap-4 items-start">
       <GuidePanel
-        v-for="p in orderedActive" :key="p.id"
+        v-for="p in renderable" :key="p.id"
         :panel-spec="p"
         :schema="schema"
         :graph-id="graphId"

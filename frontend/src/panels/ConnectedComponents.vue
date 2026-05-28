@@ -1,21 +1,18 @@
 <script setup>
 import { ref, watch, toRef, computed, nextTick } from 'vue'
 import * as d3 from 'd3'
-import Slider from '@vueform/slider'
-import '@vueform/slider/themes/default.css'
 import { useComponents } from '@/composables/useComponents.js'
 import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
-import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
+import { useSelectionStore } from '@/stores/selection.js'
 import { useFiltersStore } from '@/stores/filters.js'
+import { useFilterShortcuts } from '@/composables/useFilterShortcuts.js'
 import { Bitset } from '@/utils/bitset.js'
-import { makeTooltip, showTip, hideTip } from './shared.js'
+import { makeTooltip, showTip, hideTip, FORMATTERS } from './shared.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import ControlSwitch from './controls/ControlSwitch.vue'
-import ControlBoolean from './controls/ControlBoolean.vue'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 
@@ -25,6 +22,10 @@ const props = defineProps({
   graphId: { type: String, default: null },
   widened: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
+  // Set only when mounted inside PanelFocus (the theory modal). There the
+  // grid's side-by-side widen isn't available, so the drill-down replaces the
+  // main chart instead of sitting next to it.
+  theoryTarget: { type: String, default: null },
 })
 
 const emit = defineEmits(['request-widen', 'request-shrink'])
@@ -32,10 +33,17 @@ const emit = defineEmits(['request-widen', 'request-shrink'])
 const { data, loading, error } = useComponents(toRef(props, 'graphId'))
 const { nodes: soa } = injectGraphNodes(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
-const { nodeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
+const { nodeTypeAt, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
+// The drill-down is a per-node-type breakdown; it only makes sense when the
+// graph actually has ≥2 effective types. On a single-type graph a click is a
+// plain selection broadcast — no widen, no one-bar drill-down.
+const hasTypeDiversity = computed(() => (nodeTypeList.value?.length ?? 0) > 1)
+// Mounted inside the theory modal? Then drill-down replaces the chart.
+const inFocus = computed(() => props.theoryTarget != null)
 const { activeNodeMask, selectedMask, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
 const filters = useFiltersStore()
+const { filterToComponent, clearWccFilter } = useFilterShortcuts()
 const { controls, updateControl } = usePanel(props, 'connectivity', data)
 const mainContainer = ref(null)
 const drillContainer = ref(null)
@@ -47,6 +55,22 @@ const activeSummary = computed(() => {
   const d = data.value
   if (!d) return null
   return activeMode.value === 'scc' ? d.scc : d.wcc
+})
+
+// Graph-level facts for the theory block (always read from the WCC summary —
+// the narrative talks about overall connectivity).
+const theoryStats = computed(() => {
+  const wcc = data.value?.wcc
+  if (!wcc) return null
+  const total = props.schema?.nodes ?? 0
+  const lccPct = total ? (wcc.lcc_size / total) * 100 : 0
+  return {
+    count: wcc.count,
+    lccSize: wcc.lcc_size,
+    lccPct,
+    singletons: wcc.singletons,
+    total,
+  }
 })
 
 // component-id → Bitset of node indices; rebuilt O(N) per mode change.
@@ -89,6 +113,19 @@ function selectedCountOf(comp) {
   return tmp.popcount()
 }
 
+// True when a cross-panel selection exists at all.
+const hasSelection = computed(() => (selectedMask.value?.popcount() ?? 0) > 0)
+
+// Mark opacity unifies two dimming reasons (area stays the data — we never
+// scale it for selection): a drill-down focus dims the non-focused components,
+// and a cross-panel selection dims components that hold no selected node. The
+// component with focus / with selected nodes stays fully opaque.
+function markOpacity(comp) {
+  if (selectedId.value != null) return selectedId.value === comp.id ? 1 : 0.3
+  if (hasSelection.value) return selectedCountOf(comp) > 0 ? 1 : 0.45
+  return 1
+}
+
 function activeIdsOf(comp) {
   const masks = componentMasks.value
   const act = activeNodeMask.value
@@ -100,6 +137,25 @@ function activeIdsOf(comp) {
   if (act) tmp.andInPlace(act)
   const out = []
   for (const idx of tmp) out.push(s.ids[idx])
+  return out
+}
+
+// Active node ids of the given effective types within a component — backs the
+// drill-down bar click (broadcasts the selection of "type T in this component").
+// `wantTypes` is a Set of effective labels; "Other" passes all the folded ones.
+function idsOfTypesInComponent(comp, wantTypes) {
+  const masks = componentMasks.value
+  const act = activeNodeMask.value
+  const s = soa.value
+  if (!masks || !s) return []
+  const cm = masks.get(comp.id)
+  if (!cm) return []
+  const tmp = cm.clone()
+  if (act) tmp.andInPlace(act)
+  const out = []
+  for (const idx of tmp) {
+    if (wantTypes.has(nodeTypeAt(idx))) out.push(s.ids[idx])
+  }
   return out
 }
 
@@ -132,76 +188,80 @@ function activeByTypeOf(comp) {
   return out
 }
 
-const sizeBounds = computed(() => {
-  const s = activeSummary.value
-  if (!s || !s.components.length) return { min: 1, max: 1 }
-  // Slider domain anchored to full-graph sizes so it stays stable under filtering.
-  return {
-    min: d3.min(s.components, c => c.size) || 1,
-    max: d3.max(s.components, c => c.size) || 1,
-  }
-})
-
-// Toggle disabled when no singletons exist.
-const hasSingletons = computed(() => (activeSummary.value?.singletons ?? 0) > 0)
-
-// Size/rank filter is meaningless with a single component.
+// Rank filter is meaningless with a single component.
 const componentCount = computed(() => activeSummary.value?.count ?? 0)
 const filterAvailable = computed(() => componentCount.value > 1)
 
-const displayedComponents = computed(() => {
-  const s = activeSummary.value
-  if (!s) return []
-  // Backend returns components sorted by size desc, so index = rank.
-  const comps = controls.value.hideSingletons
-    ? s.components.filter(c => c.size > 1)
-    : s.components
+// All components for the active mode, always drawn (mask-only contract: the
+// rank filter doesn't hide marks locally — it writes filters.wccFilter, and
+// components whose nodes fall outside the resulting mask attenuate to 0-active).
+const displayedComponents = computed(() => activeSummary.value?.components ?? [])
 
-  if (controls.value.filterMode === 'rank') {
-    const top = controls.value.rankTop
-    const bottom = controls.value.rankBottom
-    return comps.filter((_, i) => {
-      const fromTop = i + 1
-      const fromBottom = comps.length - i
-      if (top != null && fromTop > top) return false
-      if (bottom != null && fromBottom > bottom) return false
-      return true
-    })
+// Distinct component sizes, descending — the rank operates on these, not on
+// array positions, so tied components share one rank (e.g. 200 singletons all
+// sit at the same "smallest size" rank and enter/leave the filter together).
+const distinctSizesDesc = computed(() => {
+  const comps = displayedComponents.value
+  return [...new Set(comps.map(c => c.size))].sort((a, b) => b - a)
+})
+
+// Translate the rank top/bottom controls into the explicit component-id list
+// the wccFilter store slot expects. Top N = components whose size is among the
+// N largest distinct sizes; Bottom N = among the N smallest. Empty → null.
+//
+// TODO (future): make rank filtering work in SCC mode too. Today the global
+// filter has a single `filters.wccFilter` slot that `useFilteredModel` always
+// resolves against `soa.wccId`, so writing SCC ids there would be misapplied
+// as WCC ids. Doing it properly means extending the store to a scoped filter
+// (`{ mode: 'wcc'|'scc', ids }`) and teaching `useFilteredModel`,
+// `useFilterShortcuts`, `filterHistory` and the header chip to honour the
+// scope. Until then the rank UI is WCC-only (SCC shows an explanatory note).
+function rankToComponentIds() {
+  const n = controls.value.rankN
+  if (n == null) return null
+  const sizes = distinctSizesDesc.value
+  const keepSizes = controls.value.rankMode === 'bottom'
+    ? new Set(sizes.slice(Math.max(0, sizes.length - n)))
+    : new Set(sizes.slice(0, n))
+  const ids = []
+  for (const c of displayedComponents.value) {
+    if (keepSizes.has(c.size)) ids.push(c.id)
   }
-
-  const minF = controls.value.sizeMin
-  const maxF = controls.value.sizeMax
-  return comps.filter(c => {
-    if (minF != null && c.size < minF) return false
-    if (maxF != null && c.size > maxF) return false
-    return true
-  })
-})
-
-const sliderModel = computed({
-  get: () => [
-    controls.value.sizeMin ?? sizeBounds.value.min,
-    controls.value.sizeMax ?? sizeBounds.value.max,
-  ],
-  set: ([lo, hi]) => {
-    updateControl('sizeMin', lo === sizeBounds.value.min ? null : lo)
-    updateControl('sizeMax', hi === sizeBounds.value.max ? null : hi)
-  },
-})
-
-function clearFilter() {
-  updateControl('sizeMin', null)
-  updateControl('sizeMax', null)
-  updateControl('rankTop', null)
-  updateControl('rankBottom', null)
+  return ids
 }
 
-const filterActive = computed(() =>
-  controls.value.sizeMin != null
-  || controls.value.sizeMax != null
-  || controls.value.rankTop != null
-  || controls.value.rankBottom != null
-)
+// How many components survive the current rank filter, over the total. Drives
+// the "X / Y shown" counter so the user sees how many the rank drops.
+const shownCount = computed(() => {
+  const total = displayedComponents.value.length
+  const ids = rankToComponentIds()
+  return { shown: ids == null ? total : ids.length, total }
+})
+
+// Push the current rank selection into the global filter. Called on every rank
+// change so "see fewer components here" == "filter the whole dashboard".
+function applyRankFilter() {
+  const ids = rankToComponentIds()
+  if (ids == null) clearWccFilter()
+  else filters.wccFilter = [...new Set(ids)].sort((a, b) => a - b)
+}
+
+function setRankMode(mode) {
+  updateControl('rankMode', mode)
+  applyRankFilter()
+}
+function setRankN(value) {
+  updateControl('rankN', value)
+  applyRankFilter()
+}
+
+function clearFilter() {
+  updateControl('rankN', null)
+  clearWccFilter()
+}
+
+const filterActive = computed(() => controls.value.rankN != null)
+
 
 const selectedComponent = computed(() => {
   if (selectedId.value == null) return null
@@ -210,36 +270,75 @@ const selectedComponent = computed(() => {
 
 const MARGINS = { top: 8, right: 12, bottom: 28, left: 44 }
 
+// Inline link classes for the theory block. Tailwind utilities (global) rather
+// than scoped CSS, because the block is teleported out of this component's tree
+// where scoped `data-v-*` rules don't reliably apply.
+const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
+const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
+function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
+
 const VIEW_OPTIONS = [{ k: 'bubbles', label: 'Bubbles' }, { k: 'bars', label: 'Bars' }]
-const LABEL_OPTIONS = [{ k: 'absolute', label: 'N' }, { k: 'percentage', label: '%' }]
-const FILTER_OPTIONS = [{ k: 'range', label: 'Range' }, { k: 'rank', label: 'Rank' }]
+const RANK_MODE_OPTIONS = [{ k: 'top', label: 'Top' }, { k: 'bottom', label: 'Bottom' }]
 // SCC option reflects graph directedness.
 const modeOptions = computed(() => [
   { k: 'wcc', label: 'WCC' },
   { k: 'scc', label: 'SCC', disabled: !sccAvailable.value, title: sccAvailable.value ? '' : 'SCC requires a directed graph' },
 ])
 
-watch(() => activeMode.value, () => { selectedId.value = null })
+// Open the LCC's by-type breakdown from a link in the theory text. Selecting
+// the largest component (size-desc → components[0]) switches the focus chart to
+// its drill-down. Doesn't broadcast a selection — it's a local example view.
+function showLccBreakdown() {
+  const lcc = data.value?.wcc?.components?.[0]
+  if (lcc) selectedId.value = lcc.id
+}
+
+// Theory-text control links (view / type): in the focus modal these should also
+// leave the LCC breakdown and return to the overview, so the user isn't stuck
+// looking at a drill-down while toggling bubbles/bars/WCC/SCC.
+function theorySetControl(field, value) {
+  if (inFocus.value) selectedId.value = null
+  updateControl(field, value)
+}
+
+// Mode switch (WCC↔SCC): component ids are not comparable across the two
+// partitionings, so reset the selection and any rank filter to avoid a stale
+// wccFilter pointing at ids from the other mode.
+watch(() => activeMode.value, () => {
+  selectedId.value = null
+  if (controls.value.rankN != null) {
+    updateControl('rankN', null)
+    clearWccFilter()
+  }
+})
 watch(displayedComponents, (list) => {
   if (selectedId.value != null && !list.find(c => c.id === selectedId.value)) {
     selectedId.value = null
   }
 })
 
+// Widen (and the side-by-side drill-down it reveals) only on type-diverse
+// graphs, and only in the dashboard grid. In the theory modal (inFocus) the
+// drill replaces the chart instead, so we don't emit widen there.
 watch(selectedId, (val) => {
-  if (val == null && props.widened) emit('request-shrink')
-  if (val != null && !props.widened) emit('request-widen')
+  if (inFocus.value) return
+  if ((val == null || !hasTypeDiversity.value) && props.widened) emit('request-shrink')
+  if (val != null && hasTypeDiversity.value && !props.widened) emit('request-widen')
 })
 
 function renderAll() { renderMain(); renderDrill() }
 
 watch([data, controls, () => props.widened, activeNodeMask, selectedMask, componentMasks], () => nextTick(renderAll), { deep: true })
-watch(selectedComponent, () => nextTick(renderDrill))
+// selectedComponent change re-renders: the side drill in the grid, the main
+// chart (drill-as-replacement) in the focus modal.
+watch(selectedComponent, () => nextTick(inFocus.value ? renderMain : renderDrill))
 
 useD3Chart([mainContainer, drillContainer], renderAll)
 
-// Cap keeps selection bounded on giant LCCs (visible-in-panel, not full component).
-const SELECTION_CAP = SELECTION_CAPS.connectivity
+// No cap: a capped broadcast is a *lying* selection (an arbitrary 500-node
+// subset that diverges from the chart once a filter changes the active set).
+// Consumers read `selectedMask` (a Bitset over N), so the cost is the id-array
+// length, not a per-mark loop — fine even for a 17k-node LCC.
 function clickComponent(comp) {
   if (selectedId.value === comp.id) {
     selectedId.value = null
@@ -247,47 +346,41 @@ function clickComponent(comp) {
     return
   }
   selectedId.value = comp.id
-  const ids = activeIdsOf(comp).slice(0, SELECTION_CAP)
-  selection.replace(ids)
-}
-
-function filterToComponent(comp) {
-  filters.wccFilter = [comp.id]
-}
-
-function filterTopN(n) {
-  const s = activeSummary.value
-  if (!s) return
-  const ids = s.components.slice(0, n).map(c => c.id)
-  filters.wccFilter = ids
+  selection.replace(activeIdsOf(comp))
 }
 
 // Active size keeps labels coherent with bubble area; comp.size stays in the tooltip.
-function formatLabel(comp, total) {
+// Single combined label "N (pct%)". `compact` (used in narrow bubbles) shows
+// the percentage alone — more telling than a raw count in a small mark; the
+// tooltip always carries both.
+function formatLabel(comp, total, compact = false) {
   const n = comp._active ?? activeSizeOf(comp)
-  if (controls.value.labelMode === 'percentage') {
-    const pct = total ? (n / total) * 100 : 0
-    return pct < 0.1 ? '<0.1%' : `${pct.toFixed(1)}%`
-  }
-  return String(n)
+  const pct = total ? (n / total) * 100 : 0
+  const pctStr = pct < 0.1 ? '<0.1%' : `${pct.toFixed(1)}%`
+  if (compact) return pctStr
+  return `${n.toLocaleString()} (${pctStr})`
 }
 
 function tooltipHtml(comp, total) {
   const n = comp._active ?? activeSizeOf(comp)
   const pct = total ? ((n / total) * 100).toFixed(2) : '?'
-  const selN = selectedCountOf(comp)
   const head = `<strong>${activeMode.value.toUpperCase()} #${comp.id + 1}</strong>`
   const body = (n !== comp.size)
     ? `${n.toLocaleString()} / ${comp.size.toLocaleString()} nodes (${pct}%)`
     : `${comp.size.toLocaleString()} nodes (${pct}%)`
-  const sel = selN > 0 ? `<br><span style="color:#f59e0b">${selN} selected</span>` : ''
-  const hint = `<br><span style="color:#94a3b8;font-size:10px">click: select · dblclick: filter</span>`
-  return `${head}<br>${body}${sel}${hint}`
+  return `${head}<br>${body}`
 }
 
 function renderMain() {
   if (!mainContainer.value) return
   d3.select(mainContainer.value).selectAll('*').remove()
+
+  // In the theory modal, a selected component replaces the chart with its
+  // by-type drill-down (no room to sit side-by-side as in the dashboard grid).
+  if (inFocus.value && selectedComponent.value && hasTypeDiversity.value) {
+    renderDrill(mainContainer.value)
+    return
+  }
 
   const comps = displayedComponents.value
   if (!comps.length) return
@@ -322,14 +415,17 @@ function renderBubbles(container, totalW, totalH, comps) {
   // Sky palette mid-tone matches COLOR_SCHEME.accent (sky-600) used by other panels.
   const colorScale = d3.scaleSequential(d3.interpolateLab('#e0f2fe', '#0369a1')).domain([0, Math.log10(maxSize + 1)])
 
-  // Below this radius the label is omitted; tooltip still surfaces the info.
-  const labelRadiusThreshold = controls.value.labelMode === 'percentage' ? 18 : 14
+  // Three label tiers by bubble radius: combined "N (pct%)" needs the most room;
+  // below that show the percentage alone (compact); below that, no label (the
+  // tooltip still surfaces everything).
+  const labelRadiusThreshold = 14   // min radius to show any label
+  const combinedRadiusThreshold = 26 // min radius to fit "N (pct%)"
 
   const node = g.selectAll('g').data(leaves).join('g')
     .attr('transform', d => `translate(${d.x},${d.y})`)
     .style('cursor', 'pointer')
     .on('click', (_, d) => clickComponent(d.data))
-    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d.data) })
+    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d.data.id) })
     .on('mouseover', (ev, d) => showTip(tooltip, ev, tooltipHtml(d.data, totalNodes)))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
@@ -337,9 +433,9 @@ function renderBubbles(container, totalW, totalH, comps) {
   node.append('circle')
     .attr('r', d => d.r)
     .attr('fill', d => colorScale(Math.log10(d.data._active + 1)))
-    .attr('stroke', d => selectedCountOf(d.data) > 0 ? '#f59e0b' : '#fff')
-    .attr('stroke-width', d => selectedCountOf(d.data) > 0 ? 2 : 1)
-    .attr('opacity', d => selectedId.value == null || selectedId.value === d.data.id ? 1 : 0.3)
+    .attr('stroke', d => selectedId.value === d.data.id ? '#0f172a' : '#fff')
+    .attr('stroke-width', 1)
+    .attr('opacity', d => markOpacity(d.data))
 
   // Rank "#k" rendered above the value label when the bubble fits two lines.
   const rankRadiusThreshold = labelRadiusThreshold + 12
@@ -360,10 +456,10 @@ function renderBubbles(container, totalW, totalH, comps) {
   labelGroup.append('text')
     .attr('text-anchor', 'middle')
     .attr('dy', d => d.r >= rankRadiusThreshold ? '0.85em' : '0.35em')
-    .attr('font-size', d => Math.min(d.r * 0.5, 16))
+    .attr('font-size', d => Math.min(d.r * 0.45, 14))
     .attr('font-weight', '600')
     .attr('fill', d => d.data._active > maxSize / 4 ? '#fff' : '#1e293b')
-    .text(d => formatLabel(d.data, totalNodes))
+    .text(d => formatLabel(d.data, totalNodes, d.r < combinedRadiusThreshold))
 }
 
 function renderBars(container, totalW, totalH, comps) {
@@ -379,13 +475,12 @@ function renderBars(container, totalW, totalH, comps) {
   // Render every displayed component (even 0-active) to make the filter effect explicit.
   comps = comps.map(c => ({ ...c, _active: activeSizeOf(c) }))
 
-  const useLog = !!controls.value.logX
+  // Component sizes are heavy-tailed (one giant LCC, many small): a log X axis
+  // is the only readable choice, so it's fixed (no toggle).
   const minSize = d3.min(comps, c => Math.max(1, c._active)) || 1
   const maxSize = d3.max(comps, c => c._active) || 1
 
-  const xScale = useLog
-    ? d3.scaleLog().domain([Math.max(1, minSize), maxSize]).range([0, innerW]).clamp(true)
-    : d3.scaleLinear().domain([0, maxSize]).range([0, innerW])
+  const xScale = d3.scaleLog().domain([Math.max(1, minSize), maxSize]).range([0, innerW]).clamp(true)
 
   const yScale = d3.scaleBand()
     .domain(comps.map((_, i) => i))
@@ -400,7 +495,7 @@ function renderBars(container, totalW, totalH, comps) {
   g.append('g').call(yAxis)
     .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
 
-  const xAxis = d3.axisBottom(xScale).ticks(5, useLog ? '~s' : 'd')
+  const xAxis = d3.axisBottom(xScale).ticks(5, '~s')
   g.append('g').attr('transform', `translate(0,${innerH})`).call(xAxis)
     .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
 
@@ -419,15 +514,15 @@ function renderBars(container, totalW, totalH, comps) {
     .attr('class', 'bar')
     .attr('x', 0)
     .attr('y', (_, i) => yScale(i))
-    .attr('width', d => useLog ? xScale(Math.max(1, d._active)) : xScale(d._active))
+    .attr('width', d => xScale(Math.max(1, d._active)))
     .attr('height', yScale.bandwidth())
     .attr('fill', d => colorScale(Math.log10(d._active + 1)))
-    .attr('stroke', d => selectedCountOf(d) > 0 ? '#f59e0b' : 'none')
-    .attr('stroke-width', d => selectedCountOf(d) > 0 ? 2 : 0)
-    .attr('opacity', d => selectedId.value == null || selectedId.value === d.id ? 1 : 0.3)
+    .attr('stroke', d => selectedId.value === d.id ? '#0f172a' : 'none')
+    .attr('stroke-width', d => selectedId.value === d.id ? 1 : 0)
+    .attr('opacity', d => markOpacity(d))
     .style('cursor', 'pointer')
     .on('click', (_, d) => clickComponent(d))
-    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d) })
+    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d.id) })
     .on('mouseover', (ev, d) => showTip(tooltip, ev, tooltipHtml(d, totalNodes)))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
@@ -435,7 +530,7 @@ function renderBars(container, totalW, totalH, comps) {
   if (yScale.bandwidth() >= minBandForLabel) {
     g.selectAll('text.size').data(comps).join('text')
       .attr('class', 'size')
-      .attr('x', d => (useLog ? xScale(Math.max(1, d._active)) : xScale(d._active)) + 4)
+      .attr('x', d => xScale(Math.max(1, d._active)) + 4)
       .attr('y', (_, i) => yScale(i) + yScale.bandwidth() / 2)
       .attr('dy', '0.35em')
       .attr('font-size', 10).attr('fill', '#475569').attr('pointer-events', 'none')
@@ -443,18 +538,34 @@ function renderBars(container, totalW, totalH, comps) {
   }
 }
 
-function renderDrill() {
-  if (!drillContainer.value || !selectedComponent.value) return
-  d3.select(drillContainer.value).selectAll('*').remove()
+function renderDrill(container = drillContainer.value) {
+  if (!container || !selectedComponent.value) return
+  d3.select(container).selectAll('*').remove()
 
   const comp = selectedComponent.value
   // Active-subset by_type keeps the drill-down coherent with bubble/bar size.
   const byType = activeByTypeOf(comp)
-  const entries = Object.entries(byType).sort((a, b) => b[1] - a[1])
-  if (!entries.length) return
+  const sorted = Object.entries(byType).sort((a, b) => b[1] - a[1])
+  if (!sorted.length) return
+  // Cap at the 10 most-present types; fold the rest into one "Other (k)" bar so
+  // the chart stays readable on high-arity graphs while bars still sum to size.
+  // `barTypes` maps each bar label → the set of effective types it represents
+  // (one for a normal bar, the folded tail for "Other"), used on bar click.
+  const DRILL_TOP = 10
+  const OTHER_LABEL_PREFIX = 'Other ('
+  let entries = sorted
+  const barTypes = new Map(sorted.map(([t]) => [t, new Set([t])]))
+  if (sorted.length > DRILL_TOP) {
+    const head = sorted.slice(0, DRILL_TOP)
+    const tail = sorted.slice(DRILL_TOP)
+    const otherTotal = tail.reduce((s, [, n]) => s + n, 0)
+    const otherLabel = `Other (${tail.length})`
+    entries = [...head, [otherLabel, otherTotal]]
+    barTypes.set(otherLabel, new Set(tail.map(([t]) => t)))
+  }
 
-  const totalW = drillContainer.value.clientWidth || 400
-  const totalH = drillContainer.value.clientHeight || 300
+  const totalW = container.clientWidth || 400
+  const totalH = container.clientHeight || 300
 
   // Left margin grows with the longest type label (≤100px); right reserves count text room.
   const maxLabelChars = Math.max(...entries.map(([t]) => t.length))
@@ -467,7 +578,7 @@ function renderDrill() {
   const innerW = Math.max(50, totalW - margins.left - margins.right)
   const innerH = Math.max(30, totalH - margins.top - margins.bottom)
 
-  const svg = d3.select(drillContainer.value).append('svg').attr('width', totalW).attr('height', totalH)
+  const svg = d3.select(container).append('svg').attr('width', totalW).attr('height', totalH)
   const g = svg.append('g').attr('transform', `translate(${margins.left},${margins.top})`)
 
   const maxCount = d3.max(entries, d => d[1]) || 1
@@ -485,11 +596,21 @@ function renderDrill() {
     .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#475569')
     .text('Node count')
 
+  const drillTip = makeTooltip(container)
   g.selectAll('rect').data(entries).join('rect')
     .attr('x', 0).attr('y', d => yScale(d[0]))
     .attr('width', d => xScale(d[1]))
     .attr('height', yScale.bandwidth())
-    .attr('fill', d => typeColor(d[0])).attr('opacity', 0.85)
+    .attr('fill', d => d[0].startsWith(OTHER_LABEL_PREFIX) ? '#94a3b8' : typeColor(d[0]))
+    .attr('opacity', 0.85)
+    .style('cursor', 'pointer')
+    .on('mouseover', (ev, d) => showTip(drillTip, ev, `<strong>${d[0]}</strong><br>${d[1].toLocaleString()} nodes in this component`))
+    .on('mousemove', (ev) => showTip(drillTip, ev, null))
+    .on('mouseout', () => hideTip(drillTip))
+    .on('click', (_, d) => {
+      const ids = idsOfTypesInComponent(comp, barTypes.get(d[0]) ?? new Set([d[0]]))
+      selection.replace(ids)
+    })
 
   // Count goes after the bar if there's room, else inside (right-aligned, white).
   const labelGap = 4
@@ -512,105 +633,113 @@ function renderDrill() {
   <div class="flex flex-col gap-1.5">
     <Teleport v-if="controlsTarget" :to="`#${controlsTarget}`">
       <div class="grid grid-cols-2 auto-rows-min gap-1.5">
-        <ControlSection title="View">
-          <div class="flex flex-col gap-1">
-            <ControlToggleGroup :model-value="controls.view" :options="VIEW_OPTIONS" @update:model-value="updateControl('view', $event)" />
-            <ControlToggleGroup :model-value="controls.mode" :options="modeOptions" @update:model-value="updateControl('mode', $event)" />
-          </div>
+        <ControlSection title="Style">
+          <ControlToggleGroup :model-value="controls.view" :options="VIEW_OPTIONS" @update:model-value="updateControl('view', $event)" />
         </ControlSection>
 
-        <ControlSection title="Label">
-          <ControlToggleGroup :model-value="controls.labelMode" :options="LABEL_OPTIONS" @update:model-value="updateControl('labelMode', $event)" />
+        <ControlSection title="Type">
+          <ControlToggleGroup :model-value="controls.mode" :options="modeOptions" @update:model-value="updateControl('mode', $event)" />
         </ControlSection>
 
-        <ControlSection title="Scale">
-          <ControlSwitch v-if="controls.view === 'bars'" label="Log X" :model-value="controls.logX" @update:model-value="updateControl('logX', $event)" />
-          <span v-else class="text-[10px] text-muted">N/A in bubbles view</span>
-        </ControlSection>
-
-        <ControlSection title="Overlay">
-          <div :title="hasSingletons ? '' : 'No singletons in this graph'">
-            <ControlBoolean
-              label="Hide singletons"
-              :model-value="controls.hideSingletons"
-              :disabled="!hasSingletons"
-              @update:model-value="hasSingletons && updateControl('hideSingletons', $event)"
-            />
-          </div>
-        </ControlSection>
-
-        <ControlSection v-if="filterAvailable" title="Filter" :col-span="2">
+        <ControlSection v-if="filterAvailable" title="Filter by rank" :col-span="2">
           <template #actions>
             <div class="flex items-center gap-2">
-              <ControlToggleGroup :model-value="controls.filterMode" :options="FILTER_OPTIONS" @update:model-value="updateControl('filterMode', $event)" />
-              <span class="text-[10px] text-muted tabular-nums">{{ displayedComponents.length }} shown</span>
+              <span class="text-[10px] tabular-nums" :class="shownCount.shown < shownCount.total ? 'text-sky-700 font-medium' : 'text-muted'">
+                {{ shownCount.shown.toLocaleString() }} / {{ shownCount.total.toLocaleString() }} shown
+              </span>
               <button
-                v-if="filterActive"
+                v-if="filterActive || filters.wccFilter"
                 class="text-[10px] text-muted hover:text-red-400"
                 @click="clearFilter"
               >clear</button>
             </div>
           </template>
 
-          <div v-if="controls.filterMode === 'range'" class="px-2 pt-1 pb-3">
-            <Slider
-              v-model="sliderModel"
-              :min="sizeBounds.min"
-              :max="sizeBounds.max"
-              :tooltips="true"
-              :lazy="false"
-              class="size-slider"
-            />
+          <!-- Rank filter writes the global WCC filter, so it's only offered in
+               WCC mode. In SCC we explain why instead of showing inert inputs. -->
+          <div v-if="activeMode === 'wcc'" class="flex flex-col gap-1.5 px-1">
+            <p class="text-[10px] leading-tight text-muted">
+              The graph has <strong>{{ distinctSizesDesc.length }}</strong> distinct WCC size{{ distinctSizesDesc.length === 1 ? '' : 's' }}.
+              Considering ties as one group, show only:
+            </p>
+            <div class="flex items-center gap-2 text-[10px] text-secondary">
+              <div class="w-20 shrink-0">
+                <ControlToggleGroup :model-value="controls.rankMode" :options="RANK_MODE_OPTIONS" @update:model-value="setRankMode($event)" />
+              </div>
+              <input
+                type="number" :min="1" :max="distinctSizesDesc.length"
+                placeholder="–"
+                :value="controls.rankN ?? ''"
+                class="input-base no-spin w-9 px-1 py-0.5 text-right tabular-nums"
+                @input="setRankN($event.target.value === '' ? null : Math.max(1, Number($event.target.value)))"
+              />
+              <span class="text-muted">size{{ controls.rankN === 1 ? '' : 's' }}</span>
+            </div>
           </div>
 
-          <div v-else class="flex items-center gap-3 text-[10px] text-secondary">
-            <label class="flex items-center gap-1">
-              <span class="text-muted">Top</span>
-              <input
-                type="number" :min="1" :max="componentCount"
-                placeholder="–"
-                :value="controls.rankTop ?? ''"
-                class="input-base w-14 px-1.5 py-0.5 text-right tabular-nums"
-                @input="updateControl('rankTop', $event.target.value === '' ? null : Math.max(1, Number($event.target.value)))"
-              />
-            </label>
-            <label class="flex items-center gap-1">
-              <span class="text-muted">Bottom</span>
-              <input
-                type="number" :min="1" :max="componentCount"
-                placeholder="–"
-                :value="controls.rankBottom ?? ''"
-                class="input-base w-14 px-1.5 py-0.5 text-right tabular-nums"
-                @input="updateControl('rankBottom', $event.target.value === '' ? null : Math.max(1, Number($event.target.value)))"
-              />
-            </label>
-            <span class="text-muted text-[10px] ml-auto">of {{ componentCount }}</span>
-          </div>
+          <p v-else class="text-[10px] leading-tight text-muted px-1">
+            Rank filtering is available in WCC mode — the global filter operates on weakly-connected components. Switch to WCC to filter by size.
+          </p>
         </ControlSection>
+      </div>
+    </Teleport>
 
-        <ControlSection v-if="componentCount > 1" title="Focus">
-          <div class="flex flex-wrap gap-1.5 px-2 pb-2">
-            <button
-              v-for="n in [1, 3, 5].filter(n => n <= componentCount)" :key="n"
-              class="segmented-pill px-2 py-0.5 text-xs"
-              :class="filters.wccFilter?.length === n && filters.wccFilter.every((id, i) => id === i) ? 'segmented-pill--active' : ''"
-              @click="filterTopN(n)">
-              Top {{ n }}
-            </button>
-            <button
-              v-if="filters.wccFilter"
-              class="segmented-pill segmented-pill--danger px-2 py-0.5 text-xs"
-              @click="filters.wccFilter = null">
-              Clear
-            </button>
-          </div>
-        </ControlSection>
+    <!-- Interactive theory block teleported into PanelFocus's drawer. Inline
+         links drive the panel's own controls so the reader can switch view /
+         component type straight from the prose. -->
+    <Teleport v-if="theoryTarget" :to="`#${theoryTarget}`">
+      <div class="flex flex-col gap-4 text-sm leading-relaxed text-secondary">
+
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Reading this plot</h3>
+          <p>
+            A <strong>connected component</strong> is a group of nodes reachable from one another. Each bubble (or bar) is one component and its <strong>area</strong> (or length) is how many nodes it holds. Real networks usually have one <strong>giant component</strong> covering almost everything, plus many small or isolated ones.<template v-if="theoryStats">
+              Here there {{ theoryStats.count === 1 ? 'is' : 'are' }} <strong>{{ FORMATTERS.integer(theoryStats.count) }}</strong> component{{ theoryStats.count === 1 ? '' : 's' }}: the largest holds <strong>{{ FORMATTERS.integer(theoryStats.lccSize) }}</strong> nodes (<strong>{{ theoryStats.lccPct < 0.1 ? '<0.1' : theoryStats.lccPct.toFixed(1) }}%</strong>), and <strong>{{ FORMATTERS.integer(theoryStats.singletons) }}</strong> {{ theoryStats.singletons === 1 ? 'node sits' : 'nodes sit' }} alone.</template>
+          </p>
+          <p>
+            View it as
+            <button :class="theoryLinkClass(controls.view === 'bubbles' && !selectedId)"
+              @click="theorySetControl('view', 'bubbles')">bubbles</button>
+            or
+            <button :class="theoryLinkClass(controls.view === 'bars' && !selectedId)"
+              @click="theorySetControl('view', 'bars')">bars</button>.<template v-if="sccAvailable">
+              On this directed graph you can also switch between
+              <button :class="theoryLinkClass(controls.mode === 'wcc')"
+                @click="theorySetControl('mode', 'wcc')">WCC</button>
+              (ignores edge direction) and
+              <button :class="theoryLinkClass(controls.mode === 'scc')"
+                @click="theorySetControl('mode', 'scc')">SCC</button>
+              (needs a directed path both ways — smaller, stricter groups).</template>
+            <template v-if="hasTypeDiversity">
+              Click any component to break it down by <strong>node type</strong> — for example,
+              <button :class="theoryLinkClass(selectedId === (data?.wcc?.components?.[0]?.id ?? -1))"
+                @click="showLccBreakdown()">see the largest one</button>.
+            </template>
+          </p>
+        </section>
+
+        <section v-if="filterAvailable" class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Filtering</h3>
+          <p>
+            The rank filter keeps only the components in the largest (<strong>Top</strong>) or smallest (<strong>Bottom</strong>) size groups, counting ties as one group. It's a global filter — those nodes are hidden across the whole dashboard, not just here.
+          </p>
+        </section>
+
       </div>
     </Teleport>
 
     <div v-if="loading" class="text-sm text-secondary p-3 surface-recessed rounded-lg">Loading components…</div>
     <div v-if="error" class="text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">{{ error }}</div>
     <p v-if="noNodesActive" class="text-[10px] italic text-amber-600 px-1">No data under current filters.</p>
+
+    <!-- Focus modal: a back affordance to leave the by-type drill (which
+         replaced the chart) and return to the component overview. -->
+    <button
+      v-if="inFocus && selectedComponent && hasTypeDiversity"
+      class="self-start text-[11px] text-sky-700 hover:text-sky-900 px-1"
+      @click="clickComponent(selectedComponent)">
+      ← Back to components
+    </button>
 
     <div :class="widened && selectedComponent ? 'grid grid-cols-2 gap-6' : ''">
       <div ref="mainContainer" class="chart-elev w-full min-w-0" style="aspect-ratio: 4/3; position: relative;"></div>
@@ -619,27 +748,20 @@ function renderDrill() {
       </div>
     </div>
 
-    <p class="text-[10px] leading-tight text-muted px-1">
-      Components computed on the full graph; bubble/bar areas reflect the current active subset.
-    </p>
 
   </div>
 </template>
 
-<style>
-.size-slider {
-  --slider-bg: #e2e8f0;
-  --slider-connect-bg: #0ea5e9;
-  --slider-height: 4px;
-  --slider-handle-bg: #0ea5e9;
-  --slider-handle-border: 2px solid #fff;
-  --slider-handle-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-  --slider-handle-width: 14px;
-  --slider-handle-height: 14px;
-  --slider-tooltip-bg: #0ea5e9;
-  --slider-tooltip-color: #fff;
-  --slider-tooltip-font-size: 10px;
-  --slider-tooltip-py: 2px;
-  --slider-tooltip-px: 6px;
+<style scoped>
+/* Hide native number-input spinners — the rank fields are typed/edited, the
+   up/down arrows just waste width here. */
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 </style>

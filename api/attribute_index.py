@@ -5,7 +5,7 @@ Shape (node side):
     {
       "<NodeType>": {
         "<attr>": {                      # 'kind' picked from schema
-          "kind": "categorical" | "numeric" | "boolean" | "temporal",
+          "kind": "categorical" | "numeric" | "boolean" | "temporal" | "text",
           # categorical:
           "values": { "<v>": [idx, ...], ... }, "missing": [idx, ...]
           # numeric / temporal:
@@ -13,6 +13,9 @@ Shape (node side):
           "range": [min, max], "missing": [idx, ...]
           # boolean:
           "true": [idx, ...], "false": [idx, ...], "missing": [idx, ...]
+          # text (high-cardinality identifier — substring/equals search):
+          "values": [[idx, str], ...],    # NOT bucketed; client scans locally
+          "distinct": int, "sample": [str, ...], "missing": [idx, ...]
         }, ...
       }, ...
     }
@@ -49,6 +52,8 @@ from timeline import _sniff_strategy
 # distinct values is broken UX and gonfia il payload.
 IDENTIFIER_CARDINALITY_RATIO = 0.5
 IDENTIFIER_MIN_DISTINCT = 50
+# How many example values to ship alongside a 'text' attr (placeholder hints).
+TEXT_SAMPLE_K = 3
 
 
 def _bucket_categorical(values_by_idx):
@@ -140,10 +145,20 @@ def _build_group(items_by_type, idx_lookup):
                 # D-i: single distinct value → nothing to filter on.
                 if distinct <= 1:
                     continue
-                # High-cardinality categoricals are identifiers (Song.name, Person.name):
-                # not realistically filterable via chips, skip from index.
+                # High-cardinality categoricals are identifiers (Song.name,
+                # Person.name): a chip multi-select over thousands of values is
+                # broken UX. Emit them as 'text' instead — a substring/equals
+                # search widget, with values shipped as an [idx, str] list so the
+                # client builds the mask locally (no per-value buckets).
                 if (distinct >= IDENTIFIER_MIN_DISTINCT
                         and distinct / len(values_present) > IDENTIFIER_CARDINALITY_RATIO):
+                    pairs = [[idx, str(v)] for idx, v in values_present]
+                    sample = [v for _, v in pairs[:TEXT_SAMPLE_K]]
+                    per_attr[attr] = {'kind': 'text',
+                                      'values': pairs,
+                                      'distinct': distinct,
+                                      'sample': sample,
+                                      'missing': missing}
                     continue
                 per_attr[attr] = {'kind': 'categorical',
                                   'values': buckets,

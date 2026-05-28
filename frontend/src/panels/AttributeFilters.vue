@@ -14,13 +14,14 @@
 //
 // Footer: "N active filters · Clear all".
 import { computed, ref, toRef } from 'vue'
-import { ChevronRight, X, Eye, EyeOff, RotateCw } from 'lucide-vue-next'
+import { ChevronRight, X, Eye, EyeOff, RotateCw, Search } from 'lucide-vue-next'
 import { injectAttributeIndex } from '@/composables/useAttributeIndex.js'
 import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { injectGraphEdges } from '@/composables/useGraphEdges.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useFiltersStore } from '@/stores/filters.js'
+import { formatAttrSummary, formatCoverage } from './shared.js'
 import RangeFilter from './controls/RangeFilter.vue'
 
 const props = defineProps({
@@ -71,6 +72,26 @@ const weightMode = ref('absolute')
 const attrModes = ref({})    // key: `${type}:${attr}` → 'absolute'|'percentile'
 function getAttrMode(t, attr) { return attrModes.value[`${t}:${attr}`] ?? 'absolute' }
 function setAttrMode(t, attr, m) { attrModes.value = { ...attrModes.value, [`${t}:${attr}`]: m } }
+
+// Descriptive metadata (coverage + value summary) for the "understand" layer of
+// the accordion — sourced from schema.*_types_detail, not the filter index.
+// This is what made the standalone Attribute Schema panel redundant: the same
+// "what does this attribute look like?" info now lives next to the control.
+const typesDetail = computed(() =>
+  props.schema?.[isEdge.value ? 'edge_types_detail' : 'node_types_detail'] ?? []
+)
+function attrMeta(type, attr) {
+  const t = typesDetail.value.find(d => d.name === type)
+  return t?.attributes.find(a => a.name === attr) ?? null
+}
+function attrCoverage(type, attr) {
+  const m = attrMeta(type, attr)
+  return m ? formatCoverage(m.coverage) : null
+}
+function attrSummary(type, attr) {
+  const m = attrMeta(type, attr)
+  return m ? formatAttrSummary(m) : null
+}
 
 // Top-level type chip group: visualization cap + sort + expand-all toggle.
 const TYPE_CHIP_CAP = 6
@@ -194,6 +215,31 @@ function setBooleanValue(type, attr, choice) {
   if (choice === 'any') clearSpec(type, attr)
   else setSpec(type, attr, { kind: 'boolean', value: choice === 'true' })
 }
+
+// Text handlers (high-cardinality identifiers) ---------------------------
+function getTextQuery(type, attr) {
+  const spec = getSpec(type, attr)
+  return (spec && spec.kind === 'text') ? (spec.query ?? '') : ''
+}
+function getTextMode(type, attr) {
+  const spec = getSpec(type, attr)
+  return (spec && spec.kind === 'text') ? (spec.mode ?? 'contains') : 'contains'
+}
+function setTextQuery(type, attr, query) {
+  const q = (query ?? '').trim()
+  if (!q) clearSpec(type, attr)
+  else setSpec(type, attr, { kind: 'text', query: q, mode: getTextMode(type, attr) })
+}
+function setTextMode(type, attr, mode) {
+  const q = getTextQuery(type, attr)
+  if (!q) return   // mode is meaningless without a query
+  setSpec(type, attr, { kind: 'text', query: q, mode })
+}
+
+const TEXT_MODE_OPTIONS = [
+  { k: 'contains', label: 'contains' },
+  { k: 'equals', label: 'exact' },
+]
 
 // Type chip group (top-level filter, distinct from per-type attr filters).
 const selectedTypesList = computed(() => isEdge.value ? filters.edgeTypes : filters.nodeTypes)
@@ -405,10 +451,15 @@ const isolatedAlreadyFiltered = computed(() => {
               :class="i > 0 ? 'border-t border-slate-100' : ''"
             >
               <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] font-medium text-primary truncate">{{ entry.attr }}</span>
-                <!-- Range-only: Abs/% toggle next to the attr name; other
-                     kinds show the kind tag instead. -->
-                <div v-if="entry.kind === 'numeric' || entry.kind === 'temporal'" class="segmented-track flex items-center">
+                <span class="flex items-baseline gap-1.5 min-w-0">
+                  <span class="text-[11px] font-medium text-primary truncate">{{ entry.attr }}</span>
+                  <span class="text-[9px] text-muted uppercase tracking-wide shrink-0">{{ entry.kind }}</span>
+                  <span v-if="attrCoverage(t, entry.attr)" class="text-[10px] font-semibold tabular-nums text-sky-700 shrink-0">
+                    {{ attrCoverage(t, entry.attr) }}
+                  </span>
+                </span>
+                <!-- Range-only: Abs/% toggle next to the attr name. -->
+                <div v-if="entry.kind === 'numeric' || entry.kind === 'temporal'" class="segmented-track flex items-center shrink-0">
                   <button
                     v-for="opt in MODE_OPTIONS" :key="opt.k"
                     class="segmented-pill inline-flex items-center justify-center px-1.5 py-0 text-[10px]"
@@ -416,8 +467,10 @@ const isolatedAlreadyFiltered = computed(() => {
                     @click="setAttrMode(t, entry.attr, opt.k)"
                   >{{ opt.label }}</button>
                 </div>
-                <span v-else class="text-[9px] text-muted uppercase tracking-wide">{{ entry.kind }}</span>
               </div>
+              <p v-if="attrSummary(t, entry.attr)" class="text-[10px] leading-tight text-muted">
+                {{ attrSummary(t, entry.attr) }}
+              </p>
 
               <!-- Categorical -->
               <div v-if="entry.kind === 'categorical'" class="flex flex-wrap gap-1">
@@ -467,6 +520,38 @@ const isolatedAlreadyFiltered = computed(() => {
                   :mode="getAttrMode(t, entry.attr)"
                   @update:model-value="(v) => setRange(t, entry.attr, 'date', v, entry.range)"
                 />
+              </div>
+
+              <!-- Text (high-cardinality identifier: substring/exact search) -->
+              <div v-else-if="entry.kind === 'text'" class="flex flex-col gap-1">
+                <div class="flex items-center gap-1.5 input-base px-2 py-1 text-[11px]">
+                  <Search :size="12" class="text-muted shrink-0" />
+                  <input
+                    type="text"
+                    :value="getTextQuery(t, entry.attr)"
+                    :placeholder="entry.sample?.length ? `e.g. ${entry.sample[0]}` : 'Search…'"
+                    class="flex-1 bg-transparent outline-none"
+                    @input="setTextQuery(t, entry.attr, $event.target.value)"
+                  />
+                  <button
+                    v-if="getTextQuery(t, entry.attr)"
+                    class="text-muted hover:text-red-500 shrink-0"
+                    title="Clear"
+                    @click="clearSpec(t, entry.attr)"
+                  ><X :size="11" /></button>
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                  <div class="segmented-track flex items-center">
+                    <button
+                      v-for="opt in TEXT_MODE_OPTIONS" :key="opt.k"
+                      class="segmented-pill inline-flex items-center justify-center px-1.5 py-0 text-[9px]"
+                      :class="getTextMode(t, entry.attr) === opt.k ? 'segmented-pill--active' : ''"
+                      :disabled="!getTextQuery(t, entry.attr)"
+                      @click="setTextMode(t, entry.attr, opt.k)"
+                    >{{ opt.label }}</button>
+                  </div>
+                  <span class="text-[9px] text-muted tabular-nums">{{ entry.distinct }} distinct</span>
+                </div>
               </div>
             </div>
           </div>

@@ -30,7 +30,7 @@ const props = defineProps({
 // Histogram derived live from SoA; fits stay anchored to the full graph (CSN framework).
 const { nodes, loading, error } = injectGraphNodes(toRef(props, 'graphId'))
 const { data: fit } = useDegreeFit(toRef(props, 'graphId'))
-const { activeNodeMask, selectedMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
+const { activeNodeMask, selectedMask, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
 const filters = useFiltersStore()
 const { color: typeColor, stylesFor, d3SymbolType, symbolPath } = useNodeTypeColors(toRef(props, 'schema'))
@@ -119,12 +119,6 @@ const FIT_LABELS = { powerlaw: 'Power law fit', exponential: 'Exponential fit', 
 // Free parameter count per family; AIC = -2·LL + 2·k. Power-law / exp / Poisson
 // have 1 free param (xmin fixed at 1, see CSN framework); log-normal has 2 (μ, σ).
 const FIT_NPARAMS = { powerlaw: 1, exponential: 1, poisson: 1, lognormal: 2 }
-
-// True when the global filter has narrowed the subset; triggers the baseline overlay.
-const isSubsetActive = computed(() => {
-  const a = activeData.value, b = baselineData.value
-  return !!(a && b && a.seq.length < b.seq.length)
-})
 
 function toggleOverlayType(t) {
   if (overlayTypes.value.includes(t)) {
@@ -236,6 +230,13 @@ const theoryFit = computed(() => {
   if (!entries.length) return null
   return { best: entries[0], entries }
 })
+
+// Inline link classes for the theory block. Tailwind utilities (global) rather
+// than scoped CSS, because the block is teleported out of this component's tree
+// where scoped `data-v-*` rules don't reliably apply.
+const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
+const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
+function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 
 const VIEWS = ['PMF', 'CCDF']
 const VIEW_OPTIONS = VIEWS.map(v => ({ k: v, label: v }))
@@ -482,7 +483,14 @@ function renderChart() {
       // outline has room. Selected marks fill in for clear highlight contrast.
       // Attenuated bins (no node in mask) collapse to the neutral grey + smaller
       // size, matching Total's attenuation style.
-      const symAt = (selected, attenuated) => d3.symbol().type(symType).size(selected ? 60 : (attenuated ? 20 : 28))()
+      const typeHasSel = (selSet?.size ?? 0) > 0
+      // Selection gap (two-way), matching Total: selected glyphs grow, and once
+      // a selection exists in this type the rest shrink a touch. Areas: selected
+      // 60, attenuated-by-filter 20, normal 28, shrunk-by-selection 16.
+      const symAt = (selected, attenuated) => {
+        const area = selected ? 60 : (attenuated ? 20 : (typeHasSel ? 16 : 28))
+        return d3.symbol().type(symType).size(area)()
+      }
       const isAttenuated = (k) => !activeKSet.has(k)
       // Visible glyph: decorative only (pointer-events disabled). The hollow
       // (fill=none) shape would otherwise capture clicks on its 1.3px outline
@@ -598,19 +606,28 @@ function renderChart() {
   }
 
   const selAll = selectedDegrees.value?.all ?? new Set()
+  const hasSel = selAll.size > 0
   const accentDarker = d3.color(COLOR_SCHEME.accent).darker(0.8).formatHex()
   // Single dot layer: bins fall into either "active" (at least one node in the
   // current mask) or "attenuated" (no node in mask). Selected always wins.
   function isBinActive(k) { return activeKSet.has(k) }
+  // Selection gap (two-way): when a selection exists, selected bins grow a bit
+  // and the rest shrink a bit, widening the contrast without recoloring (the
+  // grey/colored channel stays reserved for the filter mask).
+  function dotRadius(k) {
+    if (selAll.has(k)) return 4.5
+    const base = isBinActive(k) ? 3 : 2.6
+    return hasSel ? base - 0.8 : base
+  }
   // Visible dots are decorative (pointer-events disabled); a transparent hit
-  // circle of fixed radius owns clicks/hover so the small marks (2–2.5px) are
+  // circle of fixed radius owns clicks/hover so the small marks are
   // comfortably clickable without precise aiming.
   g.selectAll('.dot').data(visible).join('circle')
     .attr('class', 'dot')
     .attr('cx', d => xScale(d.k)).attr('cy', d => yScale(d.p))
-    .attr('r', d => selAll.has(d.k) ? 4 : (isBinActive(d.k) ? 3 : 2.6))
+    .attr('r', d => dotRadius(d.k))
     .attr('fill', d => isBinActive(d.k) ? COLOR_SCHEME.accent : BASELINE_COLOR)
-    .attr('fill-opacity', d => selAll.has(d.k) ? 0.85 : (isBinActive(d.k) ? 0.5 : 0.65))
+    .attr('fill-opacity', d => selAll.has(d.k) ? 0.9 : (isBinActive(d.k) ? 0.5 : 0.65))
     .attr('stroke', d => selAll.has(d.k) ? accentDarker : (isBinActive(d.k) ? COLOR_SCHEME.accent : BASELINE_COLOR))
     .attr('stroke-width', d => selAll.has(d.k) ? 1.8 : 0.7)
     .attr('stroke-opacity', 1)
@@ -787,28 +804,28 @@ function renderChart() {
             <template v-if="theoryStats">the <strong>{{ FORMATTERS.integer(theoryStats.n) }} nodes</strong></template><template v-else>the nodes</template>
             have a specific degree <em>k</em><template v-if="theoryStats"> (x-axis, ranging from <strong>{{ theoryStats.min }}</strong> to <strong>{{ theoryStats.max }}</strong>)</template>.<template v-if="theoryStats && theoryStats.skewRatio">
               The distribution is <strong>{{ theoryStats.heavyTailed ? 'strongly skewed' : 'moderately concentrated' }}</strong>: the busiest node holds <strong>{{ FORMATTERS.integer(theoryStats.skewRatio) }}×</strong> the connections of the
-              <button class="theory-link" :class="{ 'theory-link--on': controls.showMedian }"
+              <button :class="theoryLinkClass(controls.showMedian)"
                 @click="updateControl('showMedian', !controls.showMedian)">median</button>
               one (degree <strong>{{ FORMATTERS.integer(theoryStats.median) }}</strong>), the signature of a few hubs among many sparse nodes.</template>
           </p>
           <p>
             Read it as a
-            <button class="theory-link" :class="{ 'theory-link--on': view === 'PMF' }"
+            <button :class="theoryLinkClass(view === 'PMF')"
               @click="view = 'PMF'">PMF</button>
             (nodes of <em>exactly</em> degree <em>k</em>) or a
-            <button class="theory-link" :class="{ 'theory-link--on': view === 'CCDF' }"
+            <button :class="theoryLinkClass(view === 'CCDF')"
               @click="view = 'CCDF'">CCDF</button>
             (degree <em>≥ k</em>, which smooths the noisy tail). The Y axis shows a
-            <button class="theory-link" :class="{ 'theory-link--on': controls.yAxis === 'count' }"
+            <button :class="theoryLinkClass(controls.yAxis === 'count')"
               @click="updateControl('yAxis', 'count')">count</button>
             or a
-            <button class="theory-link" :class="{ 'theory-link--on': controls.yAxis === 'probability' }"
+            <button :class="theoryLinkClass(controls.yAxis === 'probability')"
               @click="updateControl('yAxis', 'probability')">fraction</button>
             (a <strong>probability</strong>, for comparing graphs of different sizes).
           </p>
           <p v-if="hasMultipleTypes">
             To tell whether different kinds of node follow the same degree pattern or distinct ones, switch to the
-            <button class="theory-link" :class="{ 'theory-link--on': controls.byType }"
+            <button :class="theoryLinkClass(controls.byType)"
               @click="updateControl('byType', !controls.byType)">per-type</button>
             view: it splits the curve into one series per <strong>node type</strong>, each with its own shape and color.
           </p>
@@ -826,7 +843,7 @@ function renderChart() {
           <ul v-if="theoryFit" class="flex flex-col gap-1.5 pl-1">
             <li v-for="e in theoryFit.entries" :key="e.name"
               :class="{ 'text-primary font-medium': e.name === theoryFit.best.name }">
-              <button class="theory-link" :class="{ 'theory-link--on': fitActive === e.name }"
+              <button :class="theoryLinkClass(fitActive === e.name)"
                 @click="fitActive = fitActive === e.name ? null : e.name">{{ FIT_LABELS[e.name] }}</button>
               <span class="text-muted"> · Δ AIC/n = {{ formatDeltaAic(e.deltaAic) }}</span>
               <span v-if="e.name === theoryFit.best.name" class="text-emerald-600 font-medium"> ← best</span>
@@ -843,30 +860,6 @@ function renderChart() {
     <div v-if="loading" class="text-sm text-secondary p-3 surface-recessed rounded-lg">Loading nodes…</div>
     <div v-if="error" class="text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">{{ error }}</div>
     <p v-if="noNodesActive" class="text-[10px] italic text-amber-600 px-1">No data under current filters.</p>
-    <p v-else-if="edgeFilterActive" class="text-[10px] italic text-muted px-1">Degree shown on full graph; edge filter attenuates marks only.</p>
     <div ref="chartContainer" class="chart-elev w-full" style="aspect-ratio: 4/3; position: relative;"></div>
-
-    <p v-if="isSubsetActive" class="text-[10px] leading-tight text-muted px-1">
-      Grey overlays show full-graph baseline; colored reflect the current subset.
-    </p>
   </div>
 </template>
-
-<style scoped>
-/* Inline theory affordance: a text button that toggles a chart overlay. Reads
-   as a link (underlined accent) when off, fills in when its overlay is on. */
-.theory-link {
-  color: var(--color-sky-700, #0369a1);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.theory-link:hover { color: var(--color-sky-900, #0c4a6e); }
-.theory-link--on {
-  background: var(--color-sky-100, #e0f2fe);
-  text-decoration: none;
-  border-radius: 4px;
-  padding: 0 4px;
-}
-</style>

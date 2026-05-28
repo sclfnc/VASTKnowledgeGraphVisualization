@@ -6,6 +6,7 @@ import {
 } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { usePanelsStore } from '../stores/panels.js'
+import { injectSchema } from '../composables/useSchema.js'
 
 // Centrality status injected by GuideView (single global poller). Defaults to
 // null when GuideView isn't the parent (e.g. /dataset onboarding view).
@@ -40,6 +41,12 @@ function centralityBadge(panel) {
 const panelsStore = usePanelsStore()
 const { panels, sections } = storeToRefs(panelsStore)
 const { toggle, loadSection, removeSection } = panelsStore
+const { schema } = injectSchema()
+
+// A panel may declare `available(schema)` to opt out of the registry on graphs
+// where it would render nothing (e.g. attribute-schema panels on a graph whose
+// types carry no extra attributes). Absence of the predicate = always available.
+const isAvailable = (p) => typeof p.available !== 'function' || p.available(schema.value)
 
 const search = ref('')
 const collapsed = ref(Object.fromEntries(sections.value.map(s => [s, false])))
@@ -60,7 +67,7 @@ const SECTION_ICONS = {
 
 const sectionIcon = (s) => SECTION_ICONS[s] ?? BookOpen
 
-const panelsInSection = (s) => panels.value.filter(p => p.section === s)
+const panelsInSection = (s) => panels.value.filter(p => p.section === s && isAvailable(p))
 const togglablePanelsInSection = (s) => panelsInSection(s).filter(p => !p.conditional)
 const isSectionFull = (s) => {
   const togglable = togglablePanelsInSection(s)
