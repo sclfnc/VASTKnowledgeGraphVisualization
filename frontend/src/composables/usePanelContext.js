@@ -42,6 +42,13 @@ export function usePanelContext(panelId, graphId) {
     return selection.ids
   })
 
+  const selectedEdgeIds = computed(() => {
+    if (isolated.value) {
+      return isolation.snapshotOf(panelId)?.selectionEdges ?? []
+    }
+    return selection.edgeIds
+  })
+
   const selectedMask = computed(() => {
     const soa = nodes.value
     if (!soa) return null
@@ -49,6 +56,23 @@ export function usePanelContext(panelId, graphId) {
     for (const id of selectedIds.value) {
       const idx = soa.idToIdx.get(String(id))
       if (idx !== undefined) m.set(idx)
+    }
+    return m
+  })
+
+  // Edge ids ARE the SoA edge index (the /edges/ canonical walk), so no idToIdx
+  // lookup is needed — set the bit directly. Sized to the node SoA's matching
+  // edge count is unknown here, so we size by the highest id + 1; consumers read
+  // via isEdgeSelected which guards out-of-range.
+  const selectedEdgeMask = computed(() => {
+    const ids = selectedEdgeIds.value
+    if (!ids.length) return null
+    let max = -1
+    for (const id of ids) { const n = Number(id); if (n > max) max = n }
+    const m = new Bitset(max + 1)
+    for (const id of ids) {
+      const n = Number(id)
+      if (n >= 0) m.set(n)
     }
     return m
   })
@@ -82,15 +106,37 @@ export function usePanelContext(panelId, graphId) {
     return m.get(edgeId)
   }
 
+  // Canonical selection predicates — mirror isActive/isEdgeActive so panels stop
+  // hand-rolling `selection.ids.includes(id)`. Empty selection → nothing selected
+  // (returns false), unlike the active predicates whose empty default is true.
+  function isSelected(id) {
+    const m = selectedMask.value
+    const soa = nodes.value
+    if (!m || !soa) return false
+    const idx = soa.idToIdx.get(String(id))
+    if (idx === undefined) return false
+    return m.get(idx)
+  }
+
+  function isEdgeSelected(edgeId) {
+    const m = selectedEdgeMask.value
+    if (!m || edgeId == null || edgeId < 0 || edgeId >= m.n) return false
+    return m.get(edgeId)
+  }
+
   return {
     activeNodeMask,
     activeEdgeMask,
     edgeFilterActive,
     noNodesActive,
     selectedIds,
+    selectedEdgeIds,
     selectedMask,
+    selectedEdgeMask,
     isActive,
     isEdgeActive,
+    isSelected,
+    isEdgeSelected,
     isolated,
   }
 }

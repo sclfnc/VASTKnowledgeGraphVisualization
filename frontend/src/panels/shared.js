@@ -271,3 +271,42 @@ export function formatCoverage(coverage) {
   if (pct < 0.05) return '<0.1%'
   return `${pct.toFixed(pct < 10 ? 1 : 0)}%`
 }
+
+// Set of effective types that have at least one element in `mask`. Shared by
+// type-aggregate panels (TypeMixingMatrix, EdgeFlow) to outline the marks whose
+// type contains a selected node — the cap-safe "this aggregate holds something
+// you selected" signal. `typeAt(i)` resolves the effective type of SoA index i.
+export function selectedTypesIn(count, mask, typeAt) {
+  const out = new Set()
+  if (!mask) return out
+  for (let i = 0; i < count; i++) if (mask.get(i)) out.add(typeAt(i))
+  return out
+}
+
+// Effective-type-aware variant of idsOfTypes over a node SoA. `typeAt(i)`
+// resolves the effective type of index i (so it's correct under auto-promotion,
+// unlike idsOfTypes which reads raw n.type). Collects ALL matching ids — pass
+// the result to selection.replaceCapped to apply the cap and track overflow.
+export function idsOfTypesSoA(soa, types, typeAt) {
+  if (!soa) return []
+  const want = types instanceof Set ? types
+    : new Set(Array.isArray(types) ? types : [types])
+  const out = []
+  for (let i = 0; i < soa.N; i++) {
+    if (want.has(typeAt(i))) out.push(soa.ids[i])
+  }
+  return out
+}
+
+// Deterministic [0, 1) from a string key (FNV-1a hash). Use instead of
+// Math.random() for jitter/layout that must stay stable across re-renders —
+// the same id always lands in the same spot, so a repaint doesn't reshuffle.
+export function seededUnit(key) {
+  let h = 0x811c9dc5
+  const s = String(key)
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return ((h >>> 0) % 100000) / 100000
+}

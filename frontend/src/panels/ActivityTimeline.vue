@@ -5,11 +5,14 @@ import { Clock, Settings } from 'lucide-vue-next'
 
 import { useTimeline } from '@/composables/useTimeline.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEdgeTypeColors } from '@/composables/useEdgeTypeColors.js'
 import { useFiltersStore } from '@/stores/filters.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
+import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useTimelineSettingsModal } from '@/composables/useTimelineSettingsModal.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, visibleSubset, svgFrame, FORMATTERS } from './shared.js'
+import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 
@@ -26,13 +29,15 @@ defineEmits(['request-widen', 'request-shrink'])
 
 const { data, loading, error } = useTimeline(toRef(props, 'graphId'))
 const { color: nodeTypeColor } = useNodeTypeColors(toRef(props, 'schema'))
-const edgeTypeColorScale = computed(() => {
-  const ets = props.schema?.edge_types ?? []
-  const palette = d3.schemeTableau10.concat(d3.schemeSet3)
-  return d3.scaleOrdinal().domain(ets).range(palette)
-})
-const typeColor = (t) => props.mode === 'edge' ? edgeTypeColorScale.value(t) : nodeTypeColor(t)
+const { color: edgeTypeColor } = useEdgeTypeColors(toRef(props, 'schema'))
+// Shared, effective-type-aware mapping on both sides — same hue per type across all panels.
+const typeColor = (t) => props.mode === 'edge' ? edgeTypeColor(t) : nodeTypeColor(t)
 const filters = useFiltersStore()
+const { nodeTypeAt, edgeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
+const { activeNodeMask, activeEdgeMask } = usePanelContextFromProps(props)
+// The mask this scope reacts to: node-scope timelines mask on nodes, edge-scope on edges.
+const scopeMask = computed(() => props.mode === 'edge' ? activeEdgeMask.value : activeNodeMask.value)
+const typeAt = (idx) => props.mode === 'edge' ? edgeTypeAt(idx) : nodeTypeAt(idx)
 const { openTimelineSettings } = useTimelineSettingsModal()
 const { controls, updateControl } = usePanel(props, null, data)
 
@@ -103,19 +108,17 @@ function render() {
 
   const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
 
-  // Bars sum only the globally-visible breakdown set (node types in 'node' mode, edge types in 'edge' mode).
-  const breakdownSet = props.mode === 'edge' ? filters.edgeTypes : filters.nodeTypes
-  const breakdownDomain = props.mode === 'edge' ? (props.schema?.edge_types ?? []) : (props.schema?.node_types ?? [])
-  const types = visibleSubset(breakdownSet, breakdownDomain)
-  const visibleTotal = b => {
-    if (!types.length) return b.total
-    let s = 0
-    for (const t of types) s += b.by_type?.[t] || 0
-    return s
-  }
+  // Mask-only contract: each bin carries `idx` (canonical SoA indices of its
+  // records). The ACTIVE height counts only indices in the global mask; the
+  // full-graph `total` is drawn behind as a grey baseline silhouette so the
+  // user sees what every filter (not just types) hid — same idiom as
+  // DegreeDistribution. No raw filters.* read here.
+  const mask = scopeMask.value
+  const active = computeActiveBins(bins, mask)            // [{year, total, activeTotal, activeByType}]
+  const activeTypes = activeTypeList(active)
 
   const xScale = d3.scaleBand().domain(bins.map(b => b.year)).range([0, innerW]).padding(0.1)
-  const maxTotal = d3.max(bins, b => visibleTotal(b)) || 1
+  const maxTotal = d3.max(bins, b => b.total) || 1
   const yScale = d3.scaleLinear().domain([0, maxTotal]).range([innerH, 0])
 
   const maxXTicks = 10
@@ -134,14 +137,26 @@ function render() {
     .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#475569')
     .text(activeAttr.value)
 
-  if (controls.value.breakdown === 'type' && types.length > 0) {
-    // Tidy stack input: one row per bin keyed by type.
-    const rows = bins.map(b => {
-      const row = { year: b.year, total: b.total }
-      for (const t of types) row[t] = b.by_type?.[t] || 0
+  // Baseline silhouette: the full-graph bin, drawn only where the filter hides
+  // part of it (activeTotal < total). Skipped entirely when no filter is active.
+  const filterActive = active.some(a => a.activeTotal < a.total)
+  if (filterActive) {
+    g.selectAll('rect.baseline').data(active).join('rect').attr('class', 'baseline')
+      .attr('x', d => xScale(d.year))
+      .attr('y', d => yScale(d.total))
+      .attr('width', xScale.bandwidth())
+      .attr('height', d => innerH - yScale(d.total))
+      .attr('fill', '#cbd5e1')
+      .attr('opacity', 0.5)
+  }
+
+  if (controls.value.breakdown === 'type' && activeTypes.length > 0) {
+    const rows = active.map(a => {
+      const row = { year: a.year }
+      for (const t of activeTypes) row[t] = a.activeByType.get(t) || 0
       return row
     })
-    const series = d3.stack().keys(types)(rows)
+    const series = d3.stack().keys(activeTypes)(rows)
     g.selectAll('g.layer').data(series).join('g').attr('class', 'layer')
       .attr('fill', d => typeColor(d.key))
       .selectAll('rect').data(d => d).join('rect')
@@ -151,20 +166,20 @@ function render() {
       .attr('width', xScale.bandwidth())
       .attr('opacity', 0.9)
       .style('cursor', 'pointer')
-      .on('mouseover', (ev, d) => showTip(tooltip, ev, binTooltip(d.data)))
+      .on('mouseover', (ev, d) => showTip(tooltip, ev, binTooltip(d.data.year)))
       .on('mousemove', (ev) => showTip(tooltip, ev, null))
       .on('mouseout', () => hideTip(tooltip))
       .on('click', (_, d) => onBarClick(d.data.year))
   } else {
-    g.selectAll('rect.bar').data(bins).join('rect').attr('class', 'bar')
+    g.selectAll('rect.bar').data(active).join('rect').attr('class', 'bar')
       .attr('x', d => xScale(d.year))
-      .attr('y', d => yScale(visibleTotal(d)))
+      .attr('y', d => yScale(d.activeTotal))
       .attr('width', xScale.bandwidth())
-      .attr('height', d => innerH - yScale(visibleTotal(d)))
+      .attr('height', d => innerH - yScale(d.activeTotal))
       .attr('fill', '#0284c7')
       .attr('opacity', 0.9)
       .style('cursor', 'pointer')
-      .on('mouseover', (ev, d) => showTip(tooltip, ev, binTooltip(d)))
+      .on('mouseover', (ev, d) => showTip(tooltip, ev, binTooltip(d.year)))
       .on('mousemove', (ev) => showTip(tooltip, ev, null))
       .on('mouseout', () => hideTip(tooltip))
       .on('click', (_, d) => onBarClick(d.year))
@@ -197,10 +212,50 @@ function render() {
   g.append('g').attr('class', 'brush').call(brush)
 }
 
-function binTooltip(b) {
-  const lines = [`<b>${b.year}</b>: ${b.total.toLocaleString()}`]
-  const entries = Object.entries(b.by_type || {}).sort((a, c) => c[1] - a[1])
-  for (const [t, c] of entries) {
+// Mask-only aggregation: count each bin's records that survive the global mask,
+// grouped by effective type. The mask already encodes every filter (types,
+// degree, weight, wcc, attrs, …), so the panel reacts to all of them — not just
+// the type chip group. No raw filters.* read.
+function computeActiveBins(bins, mask) {
+  return bins.map(b => {
+    const idx = b.idx || []
+    const activeByType = new Map()
+    let activeTotal = 0
+    for (const i of idx) {
+      // No mask yet (initial paint) → treat all as active so bars aren't empty.
+      if (mask && !mask.get(i)) continue
+      activeTotal += 1
+      const t = typeAt(i)
+      activeByType.set(t, (activeByType.get(t) || 0) + 1)
+    }
+    return { year: b.year, total: b.total, activeTotal, activeByType }
+  })
+}
+
+function activeTypeList(active) {
+  const seen = new Set()
+  for (const a of active) for (const t of a.activeByType.keys()) seen.add(t)
+  return [...seen].sort()
+}
+
+function binTooltip(year) {
+  const mask = scopeMask.value
+  const b = activeBins.value.find(x => x.year === year)
+  if (!b) return `<b>${year}</b>`
+  const idx = b.idx || []
+  let activeTotal = 0
+  const byType = new Map()
+  for (const i of idx) {
+    if (mask && !mask.get(i)) continue
+    activeTotal += 1
+    const t = typeAt(i)
+    byType.set(t, (byType.get(t) || 0) + 1)
+  }
+  const head = activeTotal < b.total
+    ? `<b>${year}</b>: ${activeTotal.toLocaleString()} / ${b.total.toLocaleString()}`
+    : `<b>${year}</b>: ${b.total.toLocaleString()}`
+  const lines = [head]
+  for (const [t, c] of [...byType.entries()].sort((a, c) => c[1] - a[1])) {
     lines.push(`<span style="color:${typeColor(t)}">●</span> ${t}: ${c.toLocaleString()}`)
   }
   return lines.join('<br>')
@@ -210,7 +265,7 @@ function onBarClick(year) {
   filters.temporalFilter = { attr: activeAttr.value, scope: props.mode, range: [year, year] }
 }
 
-watch([data, controls, () => props.widened, () => filters.nodeTypes, () => filters.edgeTypes, () => props.mode], () => nextTick(render), { deep: true })
+watch([data, controls, () => props.widened, scopeMask, () => props.mode], () => nextTick(render), { deep: true })
 useD3Chart(chartContainer, render)
 </script>
 

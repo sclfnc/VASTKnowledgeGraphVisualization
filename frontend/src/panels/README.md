@@ -12,8 +12,6 @@ Self-contained Vue components rendered inside `GuidePanel`. Each panel:
 |---|---|---|---|
 | Degree Distribution | `degree` | `DegreeDistribution.vue` | ✓ implemented |
 | Connected Components | `connectivity` | `ConnectedComponents.vue` | ✓ implemented |
-| Node Attribute Schema | `node_attrs` | `AttributeSchema.vue` (`mode: 'node'`) | ✓ implemented |
-| Edge Attribute Schema | `edge_attrs` | `AttributeSchema.vue` (`mode: 'edge'`) | ✓ implemented |
 | PageRank | `cent_pagerank` | `CentralityPanel.vue` (`measure: 'pagerank'`) | ✓ implemented |
 | Eigenvector | `cent_eigenvector` | `CentralityPanel.vue` (`measure: 'eigenvector'`) | ✓ implemented |
 | Betweenness | `cent_betweenness` | `CentralityPanel.vue` (`measure: 'betweenness'`) | ✓ implemented |
@@ -23,7 +21,9 @@ Self-contained Vue components rendered inside `GuidePanel`. Each panel:
 | Ego Comparison | `ego_compare` | `EgoComparisonPanel.vue` | ✓ implemented |
 | Type Mixing Matrix | `type_mixing` | `TypeMixingMatrix.vue` | ✓ implemented |
 | Edge Flow | `edge_flow` | `EdgeFlow.vue` | ✓ implemented |
-| Activity Timeline | `timeline` | `ActivityTimeline.vue` | ✓ implemented |
+| Activity Timeline | `timeline_node` / `timeline_edge` | `ActivityTimeline.vue` (`mode: 'node' \| 'edge'`) | ✓ implemented |
+
+`AttributeFilters.vue` (`mode: 'node' | 'edge'`) is the sidebar filter editor — it is **not** in the panel registry; `AppSidebar` mounts it directly when `sidebars.mode === 'filters'`.
 
 Stub entries (~20) live in `ALL_SPECS` as roadmap reference and are filtered out from the UI export (`PANEL_SPECS = ALL_SPECS.filter(p => p.status !== 'stub')`). Promoting `stub → planned → implemented` is a one-field flip.
 
@@ -38,7 +38,7 @@ panels/
 ├── layeredGraph.js             # pure helpers (fromEgoPayload, mergeLayers, filterIntersection) for ego panels
 ├── DegreeDistribution.vue
 ├── ConnectedComponents.vue
-├── AttributeSchema.vue
+├── AttributeFilters.vue           # sidebar filter editor (mode: 'node' | 'edge'), not registry-mounted
 ├── CentralityPanel.vue
 ├── CentralityComparison.vue
 ├── EgoNetworkPanel.vue
@@ -66,7 +66,7 @@ panels/
   defaultActive: true,
   status: 'implemented',      // 'implemented' | 'planned' | 'stub'
   component: DegreeDistribution,
-  componentProps: { mode: 'node' },                     // optional, for parametric panels (AttributeSchema, CentralityPanel)
+  componentProps: { mode: 'node' },                     // optional, for parametric panels (CentralityPanel, ActivityTimeline)
   explanation: '...',                                   // static fallback for theory drawer
   contextualizeExplanation: (schema, data) => `...`,    // adapted text (preferred)
   controlsSchema: { ... },     // declarative spec — usePanel reads only `default` per field
@@ -136,7 +136,10 @@ Formatters: `formatAttrSummary(attr)`, `formatCoverage(coverage)`.
 
 Node-type colors come from `@/composables/useNodeTypeColors.js`, not from `shared.js` — share that mapping across panels rather than instantiating a local `d3.scaleOrdinal`.
 
-## Cross-panel contract
+## Cross-panel contract (bitmap-truth)
 
-- **`selection.ids`** is the universal cross-panel handoff (file: `@/stores/selection.js`). Panels with per-node marks write via `add`/`toggle`. Panels aggregating multiple ids per mark (e.g. TypeMixingMatrix cell click → nodes of two types) use `replace`. Cap by reading: `EgoComparisonPanel` reads `ids.slice(0, MAX_LAYERS)`.
-- **`filters.*`** (file: `@/stores/filters.js`) is currently UI-only — the propagation refactor (see `PROPAGATION.md` at repo root) wires every panel to react to global filters via a Uint32-packed bitset (`useFilteredModel` → `usePanelContext`).
+Common state lives in two Pinia stores (`filters`, `selection`) exposed as three shared bitmaps via `usePanelContext`. Every panel consumes them; panel-private `controls` (log scale, top-N, bin size) touch no bitmap. Full contract in `contract.md` (repo root).
+
+- **`filters.*`** → `useFilteredModel` builds `activeNodeMask` / `activeEdgeMask` (Uint32-packed bitsets). Panels read them via `usePanelContext` and **attenuate** marks — mask-only: filters never recompute metrics (the two count-view exceptions, `type_mixing` / `edge_flow`, recompute aggregate counts under the edge mask). No panel reads `filters.*` raw to bypass a mask (only allowed raw read: reflecting a widget the panel itself edits, e.g. `ConnectedComponents` reading `wccFilter` for its Top-N button state).
+- **`selection.ids` / `selection.edgeIds`** → `selectedMask` / `selectedEdgeMask` + predicates `isSelected(id)` / `isEdgeSelected(edgeId)`. Per-node marks write via `add`/`toggle`; aggregate broadcasts use `replaceCapped(ids, SELECTION_CAPS[id])` so the store tracks overflow for the "+N more" caption. `EgoComparisonPanel` caps on read (`ids.slice(0, MAX_LAYERS)`).
+- **Isolation (Lock)** freezes a panel on a deep-cloned snapshot of filters + selection + all masks; `usePanelContext` resolves to the snapshot while frozen.

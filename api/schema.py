@@ -132,9 +132,40 @@ MAX_CATEGORICAL_VALUES = 50
 TYPE_DETAIL_TOP_K = 3
 
 
+# The single reserved key per scope; the helpers below read it so the literal
+# lives in exactly one place.
+_NODE_TYPE_KEY = next(iter(RESERVED_NODE_ATTRS))   # 'Node Type'
+_EDGE_TYPE_KEY = next(iter(RESERVED_EDGE_ATTRS))   # 'Edge Type'
+UNKNOWN_TYPE = 'Unknown'
+
+
 def node_type(G, n):
     """Single source of truth for the `Node Type` attribute lookup."""
-    return G.nodes[n].get('Node Type', 'Unknown')
+    return G.nodes[n].get(_NODE_TYPE_KEY, UNKNOWN_TYPE)
+
+
+def edge_type(data):
+    """Single source of truth for the `Edge Type` lookup. Takes the edge's data
+    dict (works for every walk shape: `G.edges(data=True)`, multigraph keys
+    stripped, or a reverse-mapped attr dict)."""
+    return data.get(_EDGE_TYPE_KEY, UNKNOWN_TYPE)
+
+
+def json_scalar(v):
+    """JSON-safe coercion for arbitrary attr values (numpy scalars, sets,
+    datetimes, nested containers). Shared by the inspector payloads."""
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    if isinstance(v, (list, tuple)):
+        return [json_scalar(x) for x in v]
+    if isinstance(v, (set, frozenset)):
+        return sorted(json_scalar(x) for x in v)
+    if isinstance(v, dict):
+        return {str(k): json_scalar(val) for k, val in v.items()}
+    try:
+        return v.item()
+    except AttributeError:
+        return str(v)
 
 
 def percentile(sorted_data, p):

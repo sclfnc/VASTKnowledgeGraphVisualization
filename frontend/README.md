@@ -27,77 +27,78 @@ Requires Node `^20.19.0 || >=22.12.0`. Vite proxies API calls to FastAPI on `:80
 
 ```
 src/
-├── assets/main.css           # Tailwind entry + design system utilities
+├── assets/main.css           # Tailwind entry + design-system utilities
 ├── router/index.js           # / (dashboard) + /dataset (onboarding)
-├── stores/
-│   ├── graph.js              # graphId (in-memory) + mode ('graph'|'guide')
-│   ├── filters.js            # node/edge type filters, numeric, hideIsolated, hideSelfLoops, temporalFilter
-│   ├── selection.js          # cross-panel selection ids (add/toggle/replace/clear) + MAX_LAYERS
-│   ├── panels.js             # active panel set + ordered list + GUIDE_PANELS_KEY
-│   └── timelineOverrides.js  # per-attribute date-parsing strategy overrides
-├── composables/
-│   ├── useApi.js                  # apiUrl(path) — centralized backend host
-│   ├── useFetch.js                # shared { data, loading, error, run }
-│   ├── createGraphResource.js     # factory: (path) → composable (graphIdRef) → { data, loading, error }
-│   ├── useSchema.js               # reactive /schema/{graphId}, resets filters store
-│   ├── useMetrics.js              # reactive /metrics/{graphId}
-│   ├── useDegreeFit.js            # reactive /degree-fit/{graphId}
-│   ├── useComponents.js           # reactive /components/{graphId}
-│   ├── useGraphNodes.js           # reactive /nodes/{graphId} (full node index)
-│   ├── useEgoSubgraph.js          # debounced /ego/{graphId}/{nodeId}
-│   ├── useTypeMixing.js           # reactive /type-mixing/{graphId}
-│   ├── useEdgeFlow.js             # reactive /edge-flow/{graphId}
-│   ├── useTimeline.js             # reactive /timeline/{graphId}
-│   ├── useCentralityPoller.js     # single global poller for /centrality-status/ + data
-│   ├── useCentrality.js           # per-measure consumer (inject from poller)
-│   ├── useAllCentralities.js      # all-measures consumer (CentralityComparison)
-│   ├── useForceGraph.js           # d3-force lifecycle composable (used by ego panels)
-│   ├── useNodeTypeColors.js       # deterministic nodeType → hex (Tableau10)
-│   ├── useDatasetLoader.js        # loadBuiltin / uploadFile / fetchDatasets
-│   ├── useLocalStorage.js         # module-level cache, shared refs per key
-│   ├── useAboutModal.js           # about modal open/close state
-│   └── useTimelineSettingsModal.js # ActivityTimeline date-parsing settings modal
+├── utils/
+│   ├── bitset.js             # Uint32-packed bitset (AND/OR/popcount) — the filter/selection masks
+│   └── binsearch.js          # lower/upper bound for the degree-window mask
+├── stores/                   # Pinia composition stores (in-memory unless noted)
+│   ├── graph.js              # graphId + mode ('graph' | 'guide')
+│   ├── filters.js            # type chips, degree/weight, structural toggles, temporalFilter, nodeAttrs/edgeAttrs
+│   ├── selection.js          # node + edge selection channels; replaceCapped + overflow; SELECTION_CAPS, MAX_LAYERS
+│   ├── isolation.js          # per-panel Lock snapshots (full freeze)
+│   ├── filterHistory.js      # filters-only undo/redo ring buffer (debounced)
+│   ├── sidebars.js           # sidebar mode 'contents' | 'filters' (persisted)
+│   ├── panels.js             # active panel set + ordering (persisted)
+│   ├── uiPreferences.js      # shared direction toggle (ego / ego_compare / cent_closeness)
+│   ├── typePromotion.js      # manual type-promotion overrides (scaffolding)
+│   └── timelineOverrides.js  # per-attribute date-parsing strategy (persisted)
+├── composables/              # reactive logic — data fetch + derived state
+│   ├── useFetch.js / useApi.js / createGraphResource.js   # HTTP base + per-graph resource factory
+│   ├── useSchema.js                                        # /schema/ + cross-graph teardown + effective-types prefetch
+│   ├── useGraphNodes.js / useGraphEdges.js                 # SoA node/edge indices (provided singletons)
+│   ├── useFilteredModel.js                                 # builds activeNodeMask / activeEdgeMask
+│   ├── usePanelContext.js                                  # per-panel facade: masks + selectedMask + isActive/isSelected + Lock
+│   ├── useEffectiveType(s).js                              # effective-type labels (auto-promotion)
+│   ├── useAttributeIndex.js                                # per-(type,attr) filter bitsets (incl. text identifiers)
+│   ├── useNodeTypeColors.js / useEdgeTypeColors.js         # deterministic, effective-aware type → hex
+│   ├── useMetrics / useDegreeFit / useComponents / useTypeMixing / useEdgeFlow / useTimeline / useEgoSubgraph
+│   ├── useCentralityPoller.js + useCentrality / useAllCentralities   # single global poller + consumers
+│   ├── useNodeInspect / useNodeNeighbors / useEdgeInspect  # sidebar inspector data
+│   ├── useFilterShortcuts.js                               # "filter to this type/component" mutation helpers
+│   ├── useForceGraph.js                                    # d3-force lifecycle (ego panels)
+│   └── useDatasetLoader / useLocalStorage / useAboutModal / useTimelineSettingsModal / useAppVersion
 ├── components/
-│   ├── AppSidebar.vue        # left sidebar wrapper (GuideContents host)
-│   ├── HeaderControls.vue    # header right-side controls (About/Dataset/Mode)
-│   ├── ModeToggle.vue        # Graph/Guide segmented toggle (dark + light variants)
-│   ├── DatasetDropdown.vue   # dataset switcher dropdown
-│   ├── GuideContents.vue     # panel list: search, sections, badges, load/remove all
-│   ├── GuidePanel.vue        # grid card: header icons + collapsible controls drawer + dynamic panel
-│   ├── GraphContextBar.vue   # context + filters card above the panel grid
+│   ├── AppSidebar.vue        # left sidebar: brand, ModeToggle, GraphStatus, Contents/Filters toggle, footer
+│   ├── GraphStatus.vue       # parametric (section prop): identity row, counts card, node/edge inspectors
+│   ├── GraphHeaderStrip.vue  # active-filter chips + undo/redo + reset (action-only chrome)
+│   ├── GuideContents.vue     # panel registry list: search, sections, centrality status badges
+│   ├── GuidePanel.vue        # grid card: header icons + controls drawer + dynamic panel + Lock
 │   ├── PanelFocus.vue        # focus modal: chart (left) + theory drawer (right)
-│   ├── AboutModal.vue        # about modal (Teleport, card-elev style)
-│   ├── DashboardCard.vue     # placeholder card for Graph mode grid
-│   ├── NumericFilter.vue     # numeric filter widget (absolute / percentile / IQR)
-│   └── NodeSearchInput.vue   # input + suggestions over in-memory node index (used by ego panels)
+│   ├── ModeToggle.vue        # Graph/Guide segmented toggle
+│   ├── NodeSearchInput.vue   # input + suggestions over the in-memory node index (ego panels)
+│   ├── AboutModal.vue / TimelineParsingSettingsModal.vue
+│   └── DashboardCard.vue     # placeholder card for Graph mode grid
 ├── views/
 │   ├── HomeView.vue          # mode switch: Graph (placeholder grid) or Guide
 │   ├── DatasetView.vue       # onboarding: built-in picker + file upload
-│   └── GuideView.vue         # Guide orchestrator: schema, panel state, focus state
-└── panels/                   # D3 viz panels (renamed from wikiPanels/ in refactor F10)
+│   └── GuideView.vue         # Guide orchestrator: provides per-graph singletons, mounts the panel grid
+└── panels/                   # D3 viz panels
     ├── index.js              # ALL_SPECS registry + PANEL_SPECS (filtered) + SECTIONS
     ├── usePanel.js           # initializes per-panel controls from controlsSchema.default
     ├── useD3Chart.js         # ResizeObserver + RAF wrapper for static D3 charts
-    ├── shared.js             # D3 utils: scales, axes, colors, formatters, correlations, tooltips
+    ├── shared.js             # D3 utils: scales, axes, formatters, correlations, tooltips, seededUnit, selectedTypesIn, idsOfTypesSoA
     ├── layeredGraph.js       # pure helpers for ego panels (fromEgoPayload / mergeLayers)
     ├── DegreeDistribution.vue
     ├── ConnectedComponents.vue
-    ├── AttributeSchema.vue   # parametric mode: 'node' | 'edge'
+    ├── AttributeFilters.vue  # sidebar filter editor — parametric mode: 'node' | 'edge' (NOT registry-mounted)
     ├── CentralityPanel.vue   # parametric measure: 'pagerank' | 'eigenvector' | 'betweenness' | 'closeness'
     ├── CentralityComparison.vue
-    ├── EgoNetworkPanel.vue
-    ├── EgoComparisonPanel.vue
-    ├── TypeMixingMatrix.vue
-    ├── EdgeFlow.vue
-    ├── ActivityTimeline.vue
+    ├── EgoNetworkPanel.vue / EgoComparisonPanel.vue
+    ├── TypeMixingMatrix.vue / EdgeFlow.vue
+    ├── ActivityTimeline.vue  # parametric mode: 'node' | 'edge'
     ├── NotImplementedStub.vue
-    └── controls/
-        ├── ControlSection.vue       # drawer-section wrapper (rounded card + title + slot)
-        ├── ControlToggleGroup.vue   # pill segmented control
-        ├── ControlSwitch.vue        # on/off slider with label
-        ├── ControlBoolean.vue       # eye/eye-off toggle
-        └── SliderControl.vue        # @vueform/slider wrapped in ControlSection
+    └── controls/             # ControlSection · ControlToggleGroup · ControlSwitch · ControlBoolean · SliderControl · RangeFilter
 ```
+
+## The bitmap-truth contract
+
+Common state lives in two Pinia stores (`filters`, `selection`) exposed as three shared bitmaps via
+`usePanelContext`: `activeNodeMask` / `activeEdgeMask` (built once in `useFilteredModel`) and
+`selectedMask` / `selectedEdgeMask`. Every panel **consumes** these to attenuate / outline marks;
+panel-private `controls` (log scale, top-N, bin size) touch no bitmap. **Mask-only:** filters never
+recompute metrics — the curve stays anchored to the full graph, the marks dim. The full contract
+(the two count-view exceptions, upstream-write policy, anti-patterns) is in `contract.md` at repo root.
 
 ## Design system
 
@@ -112,13 +113,16 @@ Utility classes in `assets/main.css` (Tailwind `@utility`):
 | `.type-chip` / `.type-chip--active` | Selectable rounded chip |
 | `.input-base` | Input/select base style |
 
-Always use these — don't inline equivalent `border-slate-200` + shadow stacks ad-hoc.
+Use these — don't inline equivalent `border-slate-200` + shadow stacks ad-hoc (data-encoding fills,
+e.g. heatmap cells, are the exception).
 
 ## Key conventions
 
-- **`useFetch` only** — never raw `fetch` + try/catch inside components or composables.
-- **Composables own side effects** — store resets, reactive fetches, etc. live in composables.
-- **`useD3Chart`** for D3 lifecycle (ResizeObserver + RAF + initial render).
-- **`useNodeTypeColors`** for node-type color mapping — never a local `d3.scaleOrdinal`.
+- **`useFetch` / `createGraphResource` only** — never raw `fetch` + try/catch in components or composables.
+- **Composables own side effects** — store resets, reactive fetches live in composables, not components.
+- **`useD3Chart`** for static-chart D3 lifecycle; **`useForceGraph`** for force-directed.
+- **Type colors are shared and effective-aware** — `useNodeTypeColors` / `useEdgeTypeColors`. Never a local `d3.scaleOrdinal` for types (same hue per type across all panels).
+- **Deterministic layout** — use `seededUnit(id)` from `shared.js` for jitter, never `Math.random()` in a render (it reshuffles on every repaint).
+- **Capped selection broadcasts** — `selection.replaceCapped(ids, cap)`, never `replace` + manual `.slice()` (overflow tracking drives the "+N more" caption).
 - **Lucide for all icons** — no SVG copy-paste, no emoji as affordance.
-- **`graph_id` is in-memory only** — the API registry resets on server restart; persisting it would produce stale references.
+- **`graphId` is in-memory only** — the API registry resets on server restart; persisting it would produce stale references.

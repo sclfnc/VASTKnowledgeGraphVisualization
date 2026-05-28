@@ -8,14 +8,13 @@ import { useCentrality } from '@/composables/useCentrality.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
-import { useFiltersStore } from '@/stores/filters.js'
 import { useSelectionStore } from '@/stores/selection.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
 import {
   COLOR_SCHEME, FORMATTERS, makeTooltip, showTip, hideTip,
   drawGrid, drawAxes, drawTypeLegend, spearman, svgFrame,
-  ATTENUATED_OPACITY,
+  ATTENUATED_OPACITY, seededUnit,
 } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlSwitch from './controls/ControlSwitch.vue'
@@ -34,8 +33,6 @@ const { data, status } = useCentrality(props.measure)
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { nodeType: effNodeType, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, data)
-const filters = useFiltersStore()
-const { hideIsolated } = storeToRefs(filters)
 const selection = useSelectionStore()
 const { ids: filterSelected } = storeToRefs(selection)
 const { activeNodeMask, isActive, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
@@ -70,7 +67,7 @@ const labelFor = computed(() => ({
 }[props.measure] ?? 'Centrality'))
 
 watch(
-  [data, status, controls, filterSelected, hideIsolated, () => props.widened, activeNodeMask],
+  [data, status, controls, filterSelected, () => props.widened, activeNodeMask],
   () => nextTick(renderChart),
   { deep: true },
 )
@@ -112,19 +109,19 @@ function renderGenericScatter() {
   const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
   const tooltip = makeTooltip(el)
 
-  let pts = allValues.value
-  // Captioned at bottom when nonzero.
-  const isolatedHidden = hideIsolated.value
-    ? pts.filter(r => r.degree === 0).length
-    : 0
-  if (hideIsolated.value) pts = pts.filter(r => r.degree > 0)
+  const pts = allValues.value
 
-  // Log scales additionally require value > 0; silently drop the rest.
+  // Log axes can't plot x=0 / y=0 — this is a rendering constraint of THIS view,
+  // not a global filter. The global filter never removes marks here; it attenuates
+  // them via activeNodeMask (isActive). So the only drop is the log-axis one, and
+  // its count is captioned as such (not as "isolated nodes", which conflated a
+  // math constraint with filters.hideIsolated).
   const useLogX = !!controls.value.xLog
   const useLogY = !!controls.value.yLog
   let visible = pts
   if (useLogX) visible = visible.filter(r => r.degree > 0)
   if (useLogY) visible = visible.filter(r => r.value > 0)
+  const logHidden = pts.length - visible.length
   if (!visible.length) return
 
   const xExtent = d3.extent(visible, d => d.degree)
@@ -212,7 +209,7 @@ function renderGenericScatter() {
   drawTypeLegend(svg, totalW, typesInData(), typeColor)
 
   const captions = []
-  if (isolatedHidden) captions.push(`${isolatedHidden} isolated nodes hidden`)
+  if (logHidden) captions.push(`${logHidden} node${logHidden === 1 ? '' : 's'} hidden (log axis)`)
   if (isEigenvector.value) {
     const excluded = data.value?.excluded_nodes ?? 0
     if (excluded > 0) captions.push(`${excluded} nodes outside LCC excluded`)
@@ -555,9 +552,10 @@ function renderClosenessViolins() {
     const cx = x + w / 2
 
     if (n < 5) {
-      // Sparse-type fallback: jittered strip plot. Jitter is computed once per
-      // record so the decorative dot and its transparent hit circle align.
-      const placed = records.map(d => ({ d, jx: cx + (Math.random() - 0.5) * w * 0.5 }))
+      // Sparse-type fallback: jittered strip plot. Jitter is seeded by node id
+      // (deterministic) so a re-render doesn't reshuffle the dots, and the
+      // decorative dot and its transparent hit circle stay aligned.
+      const placed = records.map(d => ({ d, jx: cx + (seededUnit(d.id) - 0.5) * w * 0.5 }))
       g.selectAll(null).data(placed).enter().append('circle')
         .attr('cx', p => p.jx)
         .attr('cy', p => yScale(p.d.value))

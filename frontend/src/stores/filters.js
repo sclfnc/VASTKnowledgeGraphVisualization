@@ -20,8 +20,6 @@ export const useFiltersStore = defineStore('filters', () => {
   const edgeTypes = ref([])
   const degree = ref(numeric([0, 0]))
   const weight = ref(numeric([0, 0]))
-  const attributes = ref({})  // legacy v1 — kept for backward compat, scheduled removal
-  const hops = ref(0)         // N-hop expansion around cross-panel selection; -1 means "all reachable"
   const hideIsolated = ref(false)
   const hideSelfLoops = ref(false)
   // Open landing point: written by Activity Timeline brush, read by future
@@ -49,13 +47,6 @@ export const useFiltersStore = defineStore('filters', () => {
       : [...(schema?.edge_types ?? [])]
     degree.value = numeric(schema?.degree_range)
     weight.value = numeric(schema?.weight_range)
-    attributes.value = Object.fromEntries(
-      (schema?.attributes ?? []).map(a => [
-        a.name,
-        a.kind === 'numeric' ? numeric(a.range) : []
-      ])
-    )
-    hops.value = 0
     hideIsolated.value = false
     hideSelfLoops.value = false
     temporalFilter.value = null
@@ -107,7 +98,7 @@ export const useFiltersStore = defineStore('filters', () => {
   }
 
   return {
-    nodeTypes, edgeTypes, degree, weight, attributes, hops,
+    nodeTypes, edgeTypes, degree, weight,
     hideIsolated, hideSelfLoops, temporalFilter, wccFilter,
     nodeAttrs, edgeAttrs,
     reset, setNodeAttr, setEdgeAttr, clearNodeAttrs, clearEdgeAttrs,

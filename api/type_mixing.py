@@ -24,7 +24,7 @@ import math
 
 import networkx as nx
 
-from schema import node_type
+from schema import node_type, edge_type
 
 
 def _simple_undirected_projection_all(G):
@@ -43,12 +43,12 @@ def _simple_undirected_projection_all(G):
     return H
 
 
-def _simple_undirected_projection_for_type(G, edge_type):
+def _simple_undirected_projection_for_type(G, target_type):
     H = nx.Graph()
     for n, d in G.nodes(data=True):
         H.add_node(n, **{k: v for k, v in d.items() if k == 'Node Type'})
     for u, v, d in G.edges(data=True):
-        if u != v and d.get('Edge Type', 'Unknown') == edge_type:
+        if u != v and edge_type(d) == target_type:
             H.add_edge(u, v)
     return H
 
@@ -70,7 +70,7 @@ def _assortativity_safe(H):
 
 def compute_type_mixing(G):
     node_types = sorted({node_type(G, n) for n in G.nodes()})
-    edge_types = sorted({d.get('Edge Type', 'Unknown') for *_, d in G.edges(data=True)})
+    edge_types = sorted({edge_type(d) for *_, d in G.edges(data=True)})
     directed = G.is_directed()
 
     # Assortativity on simple+undirected projection (full graph; frontend caveats under filter).

@@ -6,12 +6,12 @@ uniformly — backend stays stateless w.r.t. filters.
 """
 from collections import Counter
 
-from schema import node_type
+from schema import node_type, edge_type
 
 
 def compute_edge_flow(G):
     node_types = sorted({node_type(G, n) for n in G.nodes()})
-    edge_types = sorted({d.get('Edge Type', 'Unknown') for *_, d in G.edges(data=True)})
+    edge_types = sorted({edge_type(d) for *_, d in G.edges(data=True)})
     directed = G.is_directed()
 
     node_counts = Counter(node_type(G, n) for n in G.nodes())

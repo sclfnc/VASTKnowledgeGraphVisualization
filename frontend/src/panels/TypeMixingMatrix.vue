@@ -9,10 +9,9 @@ import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
-import { useFiltersStore } from '@/stores/filters.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, visibleSubset, svgFrame, FORMATTERS } from './shared.js'
+import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS, selectedTypesIn, idsOfTypesSoA } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 
@@ -30,11 +29,15 @@ const { data, loading, error } = useTypeMixing(toRef(props, 'graphId'))
 const { nodes: nodesSoA } = injectGraphNodes(toRef(props, 'graphId'))
 const { edges: edgesSoA } = injectGraphEdges(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
-const { nodeTypeAt, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
-const { activeEdgeMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
+const { nodeTypeAt, edgeTypeAt, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
+const { activeNodeMask, activeEdgeMask, selectedMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
-const filters = useFiltersStore()
 const { controls, updateControl } = usePanel(props, 'type_mixing', data)
+
+// Effective node types with ≥1 node in the current selection. A cell (t,u) is
+// outlined when t or u is in this set (cap-safe). Shared helper, same logic in EdgeFlow.
+const selectedNodeTypes = computed(() =>
+  selectedTypesIn(nodesSoA.value?.N ?? 0, selectedMask.value, nodeTypeAt))
 
 const matrixContainer = ref(null)
 const auxContainer = ref(null)
@@ -57,8 +60,26 @@ const NORM_OPTIONS = [
 // `nodeTypeList` returns the effective labels (auto-promoted) or raw types.
 const allNodeTypes = computed(() => nodeTypeList.value.length ? nodeTypeList.value : (data.value?.node_types || []))
 const allEdgeTypes = computed(() => data.value?.edge_types || [])
-const nodeTypes = computed(() => visibleSubset(filters.nodeTypes, allNodeTypes.value))
-const edgeTypes = computed(() => visibleSubset(filters.edgeTypes, allEdgeTypes.value))
+// Contract: visible rows/cols are derived from the global masks, not from the raw
+// filters.nodeTypes/edgeTypes chip arrays. A type is visible iff it has ≥1 element
+// surviving the mask — so degree/attr/wcc filters that empty a type drop its row,
+// not just the type chip group. Effective-type aware via nodeTypeAt/edgeTypeAt.
+const nodeTypes = computed(() => {
+  const soa = nodesSoA.value
+  const m = activeNodeMask.value
+  if (!soa || !m) return allNodeTypes.value
+  const present = new Set()
+  for (let i = 0; i < soa.N; i++) if (m.get(i)) present.add(nodeTypeAt(i))
+  return allNodeTypes.value.filter(t => present.has(t))
+})
+const edgeTypes = computed(() => {
+  const soa = edgesSoA.value
+  const m = activeEdgeMask.value
+  if (!soa || !m) return allEdgeTypes.value
+  const present = new Set()
+  for (let i = 0; i < soa.E; i++) if (m.get(i)) present.add(edgeTypeAt(i))
+  return allEdgeTypes.value.filter(t => present.has(t))
+})
 
 // Matrix is always recomputed client-side from edges SoA + activeEdgeMask:
 // no double codepath, edge mask (type/weight/selfLoop) propagates uniformly.
@@ -191,17 +212,20 @@ function renderMatrix() {
   }
   const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxVal || 1])
 
+  const selTypes = selectedNodeTypes.value
   for (const t of types) {
     for (const u of types) {
       const v = M?.[t]?.[u] || 0
       const raw = M_raw?.[t]?.[u] || 0
+      const sel = selTypes.has(t) || selTypes.has(u)
       g.append('rect')
         .attr('x', xScale(u))
         .attr('y', yScale(t))
         .attr('width', xScale.bandwidth())
         .attr('height', yScale.bandwidth())
         .attr('fill', colorScale(v))
-        .attr('stroke', '#fff')
+        .attr('stroke', sel ? '#0f172a' : '#fff')
+        .attr('stroke-width', sel ? 2 : 1)
         .style('cursor', 'pointer')
         .on('mouseover', (ev) => showTip(tooltip, ev, cellTooltip(t, u, raw, v)))
         .on('mousemove', (ev) => showTip(tooltip, ev, null))
@@ -284,17 +308,8 @@ function cellTooltip(src, dst, raw, normalized) {
 }
 
 function selectCell(src, dst) {
-  const soa = nodesSoA.value
-  if (!soa) return
-  const wanted = new Set([src, dst])
-  const out = []
-  for (let i = 0; i < soa.N; i++) {
-    if (wanted.has(nodeTypeAt(i))) {
-      out.push(soa.ids[i])
-      if (out.length >= SELECTION_CAP) break
-    }
-  }
-  selection.replace(out)
+  // All ids of the two effective types; replaceCapped applies the cap + tracks overflow.
+  selection.replaceCapped(idsOfTypesSoA(nodesSoA.value, [src, dst], nodeTypeAt), SELECTION_CAP)
 }
 
 // Aux per-edge-type r bars (widened mode).
@@ -357,7 +372,7 @@ function renderAux() {
 
 function renderAll() { renderMatrix(); renderAux() }
 
-watch([data, controls, () => props.widened, nodeTypes, edgeTypes, activeMatrix], () => nextTick(renderAll), { deep: true })
+watch([data, controls, () => props.widened, nodeTypes, edgeTypes, activeMatrix, selectedNodeTypes], () => nextTick(renderAll), { deep: true })
 
 useD3Chart([matrixContainer, auxContainer], renderAll)
 
@@ -437,6 +452,9 @@ const isFilteredEmpty = computed(() =>
           </p>
           <p v-else class="text-[10px] leading-tight text-muted px-1 text-center">
             Newman r computed on the full graph; matrix shows the currently visible type rows/columns.
+          </p>
+          <p v-if="selection.overflow > 0" class="text-[10px] italic text-amber-600 px-1 text-center">
+            Selection capped at {{ SELECTION_CAP }} — +{{ selection.overflow }} more not selected.
           </p>
         </div>
         <div v-if="widened" ref="auxContainer" class="chart-elev w-full min-w-0 h-full" style="position: relative;"></div>

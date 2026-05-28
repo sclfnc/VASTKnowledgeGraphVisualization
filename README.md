@@ -3,13 +3,15 @@
 > *Zoom into your graph.*
 
 A visual analytics prototype for structured exploration of knowledge graphs.
-**Zero-code, a-lot-knowledge:** load a graph, get the main metrics computed, visualised, and interactively explorable — no notebook, no `nx.degree_centrality(G)`, no boilerplate.
+**Zero-code, a-lot-knowledge:** load a graph, get the main metrics computed, visualised, and
+interactively explorable — no notebook, no `nx.degree_centrality(G)`, no boilerplate.
 
-Developed for an academic project on visual analytics for knowledge graphs (Course on Visual Analytics, VAST Challenge 2025 — Design Challenge).
+Developed for an academic project on visual analytics for knowledge graphs (Course on Visual
+Analytics, VAST Challenge 2025 — Design Challenge).
 
-**Status:** v0.4.1 — work in progress, less than a prototype.
+**Status:** v0.6.0 — work in progress.
 **Branch:** `api-integration`
-**Current focus:** the entire effort is on **Guide mode**. Graph mode is intentionally a placeholder for now.
+**Current focus:** the entire effort is on **Guide mode**. Graph mode is intentionally a placeholder.
 
 ---
 
@@ -17,38 +19,48 @@ Developed for an academic project on visual analytics for knowledge graphs (Cour
 
 Two audiences, one surface:
 
-- **Data scientists** approaching a new graph who want a structured first pass — degree distribution, centralities, components, assortativity, k-core, etc. — without writing any code. Each panel is a metric *photographed* on the loaded data and made interactive.
-- **Non-expert users** (the VAST Challenge target) who want to understand what those metrics mean, why they matter, and what a "good" or "anomalous" reading looks like — through theory drawers attached to every panel.
+- **Data scientists** approaching a new graph who want a structured first pass — degree distribution,
+  centralities, components, assortativity — without writing code. Each panel is a metric *photographed*
+  on the loaded data and made interactive.
+- **Non-expert users** (the VAST Challenge target) who want to understand what those metrics mean and
+  what a "normal" or "anomalous" reading looks like — through a theory drawer attached to every panel.
 
-The same wiki serves both: the data scientist reads the chart, the non-expert reads the explanation, and both can drill into the same focus modal.
+The data scientist reads the chart, the non-expert reads the explanation, both drill into the same
+focus modal.
 
 ---
 
 ## What it does today
 
-Telescope organises a panel registry. Currently implemented:
+A panel registry drives the Guide-mode grid. 13 panels implemented (registry stubs for ~20 more):
 
 | Section | Panel | Notes |
 |---|---|---|
-| Descriptive | **Degree Distribution** | PMF / CCDF, by-type breakdown, four theoretical fits (power-law, exponential, log-normal, Poisson) via the `powerlaw` package, IQR-based outlier highlight |
-| Descriptive | **Connected Components** | bubbles or bars view, WCC / SCC modes, range and rank filters, click-to-drill side-by-side breakdown by node type |
-| Descriptive | **Node / Edge Attribute Schema** | per-type attribute coverage matrix or attribute-first view, shared-attr highlight, coverage threshold filter |
+| Descriptive | **Degree Distribution** | PMF / CCDF, by-type breakdown, four fits (power-law, exponential, log-normal, Poisson) via `powerlaw`, IQR outlier highlight, plot-brush degree filter |
+| Descriptive | **Connected Components** | bubbles or bars, WCC / SCC modes, range & rank filters, click-to-drill breakdown by node type |
 | Centrality | **PageRank · Eigenvector · Betweenness · Closeness** | parametric `CentralityPanel` (rank-mass bars, decay-from-core boxplots, Lorenz + Gini, per-type violins, generic Deg-vs-Centrality scatter) |
-| Centrality | **Centrality Comparison** | 4×4 scatter matrix: mini-scatters in the lower triangle, correlation heat-cells in the upper |
-| Ego | **Ego Network** | k-hop subgraph around a selected node, direction Out/In/Both on directed graphs, breadcrumb navigation |
-| Ego | **Ego Comparison** | multi-ego (up to 4) union/intersection view with pie-wedge node encoding |
+| Centrality | **Centrality Comparison** | 4×4 scatter matrix: mini-scatters lower triangle, correlation heat-cells upper |
+| Local | **Ego Network** | k-hop subgraph around a node, direction Out/In/Both on directed graphs, breadcrumb navigation |
+| Local | **Ego Comparison** | multi-ego (up to 4) union/intersection with pie-wedge node encoding |
 | Mixing | **Type Mixing Matrix** | type × type heatmap, Newman assortativity, per-edge-type r bars on widen |
 | Mixing | **Edge Flow** | radial meta-graph: types on a circle, edge flows as colored arcs |
-| Temporal | **Activity Timeline · Nodes / Edges** | stacked-by-type bars over years, brush writes a scoped temporal filter (separate panel per scope) |
+| Temporal | **Activity Timeline · Nodes / Edges** | stacked-by-type bars over years, brush writes a scoped temporal filter (one panel per scope) |
 
-Stub entries (~20) live in `ALL_SPECS` as roadmap reference, filtered from the UI via `PANEL_SPECS = ALL_SPECS.filter(p => p.status !== 'stub')`.
+Each panel renders a chart in the grid and exposes theory text in the focus modal. Filtering lives in
+the left sidebar: a per-type attribute filter editor (`AttributeFilters`, node + edge modes) over
+type chips, degree/weight ranges, structural toggles, and per-attribute constraints (categorical,
+numeric, boolean, date, and free-text on high-cardinality identifiers). A schema endpoint inspects the
+loaded graph and drives conditional panels, the filter UI, and the structural badges (multigraph,
+bipartite, DAG, self-loops).
 
-Each panel renders a chart in the grid and exposes a theory drawer inside the focus modal — the drawer is meant for non-experts who want to understand the metric, the in-grid chart is for the data scientist scanning for signal.
+### How it all stays in sync
 
-A schema endpoint inspects the loaded graph and drives:
-- conditional panels (e.g. *Reciprocity* only for directed graphs, *Edge Weight* only when weighted, *Cross-type Matrix* only when heterogeneous),
-- dynamic filters (node/edge types, degree, weight, attributes — numeric / categorical / boolean),
-- the overview card with structural badges (multigraph, bipartite, DAG, self-loops).
+Every panel reacts to global filters and selection through **three shared bitmaps**
+(`activeNodeMask`, `activeEdgeMask`, `selectedMask`) built once in `useFilteredModel` /
+`usePanelContext`. **Mask-only semantics:** filters attenuate marks, they never recompute metrics — a
+power-law fit or a Gini curve stays anchored to the full graph while the marks dim. Per-panel
+Isolation (Lock) freezes a card on its current view. The full contract — what each store owns, the
+two documented count-view exceptions, the upstream-write policy — is in **[contract.md](contract.md)**.
 
 ---
 
@@ -57,8 +69,7 @@ A schema endpoint inspects the loaded graph and drives:
 | Area     | Tech                                                                                |
 | -------- | ----------------------------------------------------------------------------------- |
 | Frontend | Vue 3 · Vite · Pinia · Vue Router · Tailwind CSS v4 · D3 · Lucide · @vueform/slider |
-| Backend  | FastAPI · NetworkX · powerlaw (CSN distribution fits)                               |
-| Analysis | NetworkX · NetworKit · pandas · Jupyter                                             |
+| Backend  | FastAPI · NetworkX · NetworKit (centralities) · powerlaw (CSN distribution fits)    |
 
 ---
 
@@ -66,13 +77,14 @@ A schema endpoint inspects the loaded graph and drives:
 
 ```
 .
-├── api/              FastAPI server (graph registry, schema, dataset loader)
-├── frontend/         Vue 3 SPA — onboarding, header, Graph + Guide modes
+├── api/              FastAPI server (graph registry, schema, per-panel endpoints, centrality pipeline)
+├── frontend/         Vue 3 SPA — onboarding, sidebar, Graph + Guide modes
 ├── data/             Datasets (gitignored)
-├── docs/             Meeting notes, design rationale
-├── done.md           Progress log — updated after each session
-└── CLAUDE.md         Architecture + conventions reference
+├── contract.md       Cross-panel interaction contract (filters/selection bitmaps)
+└── README.md         This file
 ```
+
+`CLAUDE.md` and `report.md` (architecture/conventions reference and system manual) are kept local-only.
 
 ---
 
@@ -88,7 +100,13 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-The API exposes dataset endpoints (`POST /upload/`, `GET /datasets/`, `POST /datasets/load/{name}`), schema (`GET /schema/{graph_id}`), per-panel data endpoints (`/metrics/`, `/degree-fit/`, `/components/`, `/nodes/`, `/edges/`, `/ego/`, `/type-mixing/`, `/edge-flow/`, `/timeline/`), centrality with async precompute pipeline (`/centrality-status/`, `/centrality/spectral/`, `/centrality/betweenness/`, `/centrality/closeness/`), and `GET /health/`. Registry and result caches are in-memory — restarting the server clears them. See `CLAUDE.md` for full endpoint contracts.
+The API exposes dataset endpoints (`POST /upload/`, `GET /datasets/`, `POST /datasets/load/{name}`),
+schema (`GET /schema/{graph_id}`), per-panel data endpoints (`/metrics/`, `/degree-fit/`,
+`/components/`, `/nodes/`, `/edges/`, `/ego/`, `/type-mixing/`, `/edge-flow/`, `/timeline/`,
+`/attribute-index/`, `/effective-types/`, `/node-inspect/`, `/node-neighbors/`, `/edge-inspect/`),
+centrality with an async precompute pipeline (`/centrality-status/`, `/centrality/spectral/`,
+`/centrality/betweenness/`, `/centrality/closeness/`), and `GET /health/`. Registry and result caches
+are in-memory — restarting the server clears them.
 
 ### Frontend
 
@@ -102,57 +120,55 @@ Vite serves on `:5173` and proxies to the FastAPI host on `:8000`. Node `^20.19.
 
 ### Convenience
 
-A root-level `dev.sh` launches both processes in parallel and shuts them down together on `Ctrl+C`. It auto-activates `api/venv` if present.
+A root-level `dev.sh` launches both processes in parallel and shuts them down together on `Ctrl+C`.
+It auto-activates `api/venv` if present.
 
 ---
 
 ## Built-in datasets
 
-Four NetworkX datasets are exposed via `GET /datasets/`:
+Six datasets are exposed via `GET /datasets/`:
 
-- **karate** — Zachary's Karate Club
+- **karate** — Zachary's Karate Club (auto-promoted on `club`: Mr. Hi / Officer)
 - **les_miserables** — co-appearance graph
 - **florentine** — Florentine families
-- **davis** — Davis Southern Women (bipartite)
+- **davis** — Davis Southern Women (bipartite, auto-promoted on `bipartite`)
+- **email_eu_core** — Email Eu-Core (directed, real department node types)
+- **movielens_small** — MovieLens Small (larger, weighted, temporal)
 
-These are normalized at load time to expose `Node Type` / `Edge Type` keys (Mr. Hi / Officer for karate, Woman / Event for davis, etc.) so the schema endpoint works uniformly with the MC1 convention.
+The four NetworkX graphs are normalized at load time to expose `Node Type` / `Edge Type` keys so the
+schema endpoint works uniformly with the MC1 convention. Single-type graphs with one discriminator
+attribute (Karate's `club`, Davis' `bipartite`) flow through **auto-promotion**: that attribute
+becomes the effective type everywhere (colors, legends, chip group).
+
+---
+
+## Scope and limitations
+
+Design decisions, not oversights:
+
+- **Read-only.** No graph editing; the tool is for exploration and screening, not authoring.
+- **No persistence.** In-memory registry; a restart clears loaded graphs. Acceptable for a prototype with no auth and no multi-user requirement.
+- **Scale ceiling ~100K edges.** Frontend SoA + bitset and backend NetworKit handle MC1 and MovieLens comfortably; far larger graphs would need a binary wire format and server-side masking, deliberately out of scope.
+- **No layout breadth.** Telescope is not a Gephi replacement. It addresses the *exploratory* phase that precedes a full layout/community workflow — the moment when the analyst has not yet decided which metric matters.
+- **Mask-only everywhere but two count views.** A documented commitment (see [contract.md](contract.md)), not a limitation to apologize for.
+- **Multigraph parallel edges in Ego Comparison.** `mergeLayers` (`panels/layeredGraph.js`) groups edges by `(source, target, type)`, so parallel edges collapse to one visual record referencing the first `edge_id`. The single-ego view (`EgoNetworkPanel`) preserves every parallel edge.
 
 ---
 
 ## Coming next
 
-The current focus is the **filter & selection propagation refactor** (see `PROPAGATION.md` at repo root): wire all 10 panels to a global filter contract via a Uint32-packed bitset (`useFilteredModel` → `usePanelContext`), introduce per-panel Pin (lens-on-subset) and Isolation (full freeze), and surface a filter history with undo/redo arrows in `GraphContextBar`. Mask-only semantics: filters attenuate marks, never recompute metrics.
-
-After the propagation layer, the next batch of panels (stub → planned → implemented) covers triadic closure, k-core decomposition, assortativity, degree correlation, and community detection (Louvain / Label Propagation).
-
----
-
-## Known limitations
-
-### Node attribute filtering not implemented
-
-The `GraphContextBar` exposes filters for **node type** and **degree** only. Filtering by arbitrary node attributes (e.g. `department = 5` on Email-Eu-Core, `release_year > 2000` on MovieLens) is not supported.
-
-This is a deliberate deferral, not an oversight. Adding it requires:
-1. Extending `filters.js` with a dynamic `nodeAttrs` map (`attrName → {kind, value/range}`).
-2. Making `useFilteredModel` consume `useGraphNodes` (currently separate) and apply per-attribute predicates against the full node data — O(N) per active attribute filter.
-3. Designing a generic UI that handles numeric ranges, categorical multi-selects, and boolean toggles from a schema-driven spec.
-
-Node **type** filtering carries none of this overhead — it is already implemented via pre-built `typeMasks` bitsets in `useFilteredModel`, with O(1) lookup per node. The cost difference between the two is structural, not incremental.
-
-Attribute-level filtering belongs in a dedicated task once the panel audit and visual redesign are complete.
-
-### Multigraph parallel edges in EgoComparison
-
-`mergeLayers` in `panels/layeredGraph.js` groups edges by `(source, target, type)`, so parallel edges on multigraphs collapse to a single visual record and reference only the first `edge_id` encountered. Acceptable trade-off for the multi-ego comparison use case (where parallel-edge resolution is not the focus). Single-ego view (`EgoNetworkPanel`) preserves every parallel edge.
+The next batch of panels (stub → planned → implemented) covers triadic closure, k-core decomposition,
+assortativity, degree correlation, and community detection (Louvain / Label Propagation).
 
 ---
 
 ## Notes on MC1
 
-The reference dataset (`data/MC1_release/MC1_graph.json`) is a directed multigraph: 17,412 nodes / 37,857 edges, 16 weakly connected components, LCC covers >99%. Five node types (`Person`, `Song`, `RecordLabel`, `Album`, `MusicalGroup`), twelve edge types. Centralities are computed via NetworKit because pure NetworkX is too slow at this scale.
-
-Detailed metrics, anomalies, and the NetworKit ↔ NetworkX mapping pattern are in `CLAUDE.md`.
+The reference dataset (`data/MC1_release/MC1_graph.json`) is a directed multigraph: 17,412 nodes /
+37,857 edges, 16 weakly connected components, LCC covers >99%. Five node types (`Person`, `Song`,
+`RecordLabel`, `Album`, `MusicalGroup`), twelve edge types. Centralities are computed via NetworKit
+because pure NetworkX is too slow at this scale.
 
 ---
 

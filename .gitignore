@@ -1,5 +1,6 @@
 *.md
 !README.md
+!contract.md
 .*
 !.gitignore
 data/*
@@ -9,3 +10,4 @@ notebooks/*
 api/venv/
 api/__pycache__/
 api/graph_storage/
+docs/interactions/

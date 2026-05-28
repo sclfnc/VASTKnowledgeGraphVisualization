@@ -6,12 +6,13 @@ import { useEdgeFlow } from '@/composables/useEdgeFlow.js'
 import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { injectGraphEdges } from '@/composables/useGraphEdges.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useEdgeTypeColors } from '@/composables/useEdgeTypeColors.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip } from './shared.js'
+import { makeTooltip, showTip, hideTip, selectedTypesIn, idsOfTypesSoA } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlSwitch from './controls/ControlSwitch.vue'
 
@@ -30,8 +31,13 @@ const { nodes: nodesSoA } = injectGraphNodes(toRef(props, 'graphId'))
 const { edges: edgesSoA } = injectGraphEdges(toRef(props, 'graphId'))
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { nodeTypeAt, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
-const { activeEdgeMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
+const { activeEdgeMask, selectedMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
+
+// Effective node types with ≥1 node in the selection — used to outline the
+// meta-node and the arcs that touch a selected type. Cap-safe. Same helper as TypeMixing.
+const selectedNodeTypes = computed(() =>
+  selectedTypesIn(nodesSoA.value?.N ?? 0, selectedMask.value, nodeTypeAt))
 const { controls, updateControl } = usePanel(props, 'edge_flow', data)
 
 // Always recompute flows from edges SoA + activeEdgeMask: single codepath,
@@ -76,12 +82,8 @@ let tooltip = null
 const SELECTION_CAP = SELECTION_CAPS.edge_flow
 const MARGINS = { top: 20, right: 20, bottom: 20, left: 20 }
 
-const edgeColorScale = computed(() => {
-  const types = data.value?.edge_types ?? []
-  // Tableau10 + Set3 = ~22 distinct hues, well above MC1's 12 edge types.
-  const palette = d3.schemeTableau10.concat(d3.schemeSet3)
-  return d3.scaleOrdinal().domain(types).range(palette)
-})
+// Shared, effective-type-aware edge palette — same hue per edge type across all panels.
+const { color: edgeColor } = useEdgeTypeColors(toRef(props, 'schema'))
 
 const filteredFlows = computed(() => {
   const { srcTypeFilter, dstTypeFilter, edgeTypeFilter, topN, minFlow } = controls.value
@@ -194,11 +196,12 @@ function renderMain() {
         .attr('refX', 9).attr('refY', 0)
         .attr('markerWidth', 5).attr('markerHeight', 5)
         .attr('orient', 'auto')
-        .append('path').attr('d', 'M0,-4L8,0L0,4').attr('fill', edgeColorScale.value(et))
+        .append('path').attr('d', 'M0,-4L8,0L0,4').attr('fill', edgeColor(et))
     }
   }
 
   const arcsG = svg.append('g').attr('class', 'arcs')
+  const selTypes = selectedNodeTypes.value
 
   const widthDomainMax = controls.value.normalize
     ? 1
@@ -214,7 +217,7 @@ function renderMain() {
       const ratio = controls.value.normalize
         ? (f.count / (outgoingPerType.value.get(f.src_type) || 1))
         : f.count
-      const stroke = edgeColorScale.value(f.edge_type)
+      const stroke = edgeColor(f.edge_type)
       const markerId = `ef-arrow-${f.edge_type.replace(/[^A-Za-z0-9]/g, '_')}`
 
       let path
@@ -242,12 +245,13 @@ function renderMain() {
         path = `M${a.x},${a.y} Q${ctrlX},${ctrlY} ${b.x},${b.y}`
       }
 
+      const arcSelected = selTypes.has(f.src_type) || selTypes.has(f.dst_type)
       const arc = arcsG.append('path')
         .attr('d', path)
         .attr('fill', 'none')
         .attr('stroke', stroke)
         .attr('stroke-width', widthScale(ratio))
-        .attr('stroke-opacity', 0.7)
+        .attr('stroke-opacity', arcSelected ? 1 : 0.7)
         .style('cursor', 'pointer')
         .on('mouseover', (ev) => showTip(tooltip, ev, tooltipFlow(f)))
         .on('mousemove', (ev) => showTip(tooltip, ev, null))
@@ -268,11 +272,12 @@ function renderMain() {
       .on('mousemove', (ev) => showTip(tooltip, ev, null))
       .on('mouseout', () => hideTip(tooltip))
       .on('click', () => selectType(t))
+    const nodeSelected = selTypes.has(t)
     g.append('circle')
       .attr('r', p.r)
       .attr('fill', typeColor(t))
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 1.5)
+      .attr('stroke', nodeSelected ? '#0f172a' : '#fff')
+      .attr('stroke-width', nodeSelected ? 2.5 : 1.5)
       .attr('opacity', 0.9)
     g.append('text')
       .attr('text-anchor', 'middle')
@@ -298,7 +303,7 @@ function renderMain() {
       })
     row.append('rect')
       .attr('x', -10).attr('y', -5).attr('width', 8).attr('height', 8)
-      .attr('rx', 1).attr('fill', edgeColorScale.value(et))
+      .attr('rx', 1).attr('fill', edgeColor(et))
       .attr('opacity', controls.value.edgeTypeFilter === et || !controls.value.edgeTypeFilter ? 1 : 0.3)
     row.append('text')
       .attr('text-anchor', 'end').attr('x', -14).attr('y', 4)
@@ -323,25 +328,13 @@ function tooltipType(t) {
   return `<b>${t}</b><br>${count.toLocaleString()} nodes`
 }
 
-function _idsOfEffectiveTypes(wanted, cap) {
-  const soa = nodesSoA.value
-  if (!soa) return []
-  const want = wanted instanceof Set ? wanted : new Set(Array.isArray(wanted) ? wanted : [wanted])
-  const out = []
-  for (let i = 0; i < soa.N; i++) {
-    if (want.has(nodeTypeAt(i))) {
-      out.push(soa.ids[i])
-      if (out.length >= cap) break
-    }
-  }
-  return out
-}
-
+// All ids of the wanted effective types (uncapped); replaceCapped applies the
+// cap and tracks overflow for the "+N more not selected" caption.
 function selectFlow(f) {
-  selection.replace(_idsOfEffectiveTypes([f.src_type, f.dst_type], SELECTION_CAP))
+  selection.replaceCapped(idsOfTypesSoA(nodesSoA.value, [f.src_type, f.dst_type], nodeTypeAt), SELECTION_CAP)
 }
 function selectType(t) {
-  selection.replace(_idsOfEffectiveTypes(t, SELECTION_CAP))
+  selection.replaceCapped(idsOfTypesSoA(nodesSoA.value, t, nodeTypeAt), SELECTION_CAP)
 }
 
 // Flows table (drill-down on widen).
@@ -375,7 +368,7 @@ function renderTable() {
   rows.append('td').attr('class', 'px-2 py-1 border-b border-slate-100').text(f => f.src_type)
   rows.append('td').attr('class', 'px-2 py-1 border-b border-slate-100')
     .append('span')
-    .style('color', f => edgeColorScale.value(f.edge_type))
+    .style('color', f => edgeColor(f.edge_type))
     .text(f => f.edge_type)
   rows.append('td').attr('class', 'px-2 py-1 border-b border-slate-100').text(f => f.dst_type)
   rows.append('td').attr('class', 'px-2 py-1 border-b border-slate-100 text-right tabular-nums').text(f => f.count.toLocaleString())
@@ -385,7 +378,7 @@ function renderTable() {
 
 function renderAll() { renderMain(); renderTable() }
 
-watch([data, controls, () => props.widened, liveFlows], () => nextTick(renderAll), { deep: true })
+watch([data, controls, () => props.widened, liveFlows, selectedNodeTypes], () => nextTick(renderAll), { deep: true })
 
 useD3Chart([mainContainer, tableContainer], renderAll)
 
@@ -475,6 +468,9 @@ function toggleWiden() {
       <div ref="mainContainer" class="chart-elev w-full min-w-0" style="aspect-ratio: 4/3; position: relative;"></div>
       <div v-if="widened" ref="tableContainer" class="chart-elev w-full min-w-0 h-full p-2" style="position: relative;"></div>
     </div>
+    <p v-if="!loading && !error && selection.overflow > 0" class="text-[10px] italic text-amber-600 px-1">
+      Selection capped at {{ SELECTION_CAP }} — +{{ selection.overflow }} more not selected.
+    </p>
     <p v-if="!loading && !error" class="text-[10px] leading-tight text-muted px-1">
       <template v-if="edgeFilterActive">Flows recomputed on the active edge subset.</template>
       <template v-else>Flow counts on the full graph; deselect types via chips to refine.</template>

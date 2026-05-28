@@ -42,6 +42,7 @@ function toggleLock() {
   const snapshot = {
     filters: JSON.parse(JSON.stringify(filters.$state)),
     selection: [...selection.ids],
+    selectionEdges: [...selection.edgeIds],
     activeNodeMask: nMask.clone(),
     activeEdgeMask: eMask ? eMask.clone() : null,
   }

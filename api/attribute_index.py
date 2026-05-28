@@ -42,6 +42,7 @@ from schema import (
     STRUCTURAL_EDGE_FILTERS,
     _classify_attr,
     node_type,
+    edge_type,
 )
 from node_index import get_node_order
 from timeline import _sniff_strategy
@@ -226,7 +227,7 @@ def _build_edge_index(G, exclude=None):
             _u, _v, _key, data = record
         else:
             _u, _v, data = record
-        t = data.get('Edge Type', 'Unknown')
+        t = edge_type(data)
         by_type[t].append((edge_id, data))
     return _build_group(by_type, {
         'reserved': RESERVED_EDGE_ATTRS | STRUCTURAL_EDGE_FILTERS,

@@ -1,7 +1,7 @@
 """Per-request k-hop ego BFS with stratified sampling by type; hard limits protect against hubs."""
 import time
 
-from schema import node_type
+from schema import node_type, edge_type
 
 HARD_NODE_LIMIT = 2500
 HARD_TIMEOUT_MS = 1500
@@ -161,7 +161,7 @@ def ego_subgraph(G, node_id, k, soft_cap, direction='out', edge_index_map=None,
         entry = {
             'source': str(u),
             'target': str(v),
-            'type': data.get('Edge Type', 'Unknown'),
+            'type': edge_type(data),
         }
         if edge_index_map is not None:
             edge_id = edge_index_map.get(map_key)

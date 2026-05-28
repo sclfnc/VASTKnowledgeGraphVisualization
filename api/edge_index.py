@@ -16,6 +16,7 @@ import math
 
 from registry import Caches, load_graph
 from node_index import get_node_order
+from schema import edge_type
 
 
 def _build(G, node_order):
@@ -47,7 +48,7 @@ def _build(G, node_order):
             u, v, data = record
             map_key = (u, v)
 
-        et = data.get('Edge Type', 'Unknown')
+        et = edge_type(data)
         if et not in type_to_idx:
             type_to_idx[et] = len(edge_types_seen)
             edge_types_seen.append(et)

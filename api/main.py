@@ -37,8 +37,7 @@ from edge_index import get_edge_index, get_edge_index_map
 from effective_types import get_effective_types
 from ego import ego_subgraph, EgoTooLargeError, LRU_SIZE, SOFT_CAP_DEFAULT, VALID_DIRECTIONS
 from node_index import get_node_index
-from node_inspect import inspect_node, list_neighbors
-from edge_inspect import inspect_edge
+from inspectors import inspect_node, list_neighbors, inspect_edge
 from timeline import compute_timeline
 from type_mixing import compute_type_mixing
 
@@ -282,7 +281,7 @@ def get_timeline(graph_id: str, overrides: Optional[str] = None):
     try:
         G = load_graph(graph_id)
         parsed_overrides = json.loads(overrides) if overrides else None
-        result = compute_timeline(G, overrides=parsed_overrides)
+        result = compute_timeline(graph_id, G, overrides=parsed_overrides)
         sub[key] = result
         return JSONResponse(content=result)
     except HTTPException:

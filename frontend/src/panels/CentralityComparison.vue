@@ -7,6 +7,7 @@ import { useAllCentralities } from '@/composables/useAllCentralities.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
+import { useSelectionStore } from '@/stores/selection.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
 import { FORMATTERS, makeTooltip, showTip, hideTip, drawTypeLegend, pearson, spearman, svgFrame, ATTENUATED_OPACITY } from './shared.js'
@@ -25,7 +26,8 @@ const props = defineProps({
 const all = useAllCentralities()
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { nodeType: effNodeType } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
-const { activeNodeMask, isActive, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
+const { activeNodeMask, isActive, isSelected, selectedMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
+const selection = useSelectionStore()
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, null)
 const chartContainer = ref(null)
 
@@ -88,7 +90,7 @@ const corrs = computed(() => {
   return out
 })
 
-watch([matrix, corrs, controls, () => props.widened, activeNodeMask], () => nextTick(renderChart), { deep: true })
+watch([matrix, corrs, controls, () => props.widened, activeNodeMask, selectedMask], () => nextTick(renderChart), { deep: true })
 
 useD3Chart(chartContainer, renderChart)
 
@@ -158,9 +160,13 @@ function renderChart() {
         cellG.selectAll('circle').data(pts).join('circle')
           .attr('cx', d => xs(d[kCol]))
           .attr('cy', d => ys(d[kRow]))
-          .attr('r', 1.6)
+          .attr('r', d => isSelected(d.id) ? 2.6 : 1.6)
           .attr('fill', d => typeColor(effNodeType(d)))
+          .attr('stroke', d => isSelected(d.id) ? '#0f172a' : 'none')
+          .attr('stroke-width', d => isSelected(d.id) ? 0.8 : 0)
           .attr('opacity', d => isActive(d.id) ? 0.55 : ATTENUATED_OPACITY)
+          .style('cursor', 'pointer')
+          .on('click', (_, d) => selection.toggle(d.id))
           .on('mouseover', (ev, d) => showTip(tooltip, ev,
             `<strong>${d.id}</strong><br>${effNodeType(d)}<br>${MEASURE_LABELS[kCol]} ${FORMATTERS.exponential(d[kCol])}<br>${MEASURE_LABELS[kRow]} ${FORMATTERS.exponential(d[kRow])}`))
           .on('mousemove', (ev) => showTip(tooltip, ev, null))

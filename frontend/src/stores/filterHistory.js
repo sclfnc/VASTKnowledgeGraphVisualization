@@ -23,8 +23,6 @@ function snapshotFrom(f) {
     weight: { mode: f.weight.mode, value: [...f.weight.value] },
     hideIsolated: f.hideIsolated,
     hideSelfLoops: f.hideSelfLoops,
-    hops: f.hops,
-    attributes: deepClone(f.attributes),
     temporalFilter: f.temporalFilter
       ? { attr: f.temporalFilter.attr, scope: f.temporalFilter.scope ?? 'node', range: [...f.temporalFilter.range] }
       : null,
@@ -53,8 +51,6 @@ function restoreInto(f, snap, schema) {
   f.weight = { mode: snap.weight.mode, value: [...snap.weight.value] }
   f.hideIsolated = snap.hideIsolated
   f.hideSelfLoops = snap.hideSelfLoops
-  f.hops = snap.hops
-  f.attributes = deepClone(snap.attributes)
   f.temporalFilter = snap.temporalFilter
     ? { attr: snap.temporalFilter.attr, scope: snap.temporalFilter.scope ?? 'node', range: [...snap.temporalFilter.range] }
     : null
