@@ -14,7 +14,6 @@ import { injectSchema } from '../composables/useSchema.js'
 import { useFiltersStore } from '../stores/filters.js'
 import { useFilterHistoryStore } from '../stores/filterHistory.js'
 import { useSelectionStore } from '../stores/selection.js'
-import { usePinsStore } from '../stores/pins.js'
 import { useGraphStore } from '../stores/graph.js'
 import { useEffectiveType } from '../composables/useEffectiveType.js'
 
@@ -23,7 +22,6 @@ const { graphId } = storeToRefs(useGraphStore())
 const filters = useFiltersStore()
 const filterHistory = useFilterHistoryStore()
 const selection = useSelectionStore()
-const pins = usePinsStore()
 const { nodeTypeList, edgeTypeList } = useEffectiveType(graphId, schema)
 
 const effectiveNodeTypes = computed(() =>
@@ -129,7 +127,6 @@ function formatSpec(spec) {
 function resetAll() {
   filters.reset(schema.value)
   selection.clearAll()
-  pins.clearAll()
   filterHistory.clearAll()
   filterHistory.baseline()
 }

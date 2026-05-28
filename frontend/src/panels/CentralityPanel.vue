@@ -190,6 +190,13 @@ function renderGenericScatter() {
     .attr('stroke', d => ringSet.has(d.id) ? '#0f172a' : (selectedSet.has(d.id) ? '#0f172a' : 'none'))
     .attr('stroke-width', d => ringSet.has(d.id) || selectedSet.has(d.id) ? 1.5 : 0)
     .attr('opacity', d => isActive(d.id) ? 0.7 : ATTENUATED_OPACITY)
+    .style('pointer-events', 'none')
+  // Transparent hit layer so the small dots are comfortably clickable.
+  g.selectAll('circle.hit').data(visible).join('circle')
+    .attr('class', 'hit')
+    .attr('cx', d => xScale(d.degree))
+    .attr('cy', d => yScale(d.value))
+    .attr('r', 6).attr('fill', 'transparent')
     .style('cursor', 'pointer')
     .on('mouseover', (ev, d) => showTip(tooltip, ev,
       `<strong>${d.id}</strong><br>${effNodeType(d)}<br>deg ${d.degree} · ${labelFor.value} ${FORMATTERS.exponential(d.value)}`))
@@ -548,19 +555,26 @@ function renderClosenessViolins() {
     const cx = x + w / 2
 
     if (n < 5) {
-      // Sparse-type fallback: jittered strip plot.
-      g.selectAll(null).data(records).enter().append('circle')
-        .attr('cx', () => cx + (Math.random() - 0.5) * w * 0.5)
-        .attr('cy', d => yScale(d.value))
+      // Sparse-type fallback: jittered strip plot. Jitter is computed once per
+      // record so the decorative dot and its transparent hit circle align.
+      const placed = records.map(d => ({ d, jx: cx + (Math.random() - 0.5) * w * 0.5 }))
+      g.selectAll(null).data(placed).enter().append('circle')
+        .attr('cx', p => p.jx)
+        .attr('cy', p => yScale(p.d.value))
         .attr('r', 3.5)
         .attr('fill', typeColor(t))
-        .attr('opacity', d => isActive(d.id) ? 0.85 : ATTENUATED_OPACITY)
+        .attr('opacity', p => isActive(p.d.id) ? 0.85 : ATTENUATED_OPACITY)
+        .style('pointer-events', 'none')
+      g.selectAll(null).data(placed).enter().append('circle')
+        .attr('cx', p => p.jx)
+        .attr('cy', p => yScale(p.d.value))
+        .attr('r', 6).attr('fill', 'transparent')
         .style('cursor', 'pointer')
-        .on('mouseover', (ev, d) => showTip(tooltip, ev,
-          `<strong>${d.id}</strong><br>${t}<br>Closeness ${FORMATTERS.exponential(d.value)}`))
+        .on('mouseover', (ev, p) => showTip(tooltip, ev,
+          `<strong>${p.d.id}</strong><br>${t}<br>Closeness ${FORMATTERS.exponential(p.d.value)}`))
         .on('mousemove', (ev) => showTip(tooltip, ev, null))
         .on('mouseout', () => hideTip(tooltip))
-        .on('click', (_, d) => toggleSelected(d.id))
+        .on('click', (_, p) => toggleSelected(p.d.id))
       return
     }
 

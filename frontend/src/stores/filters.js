@@ -67,7 +67,7 @@ export const useFiltersStore = defineStore('filters', () => {
   // empty `nodeAttrs[type]` — once last attr is cleared, the type is removed).
   function setNodeAttr(type, attr, spec) {
     const next = { ...nodeAttrs.value }
-    const inner = { ...(next[type] ?? {}) }
+    const inner = { ...next[type] }
     if (spec === null || spec === undefined) {
       delete inner[attr]
     } else {
@@ -80,7 +80,7 @@ export const useFiltersStore = defineStore('filters', () => {
 
   function setEdgeAttr(type, attr, spec) {
     const next = { ...edgeAttrs.value }
-    const inner = { ...(next[type] ?? {}) }
+    const inner = { ...next[type] }
     if (spec === null || spec === undefined) {
       delete inner[attr]
     } else {

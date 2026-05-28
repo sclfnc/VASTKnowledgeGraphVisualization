@@ -10,7 +10,7 @@
 //
 // Action-oriented filter UI (active chips, undo/redo, reset) stays in
 // GraphHeaderStrip — this block is read-only state + metadata.
-import { computed, ref, toRef, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ChevronDown, ChevronRight, Hash, ArrowRightToLine, ArrowRightFromLine, ArrowRight, ArrowLeftRight, X } from 'lucide-vue-next'
 import { injectSchema } from '../composables/useSchema.js'

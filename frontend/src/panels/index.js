@@ -65,10 +65,8 @@ const ALL_SPECS = [
       yAxis:        { default: 'count' },
       scale:        { default: 'log' },
       byType:       { default: false },
-      showMean:     { default: false },
       showMedian:   { default: false },
       showIqr:      { default: false },
-      showOutliers: { default: true },
     },
   },
 

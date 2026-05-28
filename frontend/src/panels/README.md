@@ -128,7 +128,7 @@ Constants: `COLOR_SCHEME`, `MARGINS_DEFAULT`, `LAYER_PALETTE` (4-hue ordinal for
 
 Stats: `pearson(xs, ys)`, `spearman(xs, ys) = pearson(rank(xs), rank(ys))`, `summaryStats(seq)` (mean/median/IQR/whisker bounds).
 
-D3 helpers: `drawAxes(g, xScale, yScale, innerW, innerH, opts)`, `drawGrid(g, xScale, yScale, innerW, innerH)`, `drawLine(g, pts, xScale, yScale, color, dashArray, accessors)`, `drawTypeLegend(svg, totalW, types, typeColor)`, `applyOutlierEncoding(selection, isInlierFn, r)`.
+D3 helpers: `drawAxes(g, xScale, yScale, innerW, innerH, opts)`, `drawGrid(g, xScale, yScale, innerW, innerH)`, `drawLine(g, pts, xScale, yScale, color, dashArray, accessors)`, `drawTypeLegend(svg, totalW, types, typeColor)`.
 
 Tooltips: `makeTooltip(container)` (creates a div), `showTip(tooltip, event, html)`, `hideTip(tooltip)`, `attachTooltip(selection, htmlFn, tooltip)` (binds mouseover/mousemove/mouseout in one call), `attachVLineTooltip(g, x, h, html, tooltip)`.
 

@@ -67,12 +67,11 @@
 
 @layer utilities {
 
-  /* Card elevation: color-led, fully flat. Separation comes from the
-     white fill against the slate-100 page background — no border, no shadow.
-     Works only when --surface-recessed is dark enough to read distinct
-     from --elev-light without an outline. */
+  /* Card elevation: white fill + a thin slate-200 border, matching the sidebar
+     status/dataset cards so every card on the page shares one frame. */
   .card-elev {
     background: var(--elev-light);
+    border: 1px solid rgb(226 232 240); /* slate-200 */
   }
   /* Pill elevation: same vocabulary as card, slightly more contrast on the
      border so the small surface reads as anchored against the header.

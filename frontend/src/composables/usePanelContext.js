@@ -1,11 +1,10 @@
-// Per-panel facade composing filters + pin + isolation + selection.
-// Resolution: isolated → snapshot; pinned → activeNodeMask AND pin; else live.
+// Per-panel facade composing filters + isolation + selection.
+// Resolution: isolated → snapshot; else live.
 // Selection follows the live store unless isolated.
 import { computed, toRef } from 'vue'
 import { useFilteredModel } from './useFilteredModel.js'
 import { injectGraphNodes } from './useGraphNodes.js'
 import { useIsolationStore } from '@/stores/isolation.js'
-import { usePinsStore } from '@/stores/pins.js'
 import { useSelectionStore } from '@/stores/selection.js'
 import { Bitset } from '@/utils/bitset.js'
 
@@ -16,38 +15,24 @@ export function usePanelContextFromProps(props) {
 
 export function usePanelContext(panelId, graphId) {
   const isolation = useIsolationStore()
-  const pins = usePinsStore()
   const selection = useSelectionStore()
   const live = useFilteredModel(graphId)
   const { nodes } = injectGraphNodes(graphId)
 
   const isolated = computed(() => isolation.isFrozen(panelId))
-  const pinned = computed(() => pins.isPinned(panelId))
 
   const activeNodeMask = computed(() => {
     if (isolated.value) {
       return isolation.snapshotOf(panelId)?.activeNodeMask ?? null
     }
-    const base = live.activeNodeMask.value
-    if (!base) return null
-    const pin = pins.nodeMaskFor(panelId)
-    if (!pin) return base
-    const out = base.clone()
-    out.andInPlace(pin)
-    return out
+    return live.activeNodeMask.value
   })
 
   const activeEdgeMask = computed(() => {
     if (isolated.value) {
       return isolation.snapshotOf(panelId)?.activeEdgeMask ?? null
     }
-    const base = live.activeEdgeMask.value
-    if (!base) return null
-    const pin = pins.edgeMaskFor(panelId)
-    if (!pin) return base
-    const out = base.clone()
-    out.andInPlace(pin)
-    return out
+    return live.activeEdgeMask.value
   })
 
   const selectedIds = computed(() => {
@@ -107,6 +92,5 @@ export function usePanelContext(panelId, graphId) {
     isActive,
     isEdgeActive,
     isolated,
-    pinned,
   }
 }

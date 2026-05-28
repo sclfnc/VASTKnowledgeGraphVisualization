@@ -1,4 +1,4 @@
-// Reactive schema fetch + cross-graph teardown (filters/selection/pins/isolation/history).
+// Reactive schema fetch + cross-graph teardown (filters/selection/isolation/history).
 //
 // MUST be called once at app root (currently GuideView) — the load() watcher
 // triggers filter reset + filterHistory baseline + cross-graph teardown on
@@ -11,7 +11,6 @@ import { useGraphStore } from '../stores/graph.js'
 import { useFiltersStore } from '../stores/filters.js'
 import { useFilterHistoryStore } from '../stores/filterHistory.js'
 import { useSelectionStore } from '../stores/selection.js'
-import { usePinsStore } from '../stores/pins.js'
 import { useIsolationStore } from '../stores/isolation.js'
 
 const INJECT_KEY = 'schema'
@@ -21,7 +20,6 @@ export function useSchema() {
   const filters = useFiltersStore()
   const filterHistory = useFilterHistoryStore()
   const selection = useSelectionStore()
-  const pins = usePinsStore()
   const isolation = useIsolationStore()
   const { data: schema, error, run } = useFetch()
 
@@ -34,7 +32,6 @@ export function useSchema() {
   // Wipe state referencing the previous graph's indices/ids/N-sized Bitsets.
   function tearDownCrossGraphState() {
     selection.clearAll()
-    pins.clearAll()
     isolation.clearAll()
     filterHistory.clearAll()
   }
@@ -61,7 +58,7 @@ export function useSchema() {
       try {
         const r = await fetch(apiUrl(`/effective-types/${id}`))
         if (r.ok) effective = await r.json()
-      } catch (_e) {
+      } catch {
         // Fall back to raw types — propagation still works, just less coherent.
       }
       if (myGen !== loadGen) return
