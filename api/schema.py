@@ -12,16 +12,17 @@ _DATA_DIR = os.path.join(os.path.dirname(__file__), "graph_storage", "builtin_da
 
 
 def _load_email_eu_core():
-    """
-    Email-Eu-Core directed graph (SNAP / Stanford).
+    """Email-Eu-Core directed graph (SNAP, BSD): 1,005 nodes, 25,571 edges.
     Source : https://snap.stanford.edu/data/email-Eu-core.html
     Licence: BSD  (https://snap.stanford.edu/snap/license.html)
 
-    1,005 nodes (university researchers), 25,571 directed edges.
-    Node attribute  : department (42 research departments, integer 0-41).
-    Edge attribute  : none beyond direction.
-    Gap coverage    : directed graph, multi-node-type (42 departments).
+    Each node gets a `department` attr (0-41) and a `Node Type` of "Dept N"
+    so the rest of the pipeline can group/colour by department like any type.
+
+    Source files are fetched from SNAP on first use (see builtin_download).
     """
+    from builtin_download import ensure_dataset_files
+    ensure_dataset_files("email_eu_core")
     edges_file = os.path.join(_DATA_DIR, "email-eu-core.txt.gz")
     dept_file  = os.path.join(_DATA_DIR, "email-eu-core-dept.txt.gz")
 
@@ -55,18 +56,18 @@ def _load_email_eu_core():
 
 
 def _load_movielens_small():
-    """
-    MovieLens Latest Small bipartite graph (GroupLens / University of Minnesota).
+    """MovieLens Latest Small (GroupLens, CC BY 4.0): bipartite User→Movie graph.
     Source : https://grouplens.org/datasets/movielens/latest/
     Licence: CC BY 4.0  (https://files.grouplens.org/datasets/movielens/ml-latest-small-README.html)
 
-    610 User nodes + 9,742 Movie nodes = 10,352 nodes total.
-    100,836 directed edges (User --[Rated]--> Movie).
-    Node attributes : Movie nodes carry `release_year` (int) and `genres` (str).
-    Edge attributes : `weight` = rating (0.5–5.0), `timestamp` (ISO-8601 date string).
-    Gap coverage    : weighted edges, temporal attribute on nodes (release_year),
-                      bipartite graph, large-scale centrality stress test.
+    610 users + 9,742 movies, 100,836 `Rated` edges. Movies carry `release_year`
+    + `genres`; edges carry `weight` (the 0.5-5.0 rating) and `rating_date`.
+    The heaviest built-in — used to stress-test centrality at scale.
+
+    Source files are fetched from GroupLens on first use (see builtin_download).
     """
+    from builtin_download import ensure_dataset_files
+    ensure_dataset_files("movielens_small")
     ratings_file = os.path.join(_DATA_DIR, "ml-ratings.csv")
     movies_file  = os.path.join(_DATA_DIR, "ml-movies.csv")
 
