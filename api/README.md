@@ -5,7 +5,7 @@ NetworkX for graph ops, NetworKit for centralities (pure NetworkX is too slow at
 `powerlaw` for degree-distribution fits. **Read-only and stateless across restarts** — the registry
 is in-memory, so restarting the server clears every loaded graph.
 
-The frontend (a Vue 3 dashboard, separate folder) is the only client. This README is
+The frontend (a Vue 3 dashboard, in a separate repository) is the only client. This manual is
 self-contained: everything you need to read, run, and extend the backend is here.
 
 ## Design model (read this first)
@@ -103,7 +103,7 @@ feature module except `main.py`.
 
 | Module | Responsibility |
 |---|---|
-| `legacy_compat.py` | the 4 legacy endpoints from the shared API repo (`/summary/`, `/node-types/`, `/edge-types/`, `/set-default/`) + the `default_graph_id` constant, replicated verbatim so the upstream `tests/` suite passes. Isolated on purpose; deletable once the group migrates. |
+| `legacy_compat.py` | the 4 legacy endpoints from the shared API repo (`/summary/`, `/node-types/`, `/edge-types/`, `/set-default/`) + the `default_graph_id` constant, replicated verbatim so the upstream `tests/` suite passes. Isolated in a single file; the modular layer never depends on it. |
 
 ### Dependency shape
 
@@ -133,9 +133,7 @@ This app serves **two parallel contracts at once**, by design:
 - the **modular** contract — this backend's own 23 endpoints feeding the dashboard.
 
 They live side by side: the legacy layer is isolated in one file and the modular layer never depends
-on it. This is intentional so the PR is *additive* (nothing the upstream relied on is removed) and so
-the compatibility shim can be deleted in one step once the group adopts the modular API. When you
-touch the backend, be clear which contract you're working in — see *Extending* below.
+on it. When you touch the backend, be clear which contract you're working in — see *Extending* below.
 
 ### Where do I look to…
 
@@ -215,26 +213,25 @@ Per-graph results are cached in `registry.Caches` (`schema`, `degree_fit`, `comp
 
 ## Testing (upstream suite)
 
-The compatibility target is the upstream repo's `tests/` suite (`test_api.py`, `test_cors.py`,
-`test_default_graph_file.py`). It is **not vendored in this branch** — copy it in to run it:
+The compatibility target is the upstream `tests/` suite (`test_api.py`, `test_cors.py`,
+`test_default_graph_file.py`), vendored here unchanged alongside the modular suite (`test_modular.py`):
 
 ```bash
-pip install pytest httpx
-# drop the upstream tests/ folder into api/tests/, then:
+pip install pytest httpx   # or: ./dev.sh --dev (installs + runs the suite)
 python3 -m pytest tests/ -q
 ```
 
-Expected: **all API-contract tests pass** (upload, summary, node/edge types, set-default, health,
-CORS, full workflow). The only failure/skips come from `test_default_graph_file.py`, which is an
-**environmental** test, not part of the committed contract:
+Expected: **all API-contract tests pass** — upload, summary, node/edge types, set-default, health,
+CORS, full workflow.
 
-- It expects `graph_storage/default-graph.json` to already exist on disk — an **MC1-shaped** graph
-  (asserts node types like `Person` / `Song` / `RecordLabel`).
-- `graph_storage/` is gitignored (here *and* upstream), so the file is never committed. MC1 itself
-  is the VAST Challenge dataset and **is not redistributable**, so we deliberately do not ship it.
-- Result: `test_default_graph_file_exists` fails and the other 5 in that file `pytest.skip`
-  themselves — the same outcome you get in the upstream repo without the file. To run them green,
-  place an MC1-shaped graph at `graph_storage/default-graph.json` locally (not committed).
+The upstream test **files are vendored unchanged**. The only modification on this side is in
+`tests/conftest.py`: a session fixture (`seed_default_graph`) that writes a small synthetic
+`graph_storage/default-graph.json`. `test_default_graph_file.py` expects that file to exist on disk
+and asserts MC1 node/edge type names (`Person` / `Song` / `RecordLabel`, …) — upstream that file *is*
+the MC1 graph, which is the VAST Challenge dataset and **is not public / not redistributable**, so it
+is never committed (`graph_storage/` is gitignored here and upstream). The fixture stands in for it:
+the seeded graph uses MC1's type vocabulary so the assertions match, then is removed after the run. If
+a real `default-graph.json` is already present locally, the fixture leaves it untouched.
 
 ## Extending the backend without breaking compatibility
 

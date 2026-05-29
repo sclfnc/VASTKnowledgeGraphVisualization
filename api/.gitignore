@@ -64,12 +64,8 @@ graph_storage/
 # Sample data
 sample_graph.json
 
-# Upstream API reference (read-only, never committed)
+# Upstream API reference (read-only working copy, never committed)
 _upstream_ref/
 
-# Upstream test suite: their files run locally but are NOT committed here (they
-# live in the upstream repo). Our own modular tests + conftest ARE committed.
-tests/test_api.py
-tests/test_cors.py
-tests/test_default_graph_file.py
+# Stray upstream conftest variant — the merged conftest.py is committed instead.
 tests/conftest_upstream.py

@@ -16,6 +16,7 @@ Contains pytest fixtures that are shared across all test files:
 - `cleanup_graph_storage()`: Cleans up graph storage after tests
 - `load_builtin()`: Factory that loads a built-in dataset and yields its graph_id (cleans up files after)
 - `karate()` / `email_eu()` / `movielens()`: Convenience fixtures over `load_builtin` for the three datasets the modular suite exercises
+- `seed_default_graph()`: Session-scoped, autouse. Writes a synthetic `graph_storage/default-graph.json` (using MC1's type names) so the file-based tests below pass on a clean, offline checkout, then removes it. Leaves a real `default-graph.json` untouched if one is already present.
 
 ### `test_api.py`
 Main test suite covering:
@@ -35,9 +36,11 @@ Tests specifically for the `default-graph.json` file in `graph_storage`:
 - Tests node and edge type counting on the actual file
 - Tests file-based workflows
 
-> Note: `test_default_graph_file_exists` requires a `default-graph.json` (the non-redistributable
-> MC1 graph) that is not committed. It fails the same way on a clean clone; this is environmental,
-> not a regression.
+> Note: `test_api.py`, `test_cors.py` and `test_default_graph_file.py` are the upstream files,
+> **vendored here unchanged**. Upstream, `test_default_graph_file.py` runs against the
+> non-redistributable MC1 `default-graph.json`; here the `seed_default_graph` fixture writes a small
+> synthetic stand-in (with MC1's type names) so the suite is green on a clean checkout — see the
+> fixture note above. The test files themselves are not modified.
 
 ### `test_modular.py`
 Test suite for the modular endpoints added on top of the legacy contract (the per-panel data

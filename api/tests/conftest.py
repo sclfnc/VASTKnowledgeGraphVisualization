@@ -190,3 +190,49 @@ def email_eu(load_builtin):
 def movielens(load_builtin):
     """Bipartite, weighted edges + temporal attrs → exercises weight/timeline paths."""
     return load_builtin("movielens_small")
+
+
+# ---------------------------------------------------------------------------
+# Seed graph_storage for the file-based upstream tests.
+# test_default_graph_file.py expects a `default-graph.json` in graph_storage and,
+# in places, the MC1 node/edge types (Person/Song/RecordLabel, PerformerOf, …) —
+# upstream that file IS the (non-redistributable) MC1 graph. Here we synthesize a
+# tiny graph using those same type names under the default-graph name so the suite
+# is green on a clean, offline checkout. The names mirror MC1's vocabulary purely
+# so the type-name assertions match; the structure is otherwise minimal. If a real
+# default-graph.json is already present, we leave it untouched.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session", autouse=True)
+def seed_default_graph():
+    storage = Path(GRAPH_STORAGE_DIR)
+    storage.mkdir(exist_ok=True)
+    default_file = storage / "default-graph.json"
+
+    if default_file.exists():
+        # A real default graph is in place — don't overwrite or delete it.
+        yield
+        return
+
+    G = nx.DiGraph()
+    G.add_nodes_from([
+        (1, {'Node Type': 'Person'}),
+        (2, {'Node Type': 'Person'}),
+        (3, {'Node Type': 'Song'}),
+        (4, {'Node Type': 'RecordLabel'}),
+        (5, {'Node Type': 'Album'}),
+    ])
+    G.add_edges_from([
+        (1, 3, {'Edge Type': 'PerformerOf'}),
+        (2, 3, {'Edge Type': 'ComposerOf'}),
+        (3, 5, {'Edge Type': 'RecordedBy'}),
+        (5, 4, {'Edge Type': 'DistributedBy'}),
+        (4, 1, {'Edge Type': 'RecordedBy'}),
+    ])
+    with open(default_file, 'w') as f:
+        json.dump(nx.node_link_data(G), f)
+
+    yield
+
+    if default_file.exists():
+        default_file.unlink()

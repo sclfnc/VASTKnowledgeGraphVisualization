@@ -85,7 +85,8 @@ two documented count-view exceptions, the upstream-write policy — is in **[con
 ├── frontend/         Vue 3 SPA — onboarding, sidebar, Graph + Guide modes
 ├── data/             Datasets (gitignored)
 ├── contract.md       Cross-panel interaction contract (filters/selection bitmaps)
-└── README.md         This file
+├── README.md         Group project README (shared with the team repo)
+└── README.sclfnc.md  This file — the Telescope reference implementation
 ```
 
 `CLAUDE.md` and `report.md` (architecture/conventions reference and system manual) are kept local-only.
@@ -132,8 +133,8 @@ Two optional flags:
 
 - `--dev` — also installs the test-only deps (`pytest`, `httpx` from `api/requirements-dev.txt`) and
   runs the API suite before starting. Failures are reported per test (file, name, one-line error) but
-  are **non-blocking** — some are environmental (e.g. the default-graph test needs the
-  non-redistributable MC1 graph), so the servers start regardless.
+  are **non-blocking**, so the servers start regardless. The suite is green on a clean checkout: a
+  fixture seeds the file-based tests' graph (MC1 itself is not redistributable), see `api/README.md`.
 - `--log` — streams full `pip` / `npm` output during install (default is quiet). Useful because
   `networkit` builds from source and can otherwise look stalled.
 
