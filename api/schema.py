@@ -306,8 +306,9 @@ def _eligible_for_promotion(a, total_count, values_iter_factory):
 
 
 def _compute_auto_promotion(types_detail, total_count, values_iter_factory):
-    """Auto-promote rule (see FILTERS_V2.md §9.2): if there is a single global
-    type AND exactly one eligible attribute, return `{attr, kind}`; else None.
+    """Auto-promote rule: if a scope has a single global type AND exactly one
+    eligible discriminator attribute, return `{attr, kind}`; else None. The
+    frontend then treats that attr as the effective type (Karate's club, etc.).
     """
     if len(types_detail) != 1:
         return None

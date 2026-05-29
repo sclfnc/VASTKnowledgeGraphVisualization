@@ -1,35 +1,19 @@
-"""Per-(type, attribute) precomputed index for v2 filter pipeline.
+"""Precomputed filter index: for every (type, attribute) pair, the node/edge
+indices that hold each value. The frontend turns a filter into a fast bitset
+without scanning the whole graph.
 
-Shape (node side):
+Shape is `{ "<Type>": { "<attr>": <entry> } }` for both node and edge sides.
+The entry depends on the attribute kind:
 
-    {
-      "<NodeType>": {
-        "<attr>": {                      # 'kind' picked from schema
-          "kind": "categorical" | "numeric" | "boolean" | "temporal" | "text",
-          # categorical:
-          "values": { "<v>": [idx, ...], ... }, "missing": [idx, ...]
-          # numeric / temporal:
-          "sorted": [[idx, value], ...],            # ascending by value
-          "range": [min, max], "missing": [idx, ...]
-          # boolean:
-          "true": [idx, ...], "false": [idx, ...], "missing": [idx, ...]
-          # text (high-cardinality identifier — substring/equals search):
-          "values": [[idx, str], ...],    # NOT bucketed; client scans locally
-          "distinct": int, "sample": [str, ...], "missing": [idx, ...]
-        }, ...
-      }, ...
-    }
+    categorical:        values: { "<v>": [idx, ...] }, missing: [idx, ...]
+    numeric / temporal: sorted: [[idx, value], ...] (asc), range: [min, max], missing
+    boolean:            true: [idx], false: [idx], missing
+    text (identifiers): values: [[idx, str], ...] (client scans locally),
+                        distinct, sample, missing
 
-Edge side: identical shape, keyed by edge type.
-
-Node indices are in the canonical degree-desc ordering shared with `/nodes/`
-and `/edges/` (see `node_index.get_node_order`). Edge "indices" are
-positional in the canonical edge walk of `edge_index._build` — the i-th
-edge in the SoA arrays has `edge_id = i`, and that is the index used here.
-
-Built **eagerly** by `get_attribute_index(graph_id)` on first read. Schema
-is consulted to pick the right `kind` per attribute (it already infers
-categorical / numeric / boolean / temporal via `_classify_attr`).
+`idx` is the canonical position: degree-desc rank for nodes (same as `/nodes/`),
+edge_id for edges (same as `/edges/`). Built on first read; the attribute kind
+comes from `schema._classify_attr`.
 """
 import math
 from collections import defaultdict
@@ -168,7 +152,7 @@ def _build_group(items_by_type, idx_lookup):
                 pairs = _bucket_numeric(values_present)
                 if not pairs:
                     continue
-                # D-i: degenerate range (all values equal, e.g. Karate's weight=1).
+                # D-i: degenerate range (every value identical) → nothing to filter on.
                 if pairs[0][1] == pairs[-1][1]:
                     continue
                 per_attr[attr] = {'kind': 'numeric',
@@ -236,14 +220,9 @@ def _build_edge_index(G, exclude=None):
 
 
 def build(G, node_order):
-    """Public entry point. Returns {'node_attrs': {...}, 'edge_attrs': {...}}.
-
-    The auto-promoted attribute is **kept** in the index: it is the source of
-    truth for filtering by the promoted (now-effective) type. Display-side
-    stringification of the effective type lives separately in
-    `effective_types.py`; the two responsibilities are intentionally split so
-    the index is one source of truth for all filterable attributes.
-    """
+    """Returns {'node_attrs': {...}, 'edge_attrs': {...}}. The auto-promoted attr
+    is kept here (it's how you filter by the promoted type); its display label
+    is built separately in `effective_types.py`."""
     return {
         'node_attrs': _build_node_index(G, node_order),
         'edge_attrs': _build_edge_index(G),
