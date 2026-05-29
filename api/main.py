@@ -18,6 +18,7 @@ from schema import compute_schema, load_node_link, node_type, percentile
 from registry import (
     Caches,
     EMPTY_CENTRALITY_STATUS,
+    GRAPH_STORAGE_DIR,
     centrality_status,
     ego_subgraph_cache,
     graph_names,
@@ -26,6 +27,11 @@ from registry import (
     load_graph,
     register_graph,
 )
+# Upstream-compatibility layer (legacy endpoints + `default_graph_id`). Imported
+# so `from main import graph_registry, GRAPH_STORAGE_DIR, default_graph_id` works
+# for the upstream tests/conftest.py. See legacy_compat.py.
+import legacy_compat
+from legacy_compat import default_graph_id
 import precompute
 import datasets
 from centrality import centrality_response
@@ -52,10 +58,12 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS: vite picks a port in 5173–5180 range based on what's free; matching
-# all of them avoids breakage when an old dev process holds the canonical port.
+# CORS: the regex matches any localhost/127.0.0.1 port (vite picks a free one in
+# 5173–5180). `allow_origins` is also listed explicitly because the upstream CORS
+# test introspects `kwargs["allow_origins"]` — keep both in sync.
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=["http://localhost", "http://localhost:5173", "http://127.0.0.1", "http://127.0.0.1:8000"],
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
@@ -65,6 +73,10 @@ app.add_middleware(
 # Compress responses ≥ 1KB. /attribute-index/ on MovieLens is ~2.7MB raw and
 # compresses to a few hundred KB; same for /nodes/ on MC1 (~600KB).
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# Upstream-compatibility endpoints (/summary/, /node-types/, /edge-types/,
+# /set-default/). Kept in their own router so the modular backend stays clean.
+app.include_router(legacy_compat.router)
 
 
 @app.on_event("startup")
@@ -95,9 +107,17 @@ def cached_endpoint(cache_name: str, compute_fn):
     return run
 
 
+# --- Shared contract: /upload/ and /health/ satisfy both the upstream legacy
+# --- tests and the modular frontend. Keep their response shape upstream-compatible.
+
 @app.post("/upload/", summary="Upload a NetworkX graph JSON file")
 async def upload_graph(file: UploadFile = File(...), name: str = Form(None)):
-    """Async because UploadFile.read() is async."""
+    """Async because UploadFile.read() is async.
+
+    Shared contract: the upstream tests POST here and assert 201 + `graph_id` +
+    "Graph uploaded successfully". The modular extras (size cap, precompute
+    kickoff, name field) are additive and don't change that shape.
+    """
     if not (file.filename or '').lower().endswith('.json'):
         raise HTTPException(status_code=400, detail="File must have .json extension")
 
@@ -151,6 +171,10 @@ async def upload_graph(file: UploadFile = File(...), name: str = Form(None)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
+
+# --- Modular contract: this backend's own endpoints, one feature module each.
+# --- Stateless w.r.t. filters (full-graph payloads + stable indices). See Design
+# --- model in api/README.md.
 
 @app.get("/datasets/", summary="List available built-in datasets")
 def list_datasets():
@@ -459,4 +483,5 @@ def get_edge_inspect(graph_id: str, edge_id: int):
 
 @app.get("/health/", summary="Health check")
 def health():
-    return {"status": "ok"}
+    # Shared contract: shape matches the upstream API (status: "healthy", graph_count).
+    return {"status": "healthy", "graph_count": len(graph_registry)}

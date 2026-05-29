@@ -51,8 +51,20 @@ instance/
 # Local settings
 local_settings.py
 
-# Graph storage (temporary files)
+# Graph storage: uploads, regenerated built-in caches, and the built-in source
+# data are all transient. The source data (email-eu / MovieLens) is fetched on
+# first use from its official host by builtin_download.py — never committed.
 graph_storage/
 
 # Sample data
 sample_graph.json
+
+# Upstream API reference (read-only, never committed)
+_upstream_ref/
+
+# Upstream test suite: their files run locally but are NOT committed here (they
+# live in the upstream repo). Our own modular tests + conftest ARE committed.
+tests/test_api.py
+tests/test_cors.py
+tests/test_default_graph_file.py
+tests/conftest_upstream.py
