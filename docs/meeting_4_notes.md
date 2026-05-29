@@ -48,3 +48,28 @@ So, for example, for the described workflow, we would have something like the fo
 2. `http://localhost:5173/?EdgeType=RecordedBy`
 3. `http://localhost:5173/?EdgeType=RecordeBy&SourceType=RecordLabel`
 4. `http://localhost:5173/?EdgeType=RecordedBy&SourceType=RecordLabel&SelectedNode=17370`
+
+## Node-link diagram: further suggestion
+Francesco Secoli suggests the following for the node-link diagram visualization:
+
+I have a further observation/suggestion.
+
+> **Node-link diagram** [...] **Limitations**: to mitigate the hairball problem on large graphs, it was suggested to filter the visualization to the top *n* nodes by degree (*n* to be determined). This should be clearly communicated to the user.
+
+I'd suggest a **degree-range dual-handle slider**, always visible, supporting two use cases from a single control:
+
+1. drop the highest-degree nodes to reduce connectivity (hubs);
+2. raise the lower bound to cut low-degree noise.
+
+The default range should be, for example `[min_degree, t]`, with `t` the smallest degree threshold that keeps the node count <= 100 (computed from the degree-sorted sequence), so the first render is already de-hairballed.
+
+This replaces the fixed *n*: rather than picking a node count upfront, we derive the initial degree window and let the user widen the window up to the full graph if they want the hairball. The choice stays with the user; we just start from a readable state. A live caption like
+$$
+\begin{align*}
+  &\text{degree} \in [1, 42] \\
+  &42 \text{ of } 4242 \text{ nodes}
+\end{align*}
+$$
+keeps the cut explicit at every step.
+
+Library: [@vueform/slider](https://github.com/vueform/slider) (array `v-model` for the range).
