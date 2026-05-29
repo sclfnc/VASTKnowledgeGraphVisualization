@@ -118,8 +118,35 @@ def invalidate_caches(graph_id: str) -> None:
         _load_locks.pop(graph_id, None)
 
 
+def _prune_orphan_uploads() -> None:
+    """Delete uploaded graph files no longer referenced by the registry.
+
+    Uploads land as `<uuid>.json` and were never cleaned up — they piled up
+    indefinitely (each MC1 upload is ~6.5 MB). On every (re)registration we drop
+    the on-disk files whose graph_id is no longer in the registry. Built-ins
+    (`builtin_*.json`, rebuilt on load) and the source data folder
+    (`builtin_data/`) are left untouched. Failures are swallowed: cleanup must
+    never break a registration.
+    """
+    try:
+        for entry in os.scandir(GRAPH_STORAGE_DIR):
+            if not entry.is_file() or not entry.name.endswith('.json'):
+                continue
+            if entry.name.startswith('builtin_') or entry.name == 'default-graph.json':
+                continue
+            graph_id = entry.name[:-len('.json')]
+            if graph_id not in graph_registry:
+                try:
+                    os.remove(entry.path)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
 def register_graph(graph_id: str, file_path: str, name: str) -> None:
-    """Atomic registration: path + display name + cache wipe."""
+    """Atomic registration: path + display name + cache wipe + orphan cleanup."""
     graph_registry[graph_id] = file_path
     graph_names[graph_id] = name
     invalidate_caches(graph_id)
+    _prune_orphan_uploads()
