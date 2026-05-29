@@ -13,6 +13,10 @@ Analytics, VAST Challenge 2025 — Design Challenge).
 **Branch:** `api-integration`
 **Current focus:** the entire effort is on **Guide mode**. Graph mode is intentionally a placeholder.
 
+> **Collaboration model:** the design and implementation of this dashboard are the author's own — its architecture, interaction model (the bitmap-truth contract, mask-only propagation, the panel system), analytical goals, and the bulk of the code were conceived and written by the author. [Claude Code](https://claude.com/claude-code) was used on top of that existing, author-written codebase as an assistant for **refactoring, documentation, and translating already-formed ideas into code** — tightening structure, writing tests, and articulating decisions the author had already made. It did not originate the design and did not author the dashboard; it worked within a system that was already built. Every design decision, trade-off, and final acceptance is the author's.
+>
+> AI assistance is **pervasive across the codebase** and always interleaved with manual edits. The `Co-Authored-By` commit trailer marks only the subset of commits authored end-to-end by the assistant in a single pass, with no human edit in between — so the trailer is a partial, not exhaustive, record of AI involvement, never of authorship.
+
 ---
 
 ## Who it's for
