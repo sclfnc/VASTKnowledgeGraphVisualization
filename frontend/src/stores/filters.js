@@ -2,7 +2,7 @@
 // Numeric filters carry { mode: 'absolute' | 'percentile' | 'outliers', value }.
 // Categorical filters (node/edge type, attribute multi-select) carry an array of selected values.
 //
-// v2 (FILTERS_V2.md): per-type attribute filters live in `nodeAttrs` / `edgeAttrs`,
+// Per-type attribute filters live in `nodeAttrs` / `edgeAttrs`,
 // keyed by `{[type]: {[attrName]: AttrFilterSpec}}`. Type absent = unaffected.
 // AttrFilterSpec shapes:
 //   categorical → {kind:'categorical', values: string[]}     (Sets serialize poorly; use arrays in store)

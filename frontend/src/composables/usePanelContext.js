@@ -60,10 +60,10 @@ export function usePanelContext(panelId, graphId) {
     return m
   })
 
-  // Edge ids ARE the SoA edge index (the /edges/ canonical walk), so no idToIdx
-  // lookup is needed — set the bit directly. Sized to the node SoA's matching
-  // edge count is unknown here, so we size by the highest id + 1; consumers read
-  // via isEdgeSelected which guards out-of-range.
+  // An edge id IS its SoA index (the /edges/ canonical walk), so we set the bit
+  // directly — no idToIdx lookup. We don't know the total edge count here, so the
+  // mask is sized to the highest selected id + 1; isEdgeSelected guards reads past
+  // the end.
   const selectedEdgeMask = computed(() => {
     const ids = selectedEdgeIds.value
     if (!ids.length) return null

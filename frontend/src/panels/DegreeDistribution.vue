@@ -105,13 +105,11 @@ const fitVisibleMap = computed(() => fitActive.value ? { [fitActive.value]: true
 // Users can add/remove types via the picker in the drawer; the chip click
 // toggles membership. The set controls dots, median, IQR, and the chart legend.
 //
-// OPEN QUESTION (deferred 2026-05-27 — keep this comment in sync with
-// docs/interactions/panels/degree_distribution.md):
-//   `overlayTypes` is intentionally panel-local and does NOT mirror the global
-//   `filters.nodeTypes` chip group. Rationale: the user may want to focus the
-//   Per-type chart on 3 types out of 42 *without* removing the other 39 from
-//   the rest of the dashboard. Cost: two places to manage "show this type",
-//   with no signal between them. Revisit if real-user feedback shows confusion.
+// `overlayTypes` is intentionally panel-local and does NOT mirror the global
+// `filters.nodeTypes` chip group: the user may want to focus the per-type chart
+// on 3 types out of 42 without removing the other 39 from the rest of the
+// dashboard. Trade-off: two separate "show this type" controls, no signal between
+// them.
 const TOP_TYPES_DEFAULT = 6
 const overlayTypes = ref([])
 
@@ -517,7 +515,7 @@ function renderChart() {
     })
 
     // Per-type mode renders dots + axes + type legend only. Three overlays are
-    // intentionally suppressed (see docs/interactions/panels/degree_distribution.md):
+    // intentionally suppressed:
     //   - Aggregate fit curve: it's the FULL-graph fit; visualising it over
     //     per-type dots invites the wrong comparison ("which type follows the
     //     fit best?" — the fit isn't a per-type prediction).

@@ -10,7 +10,7 @@
 //   'node' → bitset size N (from useGraphNodes)
 //   'edge' → bitset size E (from useGraphEdges)
 //
-// Spec shapes (from FILTERS_V2.md §2.2):
+// Spec shapes:
 //   categorical: {kind:'categorical', values: Set<string> | string[]}
 //   numeric:     {kind:'numeric',     range: [lo, hi]}
 //   boolean:     {kind:'boolean',     value: true | false}
