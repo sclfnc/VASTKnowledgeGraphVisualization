@@ -1,0 +1,4 @@
+# Test-only dependencies. Installed by `./dev.sh --dev` on top of
+# requirements.txt; not needed to run the server.
+pytest
+httpx          # Starlette's TestClient transport

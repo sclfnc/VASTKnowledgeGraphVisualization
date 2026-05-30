@@ -1,5 +1,10 @@
 <script setup>
 import DashboardCard from '../components/DashboardCard.vue'
+// EXTENSION: branch between Graph (dashboard) and Guide (wiki) mode
+import { useGraphStore } from '../stores/graph.js'
+import GuideView from './GuideView.vue'
+
+const graphStore = useGraphStore()
 
 const cards = [
   {
@@ -31,14 +36,16 @@ const cards = [
     title: 'Temporal view (?)',
     subtitle: 'Temporal projection of data',
     content: 'Placeholder for a temporal view that shows the evolution of the knowledge graph over time, allowing users to see how entities and relationships have changed or developed.',
-  }
-
-
+  },
 ]
 </script>
 
 <template>
-  <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+  <!-- EXTENSION: Guide mode -->
+  <GuideView v-if="graphStore.mode === 'guide'" />
+
+  <!-- Graph mode: existing dashboard grid -->
+  <section v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
     <DashboardCard
       v-for="card in cards"
       :key="card.title"

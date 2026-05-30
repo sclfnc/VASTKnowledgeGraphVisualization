@@ -1,0 +1,15 @@
+*.md
+!README.md
+!contract.md
+!README.sclfnc.md
+.*
+!.gitignore
+data/*
+!data/download_github_zip.py
+!data/README.md
+notebooks/*
+_upstream_ref/
+api/venv/
+api/__pycache__/
+api/graph_storage/
+docs/interactions/

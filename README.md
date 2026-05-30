@@ -32,7 +32,9 @@ Any suitable knowledge-graph-like dataset may be used to motivate or illustrate 
 
 ## Repository Status
 
-At the moment, this repository is in an **initial setup stage** and primarily serves as a starting point for team collaboration. It will also serve as a central location to track the meetings and design decisions made during classes.
+This repository tracks the team's meetings and design decisions. A working reference implementation
+— a FastAPI backend plus a Vue 3 + D3 frontend ("Telescope") — is developed by [@sclfnc](https://github.com/sclfnc)
+on the `api-integration` branch; see [`README.sclfnc.md`](README.sclfnc.md) for its design and usage.
 
 
 ## Working Approach
@@ -70,6 +72,8 @@ To keep the project organized, contributors may follow these practices:
 ## Team
 
 This project is developed collaboratively by students of the **Course on Visual Analytics**.
+
+- Francesco Secoli — [@sclfnc](https://github.com/sclfnc) (reference implementation: backend + Telescope frontend)
 
 This section will be later expanded with the list of participants.
 

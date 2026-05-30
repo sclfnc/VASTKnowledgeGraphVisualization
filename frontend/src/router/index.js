@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import { useGraphStore } from '../stores/graph.js'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -9,15 +10,21 @@ const router = createRouter({
       name: 'home',
       component: HomeView,
     },
+    // EXTENSION: onboarding route — entry point when no graph is loaded
     {
-      path: '/about',
-      name: 'about',
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
-      component: () => import('../views/AboutView.vue'),
+      path: '/dataset',
+      name: 'dataset',
+      component: () => import('../views/DatasetView.vue'),
     },
   ],
+})
+
+// EXTENSION: redirect to /dataset if no graph is loaded yet
+router.beforeEach((to) => {
+  if (to.name === 'home') {
+    const store = useGraphStore()
+    if (!store.graphId) return { name: 'dataset' }
+  }
 })
 
 export default router
