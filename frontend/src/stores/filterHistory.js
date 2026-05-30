@@ -26,6 +26,8 @@ function snapshotFrom(f) {
     temporalFilter: f.temporalFilter
       ? { attr: f.temporalFilter.attr, scope: f.temporalFilter.scope ?? 'node', range: [...f.temporalFilter.range] }
       : null,
+    // Scoped component filter { scope, ids } | legacy array | null — JSON-safe.
+    wccFilter: deepClone(f.wccFilter ?? null),
     nodeAttrs: deepClone(f.nodeAttrs ?? {}),
     edgeAttrs: deepClone(f.edgeAttrs ?? {}),
   }
@@ -54,6 +56,10 @@ function restoreInto(f, snap, schema) {
   f.temporalFilter = snap.temporalFilter
     ? { attr: snap.temporalFilter.attr, scope: snap.temporalFilter.scope ?? 'node', range: [...snap.temporalFilter.range] }
     : null
+  // Component filter has no schema-derived validity to intersect (ids are
+  // numeric, scope-tagged); restore verbatim. Older snapshots without the key
+  // restore as null (filter cleared), which is the safe default.
+  f.wccFilter = deepClone(snap.wccFilter ?? null)
   f.nodeAttrs = _restoreAttrs(snap.nodeAttrs, validNT)
   f.edgeAttrs = _restoreAttrs(snap.edgeAttrs, validET)
 }

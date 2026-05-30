@@ -1,6 +1,8 @@
 <script setup>
 import { ref, watch, toRef, computed, nextTick } from 'vue'
 import * as d3 from 'd3'
+import Slider from '@vueform/slider'
+import '@vueform/slider/themes/default.css'
 import { useComponents } from '@/composables/useComponents.js'
 import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
@@ -192,6 +194,19 @@ function activeByTypeOf(comp) {
 const componentCount = computed(() => activeSummary.value?.count ?? 0)
 const filterAvailable = computed(() => componentCount.value > 1)
 
+// Single-component graph (typically a connected graph: one WCC covering ~100%):
+// a lone bubble/bar carries no comparative information. We swap the chart for an
+// explanatory empty-state instead. `null` until data loads so we don't flash it.
+const singleComponent = computed(() => {
+  const s = activeSummary.value
+  if (!s || s.count !== 1) return null
+  const comp = s.components?.[0]
+  if (!comp) return null
+  const total = props.schema?.nodes ?? comp.size
+  const pct = total ? (comp.size / total) * 100 : 100
+  return { size: comp.size, total, pct }
+})
+
 // All components for the active mode, always drawn (mask-only contract: the
 // rank filter doesn't hide marks locally — it writes filters.wccFilter, and
 // components whose nodes fall outside the resulting mask attenuate to 0-active).
@@ -205,24 +220,38 @@ const distinctSizesDesc = computed(() => {
   return [...new Set(comps.map(c => c.size))].sort((a, b) => b - a)
 })
 
-// Translate the rank top/bottom controls into the explicit component-id list
-// the wccFilter store slot expects. Top N = components whose size is among the
-// N largest distinct sizes; Bottom N = among the N smallest. Empty → null.
-//
-// TODO (future): make rank filtering work in SCC mode too. Today the global
-// filter has a single `filters.wccFilter` slot that `useFilteredModel` always
-// resolves against `soa.wccId`, so writing SCC ids there would be misapplied
-// as WCC ids. Doing it properly means extending the store to a scoped filter
-// (`{ mode: 'wcc'|'scc', ids }`) and teaching `useFilteredModel`,
-// `useFilterShortcuts`, `filterHistory` and the header chip to honour the
-// scope. Until then the rank UI is WCC-only (SCC shows an explanatory note).
+// Number of distinct size groups — the rank axis runs 1..rankCount (rank 1 =
+// largest group). Ties share a rank: all 200 singletons sit at the same rank.
+const rankCount = computed(() => distinctSizesDesc.value.length)
+
+// The active size-rank window, clamped to [1, rankCount]. Defaults to the full
+// span (whole range = no narrowing) when the control is null.
+const rankRange = computed(() => {
+  const r = controls.value.rankRange
+  const n = rankCount.value
+  if (!Array.isArray(r) || n === 0) return [1, n]
+  const lo = Math.max(1, Math.min(n, r[0]))
+  const hi = Math.max(lo, Math.min(n, r[1]))
+  return [lo, hi]
+})
+
+// A rank window narrows iff it's not the full [1, rankCount] span.
+const filterActive = computed(() => {
+  const [lo, hi] = rankRange.value
+  return rankCount.value > 0 && (lo > 1 || hi < rankCount.value)
+})
+
+// Translate the size-rank window into the explicit component-id list the scoped
+// component-filter slot expects. Ranks are 1-based over distinct sizes desc, so
+// [loRank, hiRank] keeps every component whose size sits in that rank band.
+// Returns null when the window spans everything (no narrowing). applyRankFilter
+// tags the ids with activeMode (wcc/scc) so useFilteredModel resolves them
+// against the matching membership array — rank works in both modes.
 function rankToComponentIds() {
-  const n = controls.value.rankN
-  if (n == null) return null
+  if (!filterActive.value) return null
   const sizes = distinctSizesDesc.value
-  const keepSizes = controls.value.rankMode === 'bottom'
-    ? new Set(sizes.slice(Math.max(0, sizes.length - n)))
-    : new Set(sizes.slice(0, n))
+  const [lo, hi] = rankRange.value
+  const keepSizes = new Set(sizes.slice(lo - 1, hi))  // ranks are 1-based
   const ids = []
   for (const c of displayedComponents.value) {
     if (keepSizes.has(c.size)) ids.push(c.id)
@@ -238,29 +267,37 @@ const shownCount = computed(() => {
   return { shown: ids == null ? total : ids.length, total }
 })
 
-// Push the current rank selection into the global filter. Called on every rank
-// change so "see fewer components here" == "filter the whole dashboard".
+// Plain-language summary of the active window: rank span + node + component
+// totals, so the slider's meaning is explicit ("#1–#3 largest · 3 groups,
+// 1,247 nodes, 5 components").
+const rankSummary = computed(() => {
+  const [lo, hi] = rankRange.value
+  const ids = rankToComponentIds()
+  const comps = displayedComponents.value
+  const kept = ids == null ? comps : comps.filter(c => ids.includes(c.id))
+  const nodes = kept.reduce((s, c) => s + c.size, 0)
+  const groups = hi - lo + 1
+  return { lo, hi, groups, nodes, components: kept.length }
+})
+
+// Push the current rank window into the global filter. Called on every change so
+// "see fewer components here" == "filter the whole dashboard". The scope tags
+// which membership array the mask resolves against (WCC vs SCC ids).
 function applyRankFilter() {
   const ids = rankToComponentIds()
   if (ids == null) clearWccFilter()
-  else filters.wccFilter = [...new Set(ids)].sort((a, b) => a - b)
+  else filters.wccFilter = { scope: activeMode.value, ids: [...new Set(ids)].sort((a, b) => a - b) }
 }
 
-function setRankMode(mode) {
-  updateControl('rankMode', mode)
-  applyRankFilter()
-}
-function setRankN(value) {
-  updateControl('rankN', value)
+function setRankRange(value) {
+  updateControl('rankRange', Array.isArray(value) ? [value[0], value[1]] : null)
   applyRankFilter()
 }
 
 function clearFilter() {
-  updateControl('rankN', null)
+  updateControl('rankRange', null)
   clearWccFilter()
 }
-
-const filterActive = computed(() => controls.value.rankN != null)
 
 
 const selectedComponent = computed(() => {
@@ -278,11 +315,12 @@ const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded
 function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 
 const VIEW_OPTIONS = [{ k: 'bubbles', label: 'Bubbles' }, { k: 'bars', label: 'Bars' }]
-const RANK_MODE_OPTIONS = [{ k: 'top', label: 'Top' }, { k: 'bottom', label: 'Bottom' }]
-// SCC option reflects graph directedness.
+// SCC is only meaningful on directed graphs. On an undirected graph WCC ≡ SCC,
+// so we drop the toggle entirely (a disabled pill invites a dead click) and show
+// a one-line note in its place — WCC is the only partitioning that applies.
 const modeOptions = computed(() => [
   { k: 'wcc', label: 'WCC' },
-  { k: 'scc', label: 'SCC', disabled: !sccAvailable.value, title: sccAvailable.value ? '' : 'SCC requires a directed graph' },
+  { k: 'scc', label: 'SCC' },
 ])
 
 // Open the LCC's by-type breakdown from a link in the theory text. Selecting
@@ -302,12 +340,12 @@ function theorySetControl(field, value) {
 }
 
 // Mode switch (WCC↔SCC): component ids are not comparable across the two
-// partitionings, so reset the selection and any rank filter to avoid a stale
-// wccFilter pointing at ids from the other mode.
+// partitionings, so reset the selection and any rank window to avoid a stale
+// filter pointing at ids from the other mode.
 watch(() => activeMode.value, () => {
   selectedId.value = null
-  if (controls.value.rankN != null) {
-    updateControl('rankN', null)
+  if (controls.value.rankRange != null) {
+    updateControl('rankRange', null)
     clearWccFilter()
   }
 })
@@ -425,7 +463,7 @@ function renderBubbles(container, totalW, totalH, comps) {
     .attr('transform', d => `translate(${d.x},${d.y})`)
     .style('cursor', 'pointer')
     .on('click', (_, d) => clickComponent(d.data))
-    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d.data.id) })
+    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d.data.id, activeMode.value) })
     .on('mouseover', (ev, d) => showTip(tooltip, ev, tooltipHtml(d.data, totalNodes)))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
@@ -522,7 +560,7 @@ function renderBars(container, totalW, totalH, comps) {
     .attr('opacity', d => markOpacity(d))
     .style('cursor', 'pointer')
     .on('click', (_, d) => clickComponent(d))
-    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d.id) })
+    .on('dblclick', (ev, d) => { ev.stopPropagation(); filterToComponent(d.id, activeMode.value) })
     .on('mouseover', (ev, d) => showTip(tooltip, ev, tooltipHtml(d, totalNodes)))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
@@ -638,7 +676,13 @@ function renderDrill(container = drillContainer.value) {
         </ControlSection>
 
         <ControlSection title="Type">
-          <ControlToggleGroup :model-value="controls.mode" :options="modeOptions" @update:model-value="updateControl('mode', $event)" />
+          <ControlToggleGroup
+            v-if="sccAvailable"
+            :model-value="controls.mode" :options="modeOptions"
+            @update:model-value="updateControl('mode', $event)" />
+          <p v-else class="text-[10px] leading-tight text-muted px-1">
+            The graph is undirected, so only <strong>weakly-connected components</strong> apply (SCC ≡ WCC).
+          </p>
         </ControlSection>
 
         <ControlSection v-if="filterAvailable" title="Filter by rank" :col-span="2">
@@ -655,31 +699,47 @@ function renderDrill(container = drillContainer.value) {
             </div>
           </template>
 
-          <!-- Rank filter writes the global WCC filter, so it's only offered in
-               WCC mode. In SCC we explain why instead of showing inert inputs. -->
-          <div v-if="activeMode === 'wcc'" class="flex flex-col gap-1.5 px-1">
-            <p class="text-[10px] leading-tight text-muted">
-              The graph has <strong>{{ distinctSizesDesc.length }}</strong> distinct WCC size{{ distinctSizesDesc.length === 1 ? '' : 's' }}.
-              Considering ties as one group, show only:
-            </p>
-            <div class="flex items-center gap-2 text-[10px] text-secondary">
-              <div class="w-20 shrink-0">
-                <ControlToggleGroup :model-value="controls.rankMode" :options="RANK_MODE_OPTIONS" @update:model-value="setRankMode($event)" />
+          <!-- Size-rank window. Dual-handle slider over the distinct size groups
+               (rank 1 = largest), styled like the degree filter: two editable
+               number inputs flanking the slider. Writes the scoped global
+               component filter ({ scope, ids }), so it works in both WCC and SCC
+               mode — the ids resolve against the matching membership array. -->
+          <div class="flex flex-col gap-1.5 px-1">
+            <div class="flex items-center gap-1.5">
+              <input
+                type="number" :min="1" :max="rankCount"
+                :value="rankRange[0]"
+                class="input-base no-spin w-9 px-0.5 py-0 text-[10px] leading-tight tabular-nums text-center"
+                @change="setRankRange([Math.max(1, Number($event.target.value)), rankRange[1]])"
+              />
+              <div class="flex-1 px-1">
+                <Slider
+                  :model-value="rankRange"
+                  :min="1" :max="Math.max(1, rankCount)" :step="1"
+                  :tooltips="false"
+                  @update="setRankRange($event)"
+                />
               </div>
               <input
-                type="number" :min="1" :max="distinctSizesDesc.length"
-                placeholder="–"
-                :value="controls.rankN ?? ''"
-                class="input-base no-spin w-9 px-1 py-0.5 text-right tabular-nums"
-                @input="setRankN($event.target.value === '' ? null : Math.max(1, Number($event.target.value)))"
+                type="number" :min="1" :max="rankCount"
+                :value="rankRange[1]"
+                class="input-base no-spin w-9 px-0.5 py-0 text-[10px] leading-tight tabular-nums text-center"
+                @change="setRankRange([rankRange[0], Math.min(rankCount, Number($event.target.value))])"
               />
-              <span class="text-muted">size{{ controls.rankN === 1 ? '' : 's' }}</span>
             </div>
+            <!-- Plain-language readout: which ranks, how many groups / nodes /
+                 components survive. Makes the slider's meaning explicit. -->
+            <p class="text-[10px] leading-tight" :class="filterActive ? 'text-sky-700' : 'text-muted'">
+              <template v-if="rankSummary.lo === rankSummary.hi">
+                Keeping the <strong>#{{ rankSummary.lo }}</strong> {{ rankSummary.lo === 1 ? 'largest' : (rankSummary.lo === rankCount ? 'smallest' : '') }} {{ activeMode.toUpperCase() }} size group
+              </template>
+              <template v-else>
+                Keeping {{ activeMode.toUpperCase() }} size ranks <strong>#{{ rankSummary.lo }}–#{{ rankSummary.hi }}</strong> ({{ rankSummary.lo === 1 ? 'largest' : 'rank ' + rankSummary.lo }} → {{ rankSummary.hi === rankCount ? 'smallest' : 'rank ' + rankSummary.hi }})
+              </template>
+              · {{ rankSummary.components.toLocaleString() }} component{{ rankSummary.components === 1 ? '' : 's' }}, {{ FORMATTERS.integer(rankSummary.nodes) }} nodes.
+              <span class="text-muted">Ties share a rank.</span>
+            </p>
           </div>
-
-          <p v-else class="text-[10px] leading-tight text-muted px-1">
-            Rank filtering is available in WCC mode — the global filter operates on weakly-connected components. Switch to WCC to filter by size.
-          </p>
         </ControlSection>
       </div>
     </Teleport>
@@ -721,7 +781,7 @@ function renderDrill(container = drillContainer.value) {
         <section v-if="filterAvailable" class="flex flex-col gap-2">
           <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Filtering</h3>
           <p>
-            The rank filter keeps only the components in the largest (<strong>Top</strong>) or smallest (<strong>Bottom</strong>) size groups, counting ties as one group. It's a global filter — those nodes are hidden across the whole dashboard, not just here.
+            The rank slider keeps a window of <strong>size ranks</strong>: rank #1 is the largest component, and components of equal size share one rank. Drag the two handles to keep a band — <strong>#1–#3</strong> for the three largest, the right end alone for the smallest. It's a global filter — those nodes are hidden across the whole dashboard, not just here.
           </p>
         </section>
 
@@ -741,7 +801,25 @@ function renderDrill(container = drillContainer.value) {
       ← Back to components
     </button>
 
-    <div :class="widened && selectedComponent ? 'grid grid-cols-2 gap-6' : ''">
+    <!-- Single-component graph: one bubble carries no comparison, so we explain
+         the graph is connected instead of drawing a lone mark. -->
+    <div
+      v-if="!loading && !error && singleComponent"
+      class="chart-elev flex w-full flex-col items-center justify-center gap-2 px-6 text-center"
+      style="aspect-ratio: 4/3;"
+    >
+      <p class="text-sm font-medium text-primary">
+        The graph is {{ singleComponent.pct >= 99.95 ? 'connected' : 'essentially connected' }}.
+      </p>
+      <p class="text-xs text-secondary">
+        A single {{ activeMode.toUpperCase() }} holds all
+        <strong>{{ FORMATTERS.integer(singleComponent.size) }}</strong> nodes
+        ({{ singleComponent.pct < 0.1 ? '<0.1' : singleComponent.pct.toFixed(1) }}%).
+        There is no fragmentation to explore here.
+      </p>
+    </div>
+
+    <div v-else :class="widened && selectedComponent ? 'grid grid-cols-2 gap-6' : ''">
       <div ref="mainContainer" class="chart-elev w-full min-w-0" style="aspect-ratio: 4/3; position: relative;"></div>
       <div v-if="widened && selectedComponent" class="flex flex-col min-w-0">
         <div ref="drillContainer" class="chart-elev w-full min-w-0 h-full" style="position: relative;"></div>

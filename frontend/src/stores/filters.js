@@ -26,7 +26,12 @@ export const useFiltersStore = defineStore('filters', () => {
   // panels that want to respect a temporal window. No current consumer.
   // Shape: null (no filter) | { attr: string, range: [int, int] (inclusive) }
   const temporalFilter = ref(null)
-  // null = all components; array of component ids (0-based, size-desc order) = filter active
+  // Component filter — scoped slot { scope: 'wcc'|'scc', ids: number[] } | null
+  // (a bare array is read as a legacy WCC list). Component ids are 0-based,
+  // size-desc, matching /components/ and /nodes/.{wcc_id,scc_id}. The scope tags
+  // which membership array useFilteredModel resolves against, because WCC and SCC
+  // id-spaces are not comparable. ConnectedComponents writes it tagged by its
+  // active mode. null = all components.
   const wccFilter = ref(null)
 
   // v2 per-type attribute filters.

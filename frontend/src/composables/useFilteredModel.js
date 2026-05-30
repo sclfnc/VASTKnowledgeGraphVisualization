@@ -60,12 +60,18 @@ export function useFilteredModel(graphId) {
       }
     }
 
-    if (filters.wccFilter && filters.wccFilter.length > 0) {
-      const wccIds = soa.wccId
-      if (wccIds) {
-        const allowed = new Set(filters.wccFilter)
+    // Component filter — scoped slot { scope: 'wcc'|'scc', ids } | legacy array
+    // (read as WCC). The scope selects which membership array to resolve against,
+    // so SCC rank filtering applies the ids to soa.sccId rather than soa.wccId.
+    const cf = filters.wccFilter
+    if (cf) {
+      const cfIds = Array.isArray(cf) ? cf : cf.ids
+      const cfScope = Array.isArray(cf) ? 'wcc' : cf.scope
+      const memberOf = cfScope === 'scc' ? soa.sccId : soa.wccId
+      if (Array.isArray(cfIds) && cfIds.length > 0 && memberOf) {
+        const allowed = new Set(cfIds)
         for (let i = 0; i < N; i++) {
-          if (!allowed.has(wccIds[i])) mask.clear(i)
+          if (!allowed.has(memberOf[i])) mask.clear(i)
         }
       }
     }

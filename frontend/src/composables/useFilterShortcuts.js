@@ -27,21 +27,24 @@ export function useFilterShortcuts() {
     filters.edgeTypes = [...new Set(types)]
   }
 
-  function filterToComponent(componentId) {
-    filters.wccFilter = [componentId]
+  // Component filter writes the scoped slot { scope, ids }. scope defaults to
+  // 'wcc' so every existing WCC caller is unchanged; connectivity passes 'scc'
+  // in SCC mode so useFilteredModel resolves the ids against soa.sccId.
+  function filterToComponent(componentId, scope = 'wcc') {
+    filters.wccFilter = { scope, ids: [componentId] }
   }
-  function filterToComponents(ids) {
-    filters.wccFilter = [...new Set(ids)]
+  function filterToComponents(ids, scope = 'wcc') {
+    filters.wccFilter = { scope, ids: [...new Set(ids)] }
   }
   function filterToWccTopN(n) {
-    filters.wccFilter = Array.from({ length: n }, (_, i) => i)
+    filters.wccFilter = { scope: 'wcc', ids: Array.from({ length: n }, (_, i) => i) }
   }
   function clearWccFilter() {
     filters.wccFilter = null
   }
 
   // Used by ConnectedComponents' "Isolate selected": maps a set of node ids
-  // through (id → idx → wcc_id) and writes the unique component ids.
+  // through (id → idx → wcc_id) and writes the unique component ids (WCC scope).
   function filterToWccOfNodes(nodeIds, soaNodes) {
     if (!soaNodes?.wccId || !soaNodes?.idToIdx) return
     const seen = new Set()
@@ -51,7 +54,7 @@ export function useFilterShortcuts() {
       const cid = soaNodes.wccId[idx]
       if (cid >= 0) seen.add(cid)
     }
-    filters.wccFilter = [...seen].sort((a, b) => a - b)
+    filters.wccFilter = { scope: 'wcc', ids: [...seen].sort((a, b) => a - b) }
   }
 
   return {

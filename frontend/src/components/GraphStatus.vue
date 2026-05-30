@@ -269,21 +269,23 @@ const edgeAttrEntries = computed(() => {
   <div v-else-if="schema && showNodeInspector && selectedIds.length"
        class="rounded-md border border-slate-200 bg-white px-3 py-2">
     <div>
-      <button
-        class="flex w-full items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-secondary hover:text-primary"
-        @click="inspectorOpen = !inspectorOpen">
-        <component :is="inspectorOpen ? ChevronDown : ChevronRight" :size="11" />
-        <span>Selected node</span>
-        <span v-if="selectedIds.length > 1" class="ml-1 font-normal normal-case text-muted">
-          (1 of {{ selectedIds.length }})
-        </span>
+      <div class="flex w-full items-center gap-1">
         <button
-          class="ml-auto rounded p-0.5 text-secondary transition hover:text-red-500"
+          class="flex flex-1 min-w-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-secondary hover:text-primary"
+          @click="inspectorOpen = !inspectorOpen">
+          <component :is="inspectorOpen ? ChevronDown : ChevronRight" :size="11" />
+          <span>Selected node</span>
+          <span v-if="selectedIds.length > 1" class="ml-1 font-normal normal-case text-muted">
+            (1 of {{ selectedIds.length }})
+          </span>
+        </button>
+        <button
+          class="rounded p-0.5 text-secondary transition hover:text-red-500"
           title="Clear selection"
           @click.stop="selection.clear()">
           <X :size="11" />
         </button>
-      </button>
+      </div>
 
       <div v-if="inspectorOpen" class="mt-1.5 flex flex-col gap-2">
         <!-- Selection queue (only when more than one) -->
@@ -446,21 +448,21 @@ const edgeAttrEntries = computed(() => {
   <!-- Edge inspector card — rendered in the Edges group when an edge is selected. -->
   <div v-else-if="schema && showEdgeInspector && selectedEdgeIds.length"
        class="rounded-md border border-slate-200 bg-white px-3 py-2">
-    <div>
+    <div class="flex w-full items-center gap-1">
       <button
-        class="flex w-full items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-secondary hover:text-primary"
+        class="flex flex-1 min-w-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-secondary hover:text-primary"
         @click="edgeInspectorOpen = !edgeInspectorOpen">
         <component :is="edgeInspectorOpen ? ChevronDown : ChevronRight" :size="11" />
         <span>Selected edge</span>
         <span v-if="selectedEdgeIds.length > 1" class="ml-1 font-normal normal-case text-muted">
           (1 of {{ selectedEdgeIds.length }})
         </span>
-        <button
-          class="ml-auto rounded p-0.5 text-secondary transition hover:text-red-500"
-          title="Clear edge selection"
-          @click.stop="selection.clearEdges()">
-          <X :size="11" />
-        </button>
+      </button>
+      <button
+        class="rounded p-0.5 text-secondary transition hover:text-red-500"
+        title="Clear edge selection"
+        @click.stop="selection.clearEdges()">
+        <X :size="11" />
       </button>
 
       <div v-if="edgeInspectorOpen" class="mt-1.5 flex flex-col gap-2">

@@ -70,12 +70,18 @@ const activeChips = computed(() => {
   if (filters.hideSelfLoops) {
     chips.push({ key: 'hideSelfLoops', label: 'Hide self-loops', remove: () => { filters.hideSelfLoops = false } })
   }
-  if (filters.wccFilter && filters.wccFilter.length > 0) {
-    chips.push({
-      key: 'wcc',
-      label: filters.wccFilter.length === 1 ? `WCC #${filters.wccFilter[0] + 1}` : `WCC: ${filters.wccFilter.length}`,
-      remove: () => { filters.wccFilter = null },
-    })
+  if (filters.wccFilter) {
+    // Scoped slot { scope, ids } | legacy array (read as WCC).
+    const cf = filters.wccFilter
+    const cfIds = Array.isArray(cf) ? cf : (cf.ids ?? [])
+    const cfScope = (Array.isArray(cf) ? 'wcc' : cf.scope).toUpperCase()
+    if (cfIds.length > 0) {
+      chips.push({
+        key: 'wcc',
+        label: cfIds.length === 1 ? `${cfScope} #${cfIds[0] + 1}` : `${cfScope}: ${cfIds.length}`,
+        remove: () => { filters.wccFilter = null },
+      })
+    }
   }
   if (filters.temporalFilter) {
     const tf = filters.temporalFilter

@@ -87,8 +87,10 @@ const ALL_SPECS = [
     controlsSchema: {
       view:           { default: 'bubbles' },
       mode:           { default: 'wcc' },
-      rankMode:       { default: 'top' },
-      rankN:          { default: null },
+      // Size-rank window: [loRank, hiRank], 1-based over the distinct size groups
+      // (rank 1 = largest). null = no rank filter. A dual-handle slider unifies
+      // the old Top/Bottom toggle: [1,3] = three largest, [N-1,N] = two smallest.
+      rankRange:      { default: null },
     },
   },
 

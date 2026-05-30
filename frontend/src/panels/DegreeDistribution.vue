@@ -1,7 +1,7 @@
 <script setup>
-import { ref, watch, toRef, computed } from 'vue'
+import { ref, watch, toRef, computed, nextTick } from 'vue'
 import * as d3 from 'd3'
-import { X } from 'lucide-vue-next'
+import { X, ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { useDegreeFit } from '@/composables/useDegreeFit.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
@@ -129,6 +129,11 @@ function toggleOverlayType(t) {
 function isOverlayOn(t) {
   return overlayTypes.value.includes(t)
 }
+
+// Available types picker: open by default, collapsible via the header chevron.
+// On high-arity graphs (email-eu-core has 42 types) the user can fold it away to
+// reclaim drawer space once the active set is chosen.
+const availableOpen = ref(true)
 
 const availableTypes = computed(() => Object.keys(baselineData.value?.byType || {}))
 
@@ -266,9 +271,23 @@ const MARGINS = { top: 8, right: 12, bottom: 38, left: 44 }
 // it transitively via `selectedMask`, but the watch comparator can short-circuit
 // on the computed's identity if Vue treats it as "same reference" across reads —
 // reading the raw store array forces the dependency to register.
+// Single getter source (matches the working pattern in ConnectedComponents):
+// passing an array of mixed refs + getters with { deep:true } let Vue's
+// dependency tracking go stale after the first control flip — the chart kept
+// re-rendering but the teleported drawer stopped reflecting state. A getter
+// that returns the value array re-tracks cleanly on every run.
+// Render is deferred to nextTick (matches ConnectedComponents). Calling
+// renderChart synchronously inside the reactive flush ran the D3
+// selectAll('*').remove() + rebuild in the same tick as the teleported drawer's
+// reconciliation, which froze the drawer's control bindings from the second
+// interaction onward. nextTick lets Vue settle the DOM (drawer included) first.
 watch(
-  [activeData, baselineData, selectedDegrees, () => selection.ids, fit, controls, view, fitActive, overlayTypes, () => filters.degree],
-  renderChart,
+  () => [
+    activeData.value, baselineData.value, selectedDegrees.value,
+    selection.ids, fit.value, controls.value, view.value,
+    fitActive.value, overlayTypes.value, filters.degree,
+  ],
+  () => nextTick(renderChart),
   { deep: true },
 )
 
@@ -516,9 +535,14 @@ function renderChart() {
 
     // Per-type mode renders dots + axes + type legend only. Three overlays are
     // intentionally suppressed:
-    //   - Aggregate fit curve: it's the FULL-graph fit; visualising it over
-    //     per-type dots invites the wrong comparison ("which type follows the
-    //     fit best?" — the fit isn't a per-type prediction).
+    //   - Aggregate fit curve: it's the FULL-graph fit. Drawing it over per-type
+    //     dots can't work as a shared reference: each type's dots live on its OWN
+    //     y-scale (PMF/CCDF normalised per type, or count scaled by that type's
+    //     cardinality), so a single global curve has no common axis to sit on —
+    //     it either falls outside the per-type domain (count mode) or compares
+    //     incommensurable shapes. Per-type fitting, on the other hand, would be
+    //     statistically wrong (a fit per matrix/type is not what AIC compares).
+    //     So no fit curve here by design; the Fit selector lives in Total only.
     //   - Per-type median / IQR overlays: with N active types each contributing
     //     vertical lines and bands, the chart turns into visual noise; per-type
     //     summary stats live better in a dedicated boxplot view.
@@ -715,9 +739,12 @@ function renderChart() {
           </div>
         </div>
 
-        <!-- Per-type mode (Breakdown = Per type): drawer becomes a 2-column
-             type picker. Fit and Median/IQR are intentionally hidden because
-             their semantics don't match per-type rendering (see scheda). -->
+        <!-- Per-type mode (Breakdown = Per type): 2-column type picker — Active
+             left, Available (collapsed behind a chevron) right. No Fit selector
+             here — the fit is a single FULL-graph curve with no common y-scale
+             across per-type series, and a per-type re-fit would be statistically
+             wrong (see report.md "Why no per-type fit overlay"). Median/IQR also
+             hidden (N vertical lines = noise). -->
         <div v-if="controls.byType && availableTypes.length > 1" class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1 min-w-0">
             <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">
@@ -739,10 +766,16 @@ function renderChart() {
             </div>
           </div>
           <div class="flex flex-col gap-1 min-w-0">
-            <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">
-              Available ({{ inactiveOverlayTypes.length }})
-            </span>
-            <div class="flex flex-wrap gap-1 max-h-44 overflow-y-auto pr-0.5">
+            <button
+              class="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-muted hover:text-secondary"
+              :disabled="!inactiveOverlayTypes.length"
+              :title="inactiveOverlayTypes.length ? (availableOpen ? 'Collapse' : 'Expand to add types') : 'All types active'"
+              @click="availableOpen = !availableOpen"
+            >
+              <component :is="availableOpen ? ChevronDown : ChevronRight" :size="11" class="shrink-0" />
+              <span>Available ({{ inactiveOverlayTypes.length }})</span>
+            </button>
+            <div v-if="availableOpen" class="flex flex-wrap gap-1 max-h-44 overflow-y-auto pr-0.5">
               <button v-for="t in inactiveOverlayTypes" :key="'i-'+t"
                 class="type-chip px-1.5 py-0 text-[10px]"
                 :style="{ borderColor: typeColor(t), color: typeColor(t) }"
@@ -810,10 +843,10 @@ function renderChart() {
             Read it as a
             <button :class="theoryLinkClass(view === 'PMF')"
               @click="view = 'PMF'">PMF</button>
-            (nodes of <em>exactly</em> degree <em>k</em>) or a
+            (<strong>Probability Mass Function</strong> — nodes of <em>exactly</em> degree <em>k</em>) or a
             <button :class="theoryLinkClass(view === 'CCDF')"
               @click="view = 'CCDF'">CCDF</button>
-            (degree <em>≥ k</em>, which smooths the noisy tail). The Y axis shows a
+            (<strong>Complementary Cumulative Distribution Function</strong> — degree <em>≥ k</em>, which smooths the noisy tail). The Y axis shows a
             <button :class="theoryLinkClass(controls.yAxis === 'count')"
               @click="updateControl('yAxis', 'count')">count</button>
             or a
@@ -835,7 +868,7 @@ function renderChart() {
         <section class="flex flex-col gap-2">
           <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Fitting curve</h3>
           <p>
-            Overlaying a theoretical model tells you which law generates the distribution. We compare four families with the <strong>AIC</strong>,
+            Overlaying a theoretical model tells you which law generates the distribution. We compare four families with the <strong>AIC</strong> (<strong>Akaike Information Criterion</strong>),
             <span class="font-mono">−2·ln(L) + 2·k</span>, which rewards how well a model fits (its log-likelihood <span class="font-mono">L</span>) while penalizing how many free parameters <span class="font-mono">k</span> it uses. We report the gap from the winner as <strong>Δ AIC/n</strong> — normalized by graph size, so the best model reads 0.
           </p>
           <ul v-if="theoryFit" class="flex flex-col gap-1.5 pl-1">
