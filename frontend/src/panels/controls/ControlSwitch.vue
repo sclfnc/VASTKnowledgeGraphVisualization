@@ -1,28 +1,27 @@
 <script setup>
+// On/off slider with an inline label, for additive boolean modifiers.
 defineProps({
-  label: String,
-  modelValue: Boolean,
+  label: { type: String, default: '' },
+  modelValue: { type: Boolean, default: false },
 })
-
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:model-value'])
 </script>
 
 <template>
   <button
-    class="flex items-center gap-1.5 text-[11px] transition cursor-pointer select-none"
-    :class="modelValue ? 'text-primary' : 'text-muted hover:text-secondary'"
-    @click="emit('update:modelValue', !modelValue)"
+    type="button"
+    class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[11px] transition hover:bg-slate-50"
+    @click="emit('update:model-value', !modelValue)"
   >
+    <span class="text-secondary">{{ label }}</span>
     <span
-      class="relative inline-flex items-center h-3 rounded-full transition-colors duration-200 shrink-0"
+      class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors"
       :class="modelValue ? 'bg-slate-900' : 'bg-slate-300'"
-      style="width: 22px;"
     >
       <span
-        class="absolute w-2 h-2 bg-white rounded-full shadow transition-transform duration-200"
-        :class="modelValue ? 'translate-x-3' : 'translate-x-0.5'"
+        class="inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform"
+        :class="modelValue ? 'translate-x-3.5' : 'translate-x-0.5'"
       />
     </span>
-    <span>{{ label }}</span>
   </button>
 </template>

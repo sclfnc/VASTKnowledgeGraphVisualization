@@ -1,9 +1,12 @@
 <script setup>
 // Parametric panel for the 4 single-measure centralities (PR/Eig/Betw/Clos).
-// Two views: Specific (measure-characteristic viz, default) and Generic (Deg-vs-Centrality scatter, comparable across measures).
+// Two views: "By Measure" (measure-characteristic viz, default) and "vs Degree"
+// (Deg-vs-Centrality scatter, comparable across measures). The control keys stay
+// 'specific'/'generic' internally — only the user-facing labels carry the names.
 import { ref, computed, toRef, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import * as d3 from 'd3'
+import { X, ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { useCentrality } from '@/composables/useCentrality.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
@@ -13,11 +16,10 @@ import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
 import {
   COLOR_SCHEME, FORMATTERS, makeTooltip, showTip, hideTip,
-  drawGrid, drawAxes, drawTypeLegend, spearman, svgFrame,
+  drawGrid, drawAxes, drawTypeLegend, svgFrame,
   ATTENUATED_OPACITY, seededUnit,
 } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
-import ControlSwitch from './controls/ControlSwitch.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 
 const props = defineProps({
@@ -109,7 +111,12 @@ function renderGenericScatter() {
   const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
   const tooltip = makeTooltip(el)
 
-  const pts = allValues.value
+  // Type subset from the shared picker (the scatter has no in-chart legend —
+  // the drawer's Active/Available chips are both legend and filter). null/empty
+  // = all types. Drops, unlike the log-axis drops below, are an explicit user
+  // choice, so they're not counted in the "hidden (log axis)" caption.
+  const allowedTypes = computedShowTypes()
+  const pts = allValues.value.filter(r => allowedTypes.has(effNodeType(r)))
 
   // Log axes can't plot x=0 / y=0 — this is a rendering constraint of THIS view,
   // not a global filter. The global filter never removes marks here; it attenuates
@@ -135,57 +142,22 @@ function renderGenericScatter() {
 
   drawGrid(g, xScale, yScale, innerW, innerH)
 
-  // OLS log-log fit y=α·x^β; Spearman ρ on raw values.
-  if (controls.value.fitLine && visible.length > 2) {
-    const fitPts = visible.filter(r => r.degree > 0 && r.value > 0)
-    if (fitPts.length > 2) {
-      const lx = fitPts.map(r => Math.log(r.degree))
-      const ly = fitPts.map(r => Math.log(r.value))
-      const meanX = d3.mean(lx), meanY = d3.mean(ly)
-      let num = 0, den = 0
-      for (let i = 0; i < lx.length; i++) {
-        num += (lx[i] - meanX) * (ly[i] - meanY)
-        den += (lx[i] - meanX) ** 2
-      }
-      if (den > 0) {
-        const beta = num / den
-        const logAlpha = meanY - beta * meanX
-        const fitX = d3.range(20).map(i => xExtent[0] + (xExtent[1] - xExtent[0]) * i / 19).filter(x => x > 0)
-        const linePts = fitX.map(x => ({ x, y: Math.exp(logAlpha) * Math.pow(x, beta) }))
-        const line = d3.line()
-          .x(d => xScale(d.x)).y(d => yScale(d.y))
-          .defined(d => isFinite(xScale(d.x)) && isFinite(yScale(d.y)))
-        g.append('path').datum(linePts).attr('fill', 'none')
-          .attr('stroke', '#94a3b8').attr('stroke-width', 1.4)
-          .attr('stroke-dasharray', '5,4').attr('opacity', 0.9)
-          .attr('d', line)
-
-        // Rank-based ρ — robust to heavy tails typical of centralities.
-        const rho = spearman(fitPts.map(r => r.degree), fitPts.map(r => r.value))
-        svg.append('text')
-          .attr('x', MARGINS.left + 6).attr('y', MARGINS.top + 12)
-          .attr('font-size', '10px').attr('fill', '#64748b')
-          .text(`y = αx^β  β=${beta.toFixed(2)}  ρ=${rho.toFixed(2)}`)
-      }
-    }
-  }
-
-  const ringSet = new Set()
-  if (controls.value.topKHighlight) {
-    const top = [...visible].sort((a, b) => b.value - a.value).slice(0, 10)
-    top.forEach(r => ringSet.add(r.id))
-  }
-
   const selectedSet = new Set(filterSelected.value ?? [])
+
+  // 2D rubber-band brush → selection.replace of the nodes whose (degree, value)
+  // point falls inside the box. Inserted first (below the dots in z-order) so a
+  // single click still reaches a dot's hit circle; a drag in empty space draws
+  // the box. Empty selection = no-op (doesn't clear — use a fresh box or click).
+  installScatterBrush(g, innerW, innerH, visible, xScale, yScale)
 
   g.selectAll('circle.dot').data(visible).join('circle')
     .attr('class', 'dot')
     .attr('cx', d => xScale(d.degree))
     .attr('cy', d => yScale(d.value))
-    .attr('r', d => ringSet.has(d.id) ? 4.5 : 3)
+    .attr('r', 3)
     .attr('fill', d => typeColor(effNodeType(d)))
-    .attr('stroke', d => ringSet.has(d.id) ? '#0f172a' : (selectedSet.has(d.id) ? '#0f172a' : 'none'))
-    .attr('stroke-width', d => ringSet.has(d.id) || selectedSet.has(d.id) ? 1.5 : 0)
+    .attr('stroke', d => selectedSet.has(d.id) ? '#0f172a' : 'none')
+    .attr('stroke-width', d => selectedSet.has(d.id) ? 1.5 : 0)
     .attr('opacity', d => isActive(d.id) ? 0.7 : ATTENUATED_OPACITY)
     .style('pointer-events', 'none')
   // Transparent hit layer so the small dots are comfortably clickable.
@@ -206,7 +178,8 @@ function renderGenericScatter() {
     yTickFmt: useLogY ? '.0e' : '.2~e',
   })
 
-  drawTypeLegend(svg, totalW, typesInData(), typeColor)
+  // No in-chart legend: the drawer's Show-types chips carry the color↔type
+  // mapping and double as the filter. Keeps the scatter clean on 42-type graphs.
 
   const captions = []
   if (logHidden) captions.push(`${logHidden} node${logHidden === 1 ? '' : 's'} hidden (log axis)`)
@@ -222,10 +195,38 @@ function renderGenericScatter() {
   }
 }
 
+// 2D brush over the scatter plot area. Sits below the dots in z-order so dot
+// clicks (toggle) still fire; a drag in empty space rubber-bands a box and
+// replaces the selection with the nodes inside it. `pts` are the already-
+// visible records (type-filtered + log-axis-filtered) with their scales.
+function installScatterBrush(parentG, innerW, innerH, pts, xScale, yScale) {
+  const brushG = parentG.insert('g', ':first-child').attr('class', 'scatter-brush')
+  const brush = d3.brush()
+    .extent([[0, 0], [innerW, innerH]])
+    .on('end', (event) => {
+      if (!event.sourceEvent) return     // ignore programmatic moves
+      const sel = event.selection
+      if (!sel) return                   // empty box / pure click = no-op
+      const [[x0, y0], [x1, y1]] = sel
+      const ids = []
+      for (const d of pts) {
+        const px = xScale(d.degree)
+        const py = yScale(d.value)
+        if (px >= x0 && px <= x1 && py >= y0 && py <= y1) ids.push(d.id)
+      }
+      // Replace: each new box is a fresh selection. Empty box already returned.
+      if (ids.length) selection.replace(ids)
+      // Clear the visible rectangle so it doesn't linger over the next gesture.
+      brushG.call(brush.move, null)
+    })
+  brushG.call(brush)
+  // Let the dots' hit circles receive clicks: the brush overlay only acts on drag.
+  brushG.select('.overlay').style('cursor', 'crosshair')
+}
+
 // PageRank rank-mass bars.
 function renderPageRankBars() {
   const { el, totalW, totalH } = frame()
-  const MARGINS = { top: 12, right: 70, bottom: 28, left: 110 }
 
   // Full-graph denominator preserves "% of total rank mass" under type subsetting.
   const denom = d3.sum(allValues.value, r => r.value) || 1
@@ -238,6 +239,14 @@ function renderPageRankBars() {
 
   if (!filtered.length) return
 
+  // Reserve a right-hand band for the type legend so it never overlaps the bars
+  // or the percentage labels. Width tracks the longest legend label (≈6px/char
+  // at 10px) + swatch + value-label overflow room.
+  const legendTypes = [...new Set(filtered.map(r => effNodeType(r)))]
+  const longestLabel = legendTypes.reduce((m, t) => Math.max(m, t.length), 0)
+  const LEGEND_BAND = Math.min(140, Math.max(64, longestLabel * 6 + 40))
+  const MARGINS = { top: 12, right: LEGEND_BAND, bottom: 28, left: 110 }
+
   const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
   const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
   if (innerW < 50 || innerH < 50) return
@@ -246,8 +255,10 @@ function renderPageRankBars() {
   const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
   const tooltip = makeTooltip(el)
 
+  // Pad the domain 12% past the top bar so its trailing percentage label stays
+  // inside the plot area instead of bleeding into the legend band on the right.
   const xMax = filtered[0].value / denom
-  const xScale = d3.scaleLinear().domain([0, xMax]).range([0, innerW])
+  const xScale = d3.scaleLinear().domain([0, xMax * 1.12]).range([0, innerW])
   const yScale = d3.scaleBand().domain(filtered.map(r => r.id)).range([0, innerH]).padding(0.18)
 
   const truncate = s => s.length > 14 ? s.slice(0, 12) + '…' : s
@@ -291,14 +302,28 @@ function renderPageRankBars() {
     .attr('font-size', 10).attr('fill', '#475569')
     .text(d => `${((d.value / denom) * 100).toFixed(2)}%`)
 
-  drawTypeLegend(svg, totalW, [...new Set(filtered.map(r => effNodeType(r)))], typeColor)
+  // Legend, left-anchored inside the reserved right band so it grows rightward
+  // (away from the bars) instead of leftward into them. drawTypeLegend anchors
+  // to the SVG right edge with text-anchor:end, which overlaps the plot when
+  // labels are long (e.g. "Dept 36") — hence the local left-anchored variant.
+  const legendX = MARGINS.left + innerW + 14
+  legendTypes.forEach((t, i) => {
+    const ly = MARGINS.top + 6 + i * 14
+    svg.append('circle').attr('cx', legendX).attr('cy', ly).attr('r', 3.5)
+      .attr('fill', typeColor(t))
+    svg.append('text').attr('x', legendX + 8).attr('y', ly + 4)
+      .attr('text-anchor', 'start').attr('font-size', '10px')
+      .attr('fill', '#64748b').text(t)
+  })
 }
 
-// null / empty array means "all" — keeps payload compact.
+// Sentinel: `null` → all types (compact default); an explicit array (incl.
+// empty `[]` from Remove all) → exactly that set. An empty set yields charts
+// with no marks — callers render an empty-state caption.
 function computedShowTypes() {
   const all = nodeTypeList.value.length ? nodeTypeList.value : (props.schema?.node_types ?? [])
   const sel = controls.value.showTypes
-  if (!sel || sel.length === 0) return new Set(all)
+  if (sel == null) return new Set(all)
   return new Set(sel)
 }
 
@@ -629,21 +654,31 @@ function renderClosenessViolins() {
   }
 }
 
-function typesInData() {
-  return [...new Set(allValues.value.map(r => effNodeType(r)))]
-}
-
 function toggleSelected(id) {
   selection.toggle(id)
 }
 
+// Couples both scatter axes onto the same Lin/Log scale (single toggle).
+function setScatterScale(mode) {
+  const log = mode === 'log'
+  updateControl('xLog', log)
+  updateControl('yLog', log)
+}
+
+const SCALE_OPTIONS = [{ k: 'lin', label: 'Lin' }, { k: 'log', label: 'Log' }]
+
+// Keys stay 'specific'/'generic' (used by every render branch + control gate);
+// only the user-facing labels change. 'By Measure' = the measure's native viz
+// (rank-mass bars / Lorenz / violins / decay shells); 'vs Degree' = the shared
+// degree-vs-centrality scatter, identical across all four measures.
 const VIEW_OPTIONS = [
-  { k: 'specific', label: 'Specific' },
-  { k: 'generic', label: 'Generic' },
+  { k: 'specific', label: 'By Measure' },
+  { k: 'generic', label: 'vs Degree' },
 ]
+// Capped at 40: rank-mass bars carry node-name + percentage labels, so beyond
+// ~40 the bands collapse to a few px on a 4:3 card and the tail is all ~0%.
 const TOP_N_OPTIONS = [
-  { k: 10, label: '10' }, { k: 20, label: '20' },
-  { k: 50, label: '50' }, { k: 100, label: '100' },
+  { k: 10, label: '10' }, { k: 20, label: '20' }, { k: 40, label: '40' },
 ]
 const ANCHOR_OPTIONS = computed(() => [
   { k: 'top', label: 'Top eigenvector' },
@@ -662,22 +697,79 @@ const DIRECTION_OPTIONS = [
   { k: 'in', label: 'In' },
 ]
 
-// PageRank "Show types" chip toggle; null/empty array means "all".
-function isTypeShown(t) {
-  const cur = controls.value.showTypes
-  if (!cur || cur.length === 0) return true
-  return cur.includes(t)
-}
-function togglePageRankType(t) {
+// Shared "Show types" picker — Active/Available split, mirroring
+// DegreeDistribution. `controls.showTypes` keeps the compact `null = all`
+// semantics (read by computedShowTypes); the picker is a view over it. It
+// governs the "vs Degree" scatter on all four measures, and additionally the
+// PageRank "By Measure" bars. Active = the resolved shown set; Available = rest.
+
+// Types ordered by their single most-central node: max(centrality value) over
+// the type's nodes, descending. Ordering only — every type starts ACTIVE, the
+// user filters by hand. We deliberately do NOT auto-trim to a top-N default:
+//
+//   Intrinsic limitation — on high-arity schemas (e.g. email-eu-core, 42
+//   effective types) the Active list becomes a long wall of chips and the
+//   per-type marks get visually noisy. There is no clean automatic default
+//   that's both honest and stable: ranking types by summed value rewards
+//   cardinality (wrong); a top-N-by-peak default hides types silently. So we
+//   show everything and leave curation to the user. This is a known trade-off
+//   of a per-type breakdown on many-typed graphs, not a bug.
+//
+// Peak (max) is chosen over sum because it answers "which types own the most
+// central nodes" — a type with 3 strong hubs ranks above a type with 10k
+// mediocre nodes. Computed over the FULL graph, independent of the active
+// subset, so chips never reshuffle while the user edits the set.
+const typePeakDesc = computed(() => {
+  const peak = new Map()
+  for (const r of allValues.value) {
+    const t = effNodeType(r)
+    const v = r.value || 0
+    if (v > (peak.get(t) ?? -Infinity)) peak.set(t, v)
+  }
   const all = nodeTypeList.value.length ? nodeTypeList.value : (props.schema?.node_types ?? [])
+  // Stable total order: peak desc, ties broken by label.
+  return [...all].sort((a, b) => (peak.get(b) ?? -Infinity) - (peak.get(a) ?? -Infinity) || a.localeCompare(b))
+})
+const allMeasureTypes = computed(() => typePeakDesc.value)
+
+// Resolved active set. Sentinel semantics: `null` → all types shown (compact
+// default); an explicit array (incl. empty `[]` from Remove all) → exactly that
+// set. Inherits the peak-desc order.
+const shownTypesList = computed(() => {
+  const cur = controls.value.showTypes
+  if (cur == null) return [...allMeasureTypes.value]
+  // Preserve canonical (peak-desc) order; drop stale labels from a prior graph.
+  return allMeasureTypes.value.filter(t => cur.includes(t))
+})
+const availableMeasureTypes = computed(() =>
+  allMeasureTypes.value.filter(t => !shownTypesList.value.includes(t)))
+
+// The Show-types picker shows on the PageRank bars and on the scatter (any
+// measure). Mirrors the ControlSection v-if so the empty-state can gate on it.
+const typePickerVisible = computed(() =>
+  allMeasureTypes.value.length > 1 &&
+  ((isPageRank.value && controls.value.view === 'specific') || controls.value.view === 'generic'))
+
+// Available picker: open by default, collapsible (matches DegreeDistribution).
+const typesAvailableOpen = ref(true)
+
+function toggleMeasureType(t) {
+  const all = allMeasureTypes.value
   const cur = (!controls.value.showTypes || controls.value.showTypes.length === 0)
     ? [...all]
     : [...controls.value.showTypes]
   const i = cur.indexOf(t)
   if (i === -1) cur.push(t); else cur.splice(i, 1)
+  // Collapse to the compact "all" sentinel when every type is on. An empty set
+  // is allowed here (charts render an empty-state) — Remove all relies on it.
   if (cur.length === all.length) updateControl('showTypes', null)
   else updateControl('showTypes', cur)
 }
+
+// Add all → the compact `null` sentinel (= all types). Remove all → explicit
+// empty array; the charts show an empty-state for "no type active".
+function addAllTypes() { updateControl('showTypes', null) }
+function removeAllTypes() { updateControl('showTypes', []) }
 </script>
 
 <template>
@@ -689,13 +781,12 @@ function togglePageRankType(t) {
             @update:model-value="updateControl('view', $event)" />
         </ControlSection>
 
-        <ControlSection v-if="controls.view === 'generic'" title="Scatter" :col-span="2">
-          <div class="grid grid-cols-2 gap-1">
-            <ControlSwitch label="X log" :model-value="controls.xLog" @update:model-value="updateControl('xLog', $event)" />
-            <ControlSwitch label="Y log" :model-value="controls.yLog" @update:model-value="updateControl('yLog', $event)" />
-            <ControlSwitch label="Fit line" :model-value="controls.fitLine" @update:model-value="updateControl('fitLine', $event)" />
-            <ControlSwitch label="Highlight top 10" :model-value="controls.topKHighlight" @update:model-value="updateControl('topKHighlight', $event)" />
-          </div>
+        <!-- Single Lin/Log toggle that couples both axes (degree-vs-centrality
+             scatters are read log-log or lin-lin; the mixed case isn't useful
+             here). Drives xLog + yLog together. -->
+        <ControlSection v-if="controls.view === 'generic'" title="Scale" :col-span="2">
+          <ControlToggleGroup :model-value="controls.xLog ? 'log' : 'lin'" :options="SCALE_OPTIONS"
+            @update:model-value="setScatterScale($event)" />
         </ControlSection>
 
         <!-- PageRank Specific -->
@@ -703,16 +794,70 @@ function togglePageRankType(t) {
           <ControlToggleGroup :model-value="controls.topN" :options="TOP_N_OPTIONS"
             @update:model-value="updateControl('topN', $event)" />
         </ControlSection>
-        <ControlSection v-if="isPageRank && controls.view === 'specific'" title="Show types">
-          <div class="flex flex-wrap gap-1">
-            <button
-              v-for="t in (nodeTypeList.length ? nodeTypeList : (props.schema?.node_types || []))" :key="t"
-              class="type-chip px-1.5 py-0 text-[10px]"
-              :class="{ 'type-chip--active': isTypeShown(t) }"
-              :style="isTypeShown(t)
-                ? { backgroundColor: typeColor(t) + '22', borderColor: typeColor(t), color: typeColor(t) }
-                : { borderColor: typeColor(t), color: typeColor(t) }"
-              @click="togglePageRankType(t)">{{ t }}</button>
+        <!-- Show types: Active/Available split (same UX as DegreeDistribution).
+             Shared by the PageRank "By Measure" bars and the "vs Degree" scatter
+             on all four measures — the scatter has no in-chart legend, so these
+             chips are both legend and filter. Active left (removable with ×),
+             Available right behind a chevron so high-arity graphs (email-eu-core:
+             42 types) stay readable. -->
+        <ControlSection
+          v-if="typePickerVisible"
+          title="Show types" :col-span="2">
+          <p class="text-[10px] leading-tight text-muted px-0.5 mb-1.5">
+            <template v-if="controls.view === 'generic'">
+              Filters the scatter and acts as its legend. Ordered by each type's most central node — all start active, deselect to declutter.
+            </template>
+            <template v-else>
+              Ordered by each type's most central node ({{ labelFor }}). All types start active — deselect to declutter on many-typed graphs.
+            </template>
+          </p>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1 min-w-0">
+              <!-- Bulk actions live next to "Active" — they act on the active set. -->
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">
+                  Active ({{ shownTypesList.length }})
+                </span>
+                <div class="flex items-center gap-2.5">
+                  <button
+                    class="text-[10px] font-medium text-sky-700 hover:text-sky-900 disabled:opacity-30 disabled:hover:text-sky-700"
+                    :disabled="shownTypesList.length === allMeasureTypes.length"
+                    @click="addAllTypes">Add all</button>
+                  <button
+                    class="text-[10px] font-medium text-sky-700 hover:text-sky-900 disabled:opacity-30 disabled:hover:text-sky-700"
+                    :disabled="shownTypesList.length === 0"
+                    @click="removeAllTypes">Remove all</button>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-1 max-h-44 overflow-y-auto pr-0.5">
+                <button v-for="t in shownTypesList" :key="'a-'+t"
+                  class="type-chip px-1.5 py-0 text-[10px] inline-flex items-center gap-1"
+                  :style="{ backgroundColor: typeColor(t) + '22', borderColor: typeColor(t), color: typeColor(t) }"
+                  @click="toggleMeasureType(t)">
+                  {{ t }}
+                  <X :size="9" class="opacity-60" />
+                </button>
+                <span v-if="!shownTypesList.length" class="text-[10px] text-muted italic">No type active.</span>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1 min-w-0">
+              <button
+                class="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-muted hover:text-secondary"
+                :disabled="!availableMeasureTypes.length"
+                :title="availableMeasureTypes.length ? (typesAvailableOpen ? 'Collapse' : 'Expand to add types') : 'All types active'"
+                @click="typesAvailableOpen = !typesAvailableOpen"
+              >
+                <component :is="typesAvailableOpen ? ChevronDown : ChevronRight" :size="11" class="shrink-0" />
+                <span>Available ({{ availableMeasureTypes.length }})</span>
+              </button>
+              <div v-if="typesAvailableOpen" class="flex flex-wrap gap-1 max-h-44 overflow-y-auto pr-0.5">
+                <button v-for="t in availableMeasureTypes" :key="'i-'+t"
+                  class="type-chip px-1.5 py-0 text-[10px]"
+                  :style="{ borderColor: typeColor(t), color: typeColor(t) }"
+                  @click="toggleMeasureType(t)">{{ t }}</button>
+                <span v-if="!availableMeasureTypes.length" class="text-[10px] text-muted italic">All types active.</span>
+              </div>
+            </div>
           </div>
         </ControlSection>
 
@@ -757,6 +902,22 @@ function togglePageRankType(t) {
     <p v-else-if="status === 'ready' && edgeFilterActive" class="text-[10px] italic text-muted px-1">
       {{ labelFor }} computed on the full graph; edge filter attenuates marks only.
     </p>
-    <div v-if="status === 'ready'" ref="chartContainer" class="chart-elev w-full" style="aspect-ratio: 4/3; position: relative;"></div>
+
+    <!-- Remove all → empty type set: render an explanatory empty-state instead
+         of a blank chart. Only on the views that read the type picker. -->
+    <div
+      v-if="status === 'ready' && typePickerVisible && !shownTypesList.length"
+      class="chart-elev flex w-full flex-col items-center justify-center gap-2 px-6 text-center"
+      style="aspect-ratio: 4/3;"
+    >
+      <p class="text-sm font-medium text-primary">No node type selected.</p>
+      <p class="text-xs text-secondary">
+        All types were removed in <strong>Show types</strong>. Re-add one (or <strong>Add all</strong>) to see the chart.
+      </p>
+    </div>
+    <div
+      v-else-if="status === 'ready'"
+      ref="chartContainer" class="chart-elev w-full" style="aspect-ratio: 4/3; position: relative;"
+    ></div>
   </div>
 </template>

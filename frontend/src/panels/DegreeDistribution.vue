@@ -130,6 +130,12 @@ function isOverlayOn(t) {
   return overlayTypes.value.includes(t)
 }
 
+// Bulk picker actions. Add all → every available type active; Remove all →
+// empty set (the per-type chart then renders nothing, by design — the user
+// re-adds what they want). Mirrors the CentralityPanel Show-types picker.
+function addAllOverlayTypes() { overlayTypes.value = [...availableTypesSortedBySize.value] }
+function removeAllOverlayTypes() { overlayTypes.value = [] }
+
 // Available types picker: open by default, collapsible via the header chevron.
 // On high-arity graphs (email-eu-core has 42 types) the user can fold it away to
 // reclaim drawer space once the active set is chosen.
@@ -747,9 +753,23 @@ function renderChart() {
              hidden (N vertical lines = noise). -->
         <div v-if="controls.byType && availableTypes.length > 1" class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1 min-w-0">
-            <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">
-              Active ({{ overlayTypes.length }})
-            </span>
+            <!-- Bulk actions live next to "Active" — they act on the active set.
+                 Blue to read as clickable (matches CentralityPanel). -->
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[9px] font-semibold uppercase tracking-wide text-muted">
+                Active ({{ overlayTypes.length }})
+              </span>
+              <div class="flex items-center gap-2.5">
+                <button
+                  class="text-[10px] font-medium text-sky-700 hover:text-sky-900 disabled:opacity-30 disabled:hover:text-sky-700"
+                  :disabled="overlayTypes.length === availableTypesSortedBySize.length"
+                  @click="addAllOverlayTypes">Add all</button>
+                <button
+                  class="text-[10px] font-medium text-sky-700 hover:text-sky-900 disabled:opacity-30 disabled:hover:text-sky-700"
+                  :disabled="overlayTypes.length === 0"
+                  @click="removeAllOverlayTypes">Remove all</button>
+              </div>
+            </div>
             <div class="flex flex-wrap gap-1 max-h-44 overflow-y-auto pr-0.5">
               <button v-for="t in overlayTypes" :key="'a-'+t"
                 class="type-chip px-1.5 py-0 text-[10px] inline-flex items-center gap-1"

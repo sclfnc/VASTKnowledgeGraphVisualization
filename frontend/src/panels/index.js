@@ -12,12 +12,14 @@ import ActivityTimeline from './ActivityTimeline.vue'
 import NotImplementedStub from './NotImplementedStub.vue'
 
 // Shared defaults for the 4 single-measure centrality panels; per-measure overrides spread below.
+// `showTypes` is shared: it governs the type subset for the "vs Degree" scatter
+// on all four measures, and additionally drives the PageRank "By Measure" bars.
+// null = all types active.
 const CENTRALITY_BASE_CONTROLS = {
   view:          { default: 'specific' },
   xLog:          { default: true },
   yLog:          { default: true },
-  fitLine:       { default: false },
-  topKHighlight: { default: false },
+  showTypes:     { default: null },
 }
 
 const PAGERANK_EXPLANATION = `PageRank models a random walk biased by a damping factor: at each step the surfer follows an outgoing edge with probability 0.85, or teleports uniformly with probability 0.15. The stationary distribution sums to 1, so a node's score is its share of the total "rank mass". Use the Specific view to read concentration on the few hubs; the Generic scatter shows how PageRank deviates from raw degree.`
@@ -148,7 +150,6 @@ const ALL_SPECS = [
     controlsSchema: {
       ...CENTRALITY_BASE_CONTROLS,
       topN:      { default: 20 },
-      showTypes: { default: null },
     },
   },
 
