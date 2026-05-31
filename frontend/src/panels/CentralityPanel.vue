@@ -15,9 +15,8 @@ import { useSelectionStore } from '@/stores/selection.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
 import {
-  COLOR_SCHEME, FORMATTERS, makeTooltip, showTip, hideTip,
-  drawGrid, drawAxes, drawTypeLegend, svgFrame,
-  ATTENUATED_OPACITY, seededUnit,
+  FORMATTERS, makeTooltip, showTip, hideTip,
+  drawGrid, drawAxes, svgFrame, ATTENUATED_OPACITY,
 } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
@@ -28,7 +27,9 @@ const props = defineProps({
   graphId: { type: String, default: null },
   measure: { type: String, required: true },
   widened: { type: Boolean, default: false },
+  expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
+  theoryTarget: { type: String, default: null },
 })
 
 const { data, status } = useCentrality(props.measure)
@@ -41,9 +42,8 @@ const { activeNodeMask, isActive, edgeFilterActive, noNodesActive } = usePanelCo
 
 const chartContainer = ref(null)
 
-const isPageRank = computed(() => props.measure === 'spectral_pagerank')
-const isEigenvector = computed(() => props.measure === 'spectral_eigenvector')
-const isBetweenness = computed(() => props.measure === 'betweenness')
+// All four measures now share the rank-mass bars; only Closeness still branches
+// (direction variants + degenerate case), so it's the only per-measure flag.
 const isCloseness = computed(() => props.measure === 'closeness')
 
 // Closeness has 1-3 direction variants; pick the active one (undirected/out/in).
@@ -68,13 +68,76 @@ const labelFor = computed(() => ({
   closeness: 'Closeness',
 }[props.measure] ?? 'Centrality'))
 
+// Static per-measure prose for the PanelFocus theory drawer: a plain-language
+// line for non-experts + a technical line for data scientists. Keyed by the
+// measure prop; `title` reuses labelFor so the two never drift.
+const MEASURE_THEORY = {
+  spectral_pagerank: {
+    plain: 'PageRank imagines a random surfer hopping along edges, occasionally teleporting. A node scores high when the surfer lands on it often — i.e. many paths funnel into it.',
+    technical: 'Stationary distribution of a damped random walk (damping 0.85); scores sum to 1, so each value is a share of the total rank mass.',
+  },
+  spectral_eigenvector: {
+    plain: 'Eigenvector centrality rewards being connected to other important nodes, not just to many of them. Influence spreads by association.',
+    technical: 'Leading eigenvector of the adjacency matrix on the LCC; diffusive importance dominates raw degree. Nodes outside the LCC are excluded.',
+  },
+  betweenness: {
+    plain: 'Betweenness finds the bridges: nodes that sit on the shortest path between many other pairs, so removing them would cut the network apart.',
+    technical: 'Fraction of all-pairs shortest paths passing through a node (exact Brandes). Heavy-tailed — a few structural holes hold most of the mass.',
+  },
+  closeness: {
+    plain: 'Closeness measures how near a node is to everything else: high closeness means short hops to the rest of the network.',
+    technical: 'Inverse mean shortest-path distance, per-component Wasserman-Faust normalized so values are comparable across components.',
+  },
+}
+const measureTheory = computed(() => ({
+  title: labelFor.value,
+  ...(MEASURE_THEORY[props.measure] ?? { plain: '', technical: '' }),
+}))
+
+// Derived concentration stats for the "In this graph" section. Computed over
+// the full scored set (allValues), independent of the active type subset, so
+// the prose describes the graph, not the current filter.
+const theoryStats = computed(() => {
+  const vals = allValues.value
+  if (!vals.length) return null
+  const sorted = [...vals].sort((a, b) => b.value - a.value)
+  const total = d3.sum(sorted, r => r.value)
+  if (!(total > 0)) return null
+  const top = sorted[0]
+  // How many top nodes hold half the total mass — a one-number concentration read.
+  let acc = 0
+  let halfCount = 0
+  for (const r of sorted) {
+    acc += r.value
+    halfCount++
+    if (acc >= total / 2) break
+  }
+  const n = sorted.length
+  return {
+    topId: top.id,
+    topType: effNodeType(top),
+    topShare: top.value / total,
+    halfCount,
+    halfPct: halfCount / n,
+    n,
+    typeCount: new Set(vals.map(r => effNodeType(r))).size,
+  }
+})
+
+// Inline theory links double as control toggles; active = filled pill.
+function theoryLinkClass(active) {
+  return active
+    ? 'rounded px-1.5 py-0.5 text-[13px] font-medium bg-slate-900 text-white'
+    : 'rounded px-1.5 py-0.5 text-[13px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200'
+}
+
 watch(
-  [data, status, controls, filterSelected, () => props.widened, activeNodeMask],
+  [data, status, controls, filterSelected, activeNodeMask],
   () => nextTick(renderChart),
   { deep: true },
 )
 
-useD3Chart(chartContainer, renderChart)
+useD3Chart(chartContainer, renderChart, () => [props.widened, props.expanded])
 
 function renderChart() {
   if (!chartContainer.value) return
@@ -85,10 +148,11 @@ function renderChart() {
     renderGenericScatter()
     return
   }
-  if (isPageRank.value) renderPageRankBars()
-  else if (isEigenvector.value) renderEigenvectorDecay()
-  else if (isBetweenness.value) renderBetweennessLorenz()
-  else if (isCloseness.value) renderClosenessViolins()
+  // All four measures share the rank-mass bars as their "By Measure" view —
+  // one honest, comparable encoding (top-N nodes, share of total mass, colored
+  // by type). Measure-specific overlays can be layered back later if a measure
+  // genuinely needs one; for now the view is unified.
+  renderRankMassBars()
 }
 
 // Zero-margin frame; each renderer sets its own inner margins below.
@@ -183,7 +247,7 @@ function renderGenericScatter() {
 
   const captions = []
   if (logHidden) captions.push(`${logHidden} node${logHidden === 1 ? '' : 's'} hidden (log axis)`)
-  if (isEigenvector.value) {
+  if (props.measure === 'spectral_eigenvector') {
     const excluded = data.value?.excluded_nodes ?? 0
     if (excluded > 0) captions.push(`${excluded} nodes outside LCC excluded`)
   }
@@ -224,11 +288,14 @@ function installScatterBrush(parentG, innerW, innerH, pts, xScale, yScale) {
   brushG.select('.overlay').style('cursor', 'crosshair')
 }
 
-// PageRank rank-mass bars.
-function renderPageRankBars() {
+// Rank-mass bars — the shared "By Measure" view for PageRank and Eigenvector.
+// Top-N nodes by the measure value, bar = share of total mass, color = type.
+// Honest for both: PageRank sums to 1 by construction, Eigenvector doesn't, but
+// "% of total" is a valid relative-concentration read in either case.
+function renderRankMassBars() {
   const { el, totalW, totalH } = frame()
 
-  // Full-graph denominator preserves "% of total rank mass" under type subsetting.
+  // Full-graph denominator preserves "% of total mass" under type subsetting.
   const denom = d3.sum(allValues.value, r => r.value) || 1
 
   const allowedTypes = computedShowTypes()
@@ -273,7 +340,7 @@ function renderPageRankBars() {
   svg.append('text')
     .attr('x', MARGINS.left + innerW / 2).attr('y', totalH - 4)
     .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#475569')
-    .text('% of total PageRank mass')
+    .text(`% of total ${labelFor.value} mass`)
 
   const selectedSet = new Set(filterSelected.value ?? [])
 
@@ -289,7 +356,7 @@ function renderPageRankBars() {
     .attr('opacity', d => isActive(d.id) ? 0.85 : ATTENUATED_OPACITY)
     .style('cursor', 'pointer')
     .on('mouseover', (ev, d) => showTip(tooltip, ev,
-      `<strong>${d.id}</strong><br>${effNodeType(d)}<br>PR ${FORMATTERS.exponential(d.value)}<br>${((d.value / denom) * 100).toFixed(2)}% of total`))
+      `<strong>${d.id}</strong><br>${effNodeType(d)}<br>${labelFor.value} ${FORMATTERS.exponential(d.value)}<br>${((d.value / denom) * 100).toFixed(2)}% of total`))
     .on('mousemove', (ev) => showTip(tooltip, ev, null))
     .on('mouseout', () => hideTip(tooltip))
     .on('click', (_, d) => toggleSelected(d.id))
@@ -327,333 +394,6 @@ function computedShowTypes() {
   return new Set(sel)
 }
 
-// Eigenvector decay-from-core boxplots over EV-rank quantile shells.
-function renderEigenvectorDecay() {
-  const { el, totalW, totalH } = frame()
-  const MARGINS = { top: 12, right: 12, bottom: 38, left: 60 }
-  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
-  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
-  if (innerW < 50 || innerH < 50) return
-
-  // Quantile shells are a proxy for hop-distance — edges aren't in this payload.
-  const values = allValues.value
-  if (!values.length) return
-  const sorted = [...values].sort((a, b) => b.value - a.value)
-  let anchor
-  if (controls.value.anchor === 'selected' && filterSelected.value?.length) {
-    const sid = String(filterSelected.value[0])
-    anchor = sorted.find(r => r.id === sid)
-    if (!anchor) {
-      // No EV value → node outside LCC.
-      d3.select(el).append('div')
-        .style('display', 'flex').style('align-items', 'center').style('justify-content', 'center')
-        .style('height', '100%').style('padding', '1rem')
-        .style('font-size', '12px').style('color', '#64748b').style('text-align', 'center')
-        .text(`Anchor selezionato (${sid}) fuori dalla LCC: Eigenvector indefinito.`)
-      return
-    }
-  } else {
-    anchor = sorted[0]
-  }
-
-  const SHELLS = 6
-  const shellSize = Math.ceil(sorted.length / SHELLS)
-  const shells = []
-  for (let s = 0; s < SHELLS; s++) {
-    const slice = sorted.slice(s * shellSize, (s + 1) * shellSize)
-    if (slice.length) shells.push({ label: `Q${s + 1}`, items: slice })
-  }
-
-  const svg = d3.select(el).append('svg').attr('width', totalW).attr('height', totalH)
-  const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
-  const tooltip = makeTooltip(el)
-
-  const xScale = d3.scaleBand().domain(shells.map(s => s.label)).range([0, innerW]).padding(0.25)
-  const useLogY = !!controls.value.yLog
-  const yExtent = [
-    d3.min(values, d => d.value), d3.max(values, d => d.value),
-  ]
-  const yScale = (useLogY ? d3.scaleLog() : d3.scaleLinear())
-    .domain([useLogY ? Math.max(1e-12, yExtent[0]) : 0, yExtent[1]])
-    .range([innerH, 0]).clamp(true)
-
-  drawGrid(g, d3.scaleLinear().domain([0, 1]).range([0, innerW]), yScale, innerW, innerH)
-
-  shells.forEach(s => {
-    const vals = s.items.map(r => r.value).sort((a, b) => a - b)
-    if (!vals.length) return
-    const q = p => d3.quantileSorted(vals, p)
-    const x = xScale(s.label)
-    const w = xScale.bandwidth()
-    const cx = x + w / 2
-    const q1 = q(0.25), q2 = q(0.5), q3 = q(0.75)
-    const iqr = q3 - q1
-    const lo = Math.max(vals[0], q1 - 1.5 * iqr)
-    const hi = Math.min(vals[vals.length - 1], q3 + 1.5 * iqr)
-
-    g.append('line').attr('x1', cx).attr('x2', cx)
-      .attr('y1', yScale(lo)).attr('y2', yScale(hi))
-      .attr('stroke', '#64748b').attr('stroke-width', 1)
-    g.append('rect')
-      .attr('x', x).attr('y', yScale(q3))
-      .attr('width', w).attr('height', Math.max(1, yScale(q1) - yScale(q3)))
-      .attr('fill', COLOR_SCHEME.accent).attr('opacity', 0.35)
-      .attr('stroke', COLOR_SCHEME.accent).attr('stroke-width', 1)
-    g.append('line').attr('x1', x).attr('x2', x + w)
-      .attr('y1', yScale(q2)).attr('y2', yScale(q2))
-      .attr('stroke', '#0f172a').attr('stroke-width', 1.5)
-
-    g.append('rect').attr('x', x).attr('y', 0).attr('width', w).attr('height', innerH)
-      .attr('fill', 'transparent').style('cursor', 'pointer')
-      .on('mouseover', (ev) => showTip(tooltip, ev,
-        `<strong>${s.label}</strong><br>n=${vals.length}<br>median ${FORMATTERS.exponential(q2)}<br>IQR [${FORMATTERS.exponential(q1)}, ${FORMATTERS.exponential(q3)}]`))
-      .on('mousemove', (ev) => showTip(tooltip, ev, null))
-      .on('mouseout', () => hideTip(tooltip))
-  })
-
-  drawAxes(g, xScale, yScale, innerW, innerH, {
-    xLabel: 'Rank shell (Q1 = top)', yLabel: 'Eigenvector value',
-    yTickFmt: useLogY ? '.0e' : '.2~e',
-  })
-
-  svg.append('text')
-    .attr('x', MARGINS.left + 6).attr('y', MARGINS.top + 12)
-    .attr('font-size', '10px').attr('fill', '#64748b')
-    .text(`Anchor: ${anchor.id} (${FORMATTERS.exponential(anchor.value)})`)
-}
-
-// Betweenness Lorenz curve + Gini.
-function renderBetweennessLorenz() {
-  const { el, totalW, totalH } = frame()
-  const MARGINS = { top: 12, right: 12, bottom: 38, left: 56 }
-  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
-  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
-  if (innerW < 50 || innerH < 50) return
-
-  const values = allValues.value
-  if (!values.length) return
-  const sorted = [...values].sort((a, b) => a.value - b.value)
-  const n = sorted.length
-  const total = d3.sum(sorted, r => r.value) || 1
-
-  let cum = 0
-  const lorenz = [{ x: 0, y: 0 }]
-  for (let i = 0; i < n; i++) {
-    cum += sorted[i].value
-    lorenz.push({ x: (i + 1) / n, y: cum / total })
-  }
-  let gini = 0
-  for (let i = 1; i < lorenz.length; i++) {
-    const dx = lorenz[i].x - lorenz[i - 1].x
-    const avgY = (lorenz[i].y + lorenz[i - 1].y) / 2
-    gini += dx * (lorenz[i].x - avgY) * 2
-  }
-
-  const svg = d3.select(el).append('svg').attr('width', totalW).attr('height', totalH)
-  const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
-  const tooltip = makeTooltip(el)
-
-  const xScale = d3.scaleLinear().domain([0, 1]).range([0, innerW])
-  const yScale = d3.scaleLinear().domain([0, 1]).range([innerH, 0])
-
-  drawGrid(g, xScale, yScale, innerW, innerH)
-
-  // Perfect-equality reference diagonal.
-  g.append('line').attr('x1', 0).attr('x2', innerW).attr('y1', innerH).attr('y2', 0)
-    .attr('stroke', '#cbd5e1').attr('stroke-width', 1).attr('stroke-dasharray', '4,4')
-
-  const line = d3.line().x(d => xScale(d.x)).y(d => yScale(d.y))
-  g.append('path').datum(lorenz).attr('fill', 'none')
-    .attr('stroke', COLOR_SCHEME.accent).attr('stroke-width', 2).attr('d', line)
-
-  drawAxes(g, xScale, yScale, innerW, innerH, {
-    xLabel: 'Cumulative share of nodes', yLabel: 'Cumulative share of Betweenness',
-    xTickFmt: '.0%', yTickFmt: '.0%',
-  })
-
-  svg.append('text')
-    .attr('x', MARGINS.left + innerW - 6).attr('y', MARGINS.top + 14)
-    .attr('text-anchor', 'end').attr('font-size', '11px').attr('font-weight', '600').attr('fill', '#0f172a')
-    .text(`Gini ${gini.toFixed(3)}`)
-
-  if (controls.value.lorenzOverlay) {
-    const k = Number(controls.value.lorenzOverlayK) || 5
-    const topK = [...values].sort((a, b) => b.value - a.value).slice(0, k)
-    const topIds = new Set(topK.map(r => r.id))
-    // Locate each top-k on the Lorenz curve.
-    let cum2 = 0
-    const marks = []
-    for (let i = 0; i < n; i++) {
-      cum2 += sorted[i].value
-      if (topIds.has(sorted[i].id)) {
-        marks.push({
-          ...sorted[i],
-          x: (i + 1) / n,
-          y: cum2 / total,
-        })
-      }
-    }
-    const selectedSet = new Set(filterSelected.value ?? [])
-    g.selectAll('circle.topk').data(marks).join('circle')
-      .attr('class', 'topk')
-      .attr('cx', d => xScale(d.x))
-      .attr('cy', d => yScale(d.y))
-      .attr('r', 5)
-      .attr('fill', d => typeColor(effNodeType(d)))
-      .attr('stroke', d => selectedSet.has(d.id) ? '#0f172a' : '#fff')
-      .attr('stroke-width', 1.5)
-      .attr('opacity', d => isActive(d.id) ? 1 : ATTENUATED_OPACITY)
-      .style('cursor', 'pointer')
-      .on('mouseover', (ev, d) => showTip(tooltip, ev,
-        `<strong>${d.id}</strong><br>${effNodeType(d)}<br>Betw ${FORMATTERS.exponential(d.value)}<br>cum frac ${(d.x * 100).toFixed(1)}%`))
-      .on('mousemove', (ev) => showTip(tooltip, ev, null))
-      .on('mouseout', () => hideTip(tooltip))
-      .on('click', (_, d) => toggleSelected(d.id))
-
-    drawTypeLegend(svg, totalW, [...new Set(marks.map(r => effNodeType(r)))], typeColor)
-  }
-}
-
-// Closeness violins per node type (with sparse-type strip fallback).
-function renderClosenessViolins() {
-  const { el, totalW, totalH } = frame()
-  const variant = closenessVariant.value
-  if (!variant) return
-
-  // Degenerate variant → static explanation only.
-  if (variant.degenerate) {
-    const frac = (variant.largest_component_fraction ?? 0) * 100
-    d3.select(el).append('div')
-      .style('display', 'flex').style('align-items', 'center').style('justify-content', 'center')
-      .style('height', '100%').style('padding', '1rem')
-      .style('font-size', '12px').style('color', '#64748b').style('text-align', 'center')
-      .html(`Closeness <b>${controls.value.closeDirection}</b> non informativa: la componente fortemente connessa più grande contiene solo il ${frac.toFixed(2)}% dei nodi. Vedi variante <b>Undirected</b>.`)
-    return
-  }
-
-  const MARGINS = { top: 12, right: 12, bottom: 50, left: 56 }
-  const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
-  const innerH = Math.max(0, totalH - MARGINS.top - MARGINS.bottom)
-  if (innerW < 50 || innerH < 50) return
-
-  const values = variant.values
-  if (!Array.isArray(values) || values.length === 0) return
-
-  // Re-aggregate client-side using effective types (auto-promoted or raw).
-  // Backend ships by_type keyed on raw `Node Type`; under auto_promotion that
-  // collapses to a single bucket on Karate-like graphs.
-  const byType = {}
-  const counts = {}
-  for (const r of values) {
-    const t = effNodeType(r)
-    ;(byType[t] ??= []).push(r)
-    counts[t] = (counts[t] || 0) + 1
-  }
-  let types = Object.keys(byType)
-  if (controls.value.closeSort === 'alpha') {
-    types.sort((a, b) => a.localeCompare(b))
-  } else {
-    // Median desc surfaces the "most central type" first.
-    const medianOf = (t) => d3.median(byType[t].map(r => r.value)) ?? 0
-    types.sort((a, b) => medianOf(b) - medianOf(a))
-  }
-
-  const svg = d3.select(el).append('svg').attr('width', totalW).attr('height', totalH)
-  const g = svg.append('g').attr('transform', `translate(${MARGINS.left},${MARGINS.top})`)
-  const tooltip = makeTooltip(el)
-
-  const xScale = d3.scaleBand().domain(types).range([0, innerW]).padding(0.2)
-  const allVals = values.map(r => r.value)
-  const yScale = d3.scaleLinear().domain([0, d3.max(allVals) || 1]).range([innerH, 0])
-
-  drawGrid(g, d3.scaleLinear().domain([0, 1]).range([0, innerW]), yScale, innerW, innerH)
-
-  types.forEach(t => {
-    const records = byType[t]
-    const vals = records.map(r => r.value).sort((a, b) => a - b)
-    const n = counts[t] ?? vals.length
-    const x = xScale(t)
-    const w = xScale.bandwidth()
-    const cx = x + w / 2
-
-    if (n < 5) {
-      // Sparse-type fallback: jittered strip plot. Jitter is seeded by node id
-      // (deterministic) so a re-render doesn't reshuffle the dots, and the
-      // decorative dot and its transparent hit circle stay aligned.
-      const placed = records.map(d => ({ d, jx: cx + (seededUnit(d.id) - 0.5) * w * 0.5 }))
-      g.selectAll(null).data(placed).enter().append('circle')
-        .attr('cx', p => p.jx)
-        .attr('cy', p => yScale(p.d.value))
-        .attr('r', 3.5)
-        .attr('fill', typeColor(t))
-        .attr('opacity', p => isActive(p.d.id) ? 0.85 : ATTENUATED_OPACITY)
-        .style('pointer-events', 'none')
-      g.selectAll(null).data(placed).enter().append('circle')
-        .attr('cx', p => p.jx)
-        .attr('cy', p => yScale(p.d.value))
-        .attr('r', 6).attr('fill', 'transparent')
-        .style('cursor', 'pointer')
-        .on('mouseover', (ev, p) => showTip(tooltip, ev,
-          `<strong>${p.d.id}</strong><br>${t}<br>Closeness ${FORMATTERS.exponential(p.d.value)}`))
-        .on('mousemove', (ev) => showTip(tooltip, ev, null))
-        .on('mouseout', () => hideTip(tooltip))
-        .on('click', (_, p) => toggleSelected(p.d.id))
-      return
-    }
-
-    const yMin = vals[0], yMax = vals[vals.length - 1]
-    const bw = Math.max(1e-12, (yMax - yMin) * 0.08)
-    const kerns = d3.range(0, 41).map(i => yMin + (yMax - yMin) * i / 40)
-    const density = kerns.map(yk => {
-      const u = vals.reduce((acc, v) => acc + Math.exp(-((v - yk) ** 2) / (2 * bw * bw)), 0)
-      return { y: yk, d: u / (vals.length * bw * Math.sqrt(2 * Math.PI)) }
-    })
-    const maxD = d3.max(density, p => p.d) || 1
-    const widthScale = d3.scaleLinear().domain([0, maxD]).range([0, w / 2])
-
-    const areaR = d3.area()
-      .x0(() => cx)
-      .x1(p => cx + widthScale(p.d))
-      .y(p => yScale(p.y))
-      .curve(d3.curveCatmullRom)
-    const areaL = d3.area()
-      .x0(p => cx - widthScale(p.d))
-      .x1(() => cx)
-      .y(p => yScale(p.y))
-      .curve(d3.curveCatmullRom)
-
-    g.append('path').datum(density).attr('d', areaR).attr('fill', typeColor(t)).attr('opacity', 0.45)
-    g.append('path').datum(density).attr('d', areaL).attr('fill', typeColor(t)).attr('opacity', 0.45)
-
-    // 25/50/75 percentile marks.
-    const q = p => d3.quantileSorted(vals, p)
-    ;[0.25, 0.5, 0.75].forEach(p => {
-      const yp = yScale(q(p))
-      g.append('line').attr('x1', cx - 6).attr('x2', cx + 6)
-        .attr('y1', yp).attr('y2', yp)
-        .attr('stroke', '#0f172a').attr('stroke-width', p === 0.5 ? 1.8 : 1)
-        .attr('opacity', p === 0.5 ? 1 : 0.6)
-    })
-
-    g.append('rect').attr('x', x).attr('y', 0).attr('width', w).attr('height', innerH)
-      .attr('fill', 'transparent').style('cursor', 'default')
-      .on('mouseover', (ev) => showTip(tooltip, ev,
-        `<strong>${t}</strong><br>n=${vals.length}<br>median ${FORMATTERS.exponential(q(0.5))}<br>IQR [${FORMATTERS.exponential(q(0.25))}, ${FORMATTERS.exponential(q(0.75))}]`))
-      .on('mousemove', (ev) => showTip(tooltip, ev, null))
-      .on('mouseout', () => hideTip(tooltip))
-  })
-
-  drawAxes(g, xScale, yScale, innerW, innerH, {
-    xLabel: 'Node type', yLabel: 'Closeness',
-    yTickFmt: '.2~e',
-  })
-
-  if (types.length > 4) {
-    g.selectAll('g.tick text').filter(function (d) { return types.includes(d) })
-      .attr('transform', 'rotate(-20)').attr('text-anchor', 'end').attr('dx', '-0.3em').attr('dy', '0.2em')
-  }
-}
-
 function toggleSelected(id) {
   selection.toggle(id)
 }
@@ -679,17 +419,6 @@ const VIEW_OPTIONS = [
 // ~40 the bands collapse to a few px on a 4:3 card and the tail is all ~0%.
 const TOP_N_OPTIONS = [
   { k: 10, label: '10' }, { k: 20, label: '20' }, { k: 40, label: '40' },
-]
-const ANCHOR_OPTIONS = computed(() => [
-  { k: 'top', label: 'Top eigenvector' },
-  { k: 'selected', label: 'Selected node', disabled: filterSelected.value.length === 0,
-    title: filterSelected.value.length === 0 ? 'Select a node first' : '' },
-])
-const LORENZ_K_OPTIONS = [
-  { k: 5, label: '5' }, { k: 10, label: '10' }, { k: 20, label: '20' },
-]
-const CLOSE_SORT_OPTIONS = [
-  { k: 'median', label: 'Median desc' }, { k: 'alpha', label: 'Alphabetical' },
 ]
 const DIRECTION_OPTIONS = [
   { k: 'undirected', label: 'Undirected' },
@@ -744,11 +473,9 @@ const shownTypesList = computed(() => {
 const availableMeasureTypes = computed(() =>
   allMeasureTypes.value.filter(t => !shownTypesList.value.includes(t)))
 
-// The Show-types picker shows on the PageRank bars and on the scatter (any
-// measure). Mirrors the ControlSection v-if so the empty-state can gate on it.
-const typePickerVisible = computed(() =>
-  allMeasureTypes.value.length > 1 &&
-  ((isPageRank.value && controls.value.view === 'specific') || controls.value.view === 'generic'))
+// The Show-types picker shows on the rank-mass bars (all four measures) and on
+// the scatter. Mirrors the ControlSection v-if so the empty-state can gate on it.
+const typePickerVisible = computed(() => allMeasureTypes.value.length > 1)
 
 // Available picker: open by default, collapsible (matches DegreeDistribution).
 const typesAvailableOpen = ref(true)
@@ -773,12 +500,19 @@ function removeAllTypes() { updateControl('showTypes', []) }
 </script>
 
 <template>
-  <div class="flex flex-col gap-1.5 h-full">
+  <div class="flex flex-col gap-1.5">
     <Teleport v-if="controlsTarget" :to="`#${controlsTarget}`">
       <div class="grid grid-cols-2 auto-rows-min gap-1.5">
         <ControlSection title="View" :col-span="2">
           <ControlToggleGroup :model-value="controls.view" :options="VIEW_OPTIONS"
             @update:model-value="updateControl('view', $event)" />
+        </ControlSection>
+
+        <!-- Closeness keeps the Direction selector: it picks which variant
+             (undirected / out / in) feeds the shared rank-mass bars. -->
+        <ControlSection v-if="isCloseness && schema?.directed" title="Direction" :col-span="2">
+          <ControlToggleGroup :model-value="controls.closeDirection" :options="DIRECTION_OPTIONS"
+            @update:model-value="updateControl('closeDirection', $event)" />
         </ControlSection>
 
         <!-- Single Lin/Log toggle that couples both axes (degree-vs-centrality
@@ -789,8 +523,8 @@ function removeAllTypes() { updateControl('showTypes', []) }
             @update:model-value="setScatterScale($event)" />
         </ControlSection>
 
-        <!-- PageRank Specific -->
-        <ControlSection v-if="isPageRank && controls.view === 'specific'" title="Top N">
+        <!-- Top N for the rank-mass bars (shared by all four measures). -->
+        <ControlSection v-if="controls.view === 'specific'" title="Top N">
           <ControlToggleGroup :model-value="controls.topN" :options="TOP_N_OPTIONS"
             @update:model-value="updateControl('topN', $event)" />
         </ControlSection>
@@ -860,32 +594,70 @@ function removeAllTypes() { updateControl('showTypes', []) }
             </div>
           </div>
         </ControlSection>
+      </div>
+    </Teleport>
 
-        <!-- Eigenvector Specific -->
-        <ControlSection v-if="isEigenvector && controls.view === 'specific'" title="Anchor" :col-span="2">
-          <ControlToggleGroup :model-value="controls.anchor" :options="ANCHOR_OPTIONS"
-            @update:model-value="updateControl('anchor', $event)" />
-        </ControlSection>
+    <!-- Interactive theory block teleported into PanelFocus's drawer. Inline
+         links drive the panel's own controls so the reader can switch view,
+         Top N and (closeness) direction straight from the prose. -->
+    <Teleport v-if="theoryTarget" :to="`#${theoryTarget}`">
+      <div class="flex flex-col gap-4 text-sm leading-relaxed text-secondary">
 
-        <!-- Betweenness Specific -->
-        <ControlSection v-if="isBetweenness && controls.view === 'specific'" title="Top-k overlay">
-          <ControlSwitch label="Show top-k" :model-value="controls.lorenzOverlay"
-            @update:model-value="updateControl('lorenzOverlay', $event)" />
-        </ControlSection>
-        <ControlSection v-if="isBetweenness && controls.view === 'specific' && controls.lorenzOverlay" title="Top-k size">
-          <ControlToggleGroup :model-value="controls.lorenzOverlayK" :options="LORENZ_K_OPTIONS"
-            @update:model-value="updateControl('lorenzOverlayK', $event)" />
-        </ControlSection>
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">What {{ measureTheory.title }} measures</h3>
+          <p>{{ measureTheory.plain }}</p>
+          <p class="text-[13px] text-slate-600">{{ measureTheory.technical }}</p>
+        </section>
 
-        <!-- Closeness Specific -->
-        <ControlSection v-if="isCloseness && controls.view === 'specific' && schema?.directed" title="Direction" :col-span="2">
-          <ControlToggleGroup :model-value="controls.closeDirection" :options="DIRECTION_OPTIONS"
-            @update:model-value="updateControl('closeDirection', $event)" />
-        </ControlSection>
-        <ControlSection v-if="isCloseness && controls.view === 'specific'" title="Sort" :col-span="2">
-          <ControlToggleGroup :model-value="controls.closeSort" :options="CLOSE_SORT_OPTIONS"
-            @update:model-value="updateControl('closeSort', $event)" />
-        </ControlSection>
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Reading this panel</h3>
+          <p>
+            The
+            <button :class="theoryLinkClass(controls.view === 'specific')"
+              @click="updateControl('view', 'specific')">By Measure</button>
+            view ranks the
+            <button :class="theoryLinkClass(false)"
+              @click="updateControl('topN', controls.topN === 10 ? 20 : controls.topN === 20 ? 40 : 10)">top {{ controls.topN }}</button>
+            nodes; each bar is that node's <strong>share of the total {{ measureTheory.title }} mass</strong>, so a long bar means one node concentrates a large slice of the whole network's score.
+          </p>
+          <p>
+            The
+            <button :class="theoryLinkClass(controls.view === 'generic')"
+              @click="updateControl('view', 'generic')">vs Degree</button>
+            view plots each node's {{ measureTheory.title }} against its <strong>degree</strong> (number of connections). Points off the diagonal are the interesting ones: high {{ measureTheory.title }} with low degree means a node punches above its raw connectivity. Drag a box to select those nodes across every panel.
+          </p>
+          <p v-if="measure === 'closeness' && schema?.directed">
+            On this directed graph you can read closeness as
+            <button :class="theoryLinkClass(controls.closeDirection === 'undirected')"
+              @click="updateControl('closeDirection', 'undirected')">undirected</button>,
+            <button :class="theoryLinkClass(controls.closeDirection === 'out')"
+              @click="updateControl('closeDirection', 'out')">out</button>
+            or
+            <button :class="theoryLinkClass(controls.closeDirection === 'in')"
+              @click="updateControl('closeDirection', 'in')">in</button>.
+          </p>
+        </section>
+
+        <section v-if="theoryStats" class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">In this graph</h3>
+          <p>
+            The most central node is <strong>{{ theoryStats.topId }}</strong>
+            <template v-if="theoryStats.typeCount > 1"> (<span :style="{ color: typeColor(theoryStats.topType) }" class="font-medium">{{ theoryStats.topType }}</span>)</template>,
+            holding <strong>{{ (theoryStats.topShare * 100).toFixed(theoryStats.topShare < 0.01 ? 2 : 1) }}%</strong> of all {{ measureTheory.title }} mass on its own.
+          </p>
+          <p>
+            Just <strong>{{ FORMATTERS.integer(theoryStats.halfCount) }}</strong>
+            of the <strong>{{ FORMATTERS.integer(theoryStats.n) }}</strong> scored nodes
+            ({{ (theoryStats.halfPct * 100).toFixed(theoryStats.halfPct < 0.01 ? 2 : 1) }}%) hold <strong>half</strong> the total —
+            <template v-if="theoryStats.halfPct < 0.1">a sharply concentrated, hub-dominated network.</template>
+            <template v-else-if="theoryStats.halfPct < 0.35">a moderately concentrated network.</template>
+            <template v-else>a fairly even spread, with no single node dominating.</template>
+          </p>
+          <p v-if="theoryStats.typeCount > 1" class="rounded-md bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
+            <strong>Tip:</strong> with <strong>{{ theoryStats.typeCount }}</strong> node types, open the panel <strong>settings</strong> (controls icon, top-right) and use <strong>Show types</strong> to focus the bars and scatter on the types you care about.
+          </p>
+        </section>
+
       </div>
     </Teleport>
 

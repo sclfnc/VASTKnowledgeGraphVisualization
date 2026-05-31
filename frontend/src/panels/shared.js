@@ -176,26 +176,48 @@ export function attachVLineTooltip(g, x, h, html, tooltip) {
 }
 
 export function drawGrid(g, xScale, yScale, innerW, innerH) {
+  // Align gridlines to the same tick values drawAxes uses: powers of 10 on a log
+  // scale (d3's default emits 2..9 per decade, which desyncs grid from labels),
+  // d3 defaults on a linear scale.
+  const yAxis = d3.axisLeft(yScale).tickSize(-innerW).tickFormat('')
+  if (isLogScale(yScale)) yAxis.tickValues(logMajorTicks(yScale)); else yAxis.ticks(5)
   g.append('g').attr('class', 'grid')
-    .call(d3.axisLeft(yScale).ticks(5).tickSize(-innerW).tickFormat(''))
+    .call(yAxis)
     .call(s => s.selectAll('line').attr('stroke', COLOR_SCHEME.grid).attr('stroke-width', 0.5))
     .call(s => s.selectAll('.domain').remove())
+  const xAxis = d3.axisBottom(xScale).tickSize(-innerH).tickFormat('')
+  if (isLogScale(xScale)) xAxis.tickValues(logMajorTicks(xScale)); else xAxis.ticks(6)
   g.append('g').attr('class', 'grid').attr('transform', `translate(0,${innerH})`)
-    .call(d3.axisBottom(xScale).ticks(6).tickSize(-innerH).tickFormat(''))
+    .call(xAxis)
     .call(s => s.selectAll('line').attr('stroke', COLOR_SCHEME.grid).attr('stroke-width', 0.5))
     .call(s => s.selectAll('.domain').remove())
 }
 
-// Log scales: force tick values to powers of 10 — d3's default emits 2..9 per decade.
+// Log scales: prefer powers of 10 (d3's default clutters with 2..9 per decade).
+// But on a short span the decade boundaries alone can yield ≤2 ticks, making a
+// genuine log axis read as linear (one lonely label). When that happens, fall
+// back to including the 2/3/5×10ⁿ minor ticks within the domain so the axis is
+// visibly logarithmic. Threshold: <3 major powers in range.
 function isLogScale(s) { return typeof s?.base === 'function' }
 function logMajorTicks(scale) {
   const [a, b] = scale.domain()
   const lo = Math.min(a, b), hi = Math.max(a, b)
   const start = Math.ceil(Math.log10(lo))
   const end = Math.floor(Math.log10(hi))
+  const majors = []
+  for (let i = start; i <= end; i++) majors.push(Math.pow(10, i))
+  if (majors.length >= 3) return majors
+  // Short span: add 2/3/5 minor ticks across the decades the domain touches.
   const out = []
-  for (let i = start; i <= end; i++) out.push(Math.pow(10, i))
-  return out
+  const decStart = Math.floor(Math.log10(lo))
+  const decEnd = Math.ceil(Math.log10(hi))
+  for (let i = decStart; i <= decEnd; i++) {
+    for (const mul of [1, 2, 3, 5]) {
+      const v = mul * Math.pow(10, i)
+      if (v >= lo && v <= hi) out.push(v)
+    }
+  }
+  return out.length ? out : majors
 }
 export function drawAxes(g, xScale, yScale, innerW, innerH, opts = {}) {
   const { xLabel = '', yLabel = '', yTickFmt = null, xTickFmt = null, yTicks = 5, xTicks = 6 } = opts

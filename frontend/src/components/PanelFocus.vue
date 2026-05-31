@@ -71,7 +71,7 @@ onUnmounted(() => {
       class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
       @click.self="emit('close')"
     >
-      <div class="relative flex w-full max-w-7xl max-h-[90vh] rounded-2xl bg-white shadow-xl overflow-hidden">
+      <div class="relative flex w-full max-w-7xl h-[85vh] max-h-[90vh] rounded-2xl bg-white shadow-xl overflow-hidden">
         <div class="flex flex-1 flex-col p-10 min-h-0">
           <div class="mb-6 flex items-center justify-between">
             <span class="text-lg font-semibold text-primary">{{ panel.label }}</span>

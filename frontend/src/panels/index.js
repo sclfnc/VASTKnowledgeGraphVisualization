@@ -20,10 +20,12 @@ const CENTRALITY_BASE_CONTROLS = {
   xLog:          { default: true },
   yLog:          { default: true },
   showTypes:     { default: null },
+  // All four measures share the rank-mass bars → Top N is a base control.
+  topN:          { default: 20 },
 }
 
 const PAGERANK_EXPLANATION = `PageRank models a random walk biased by a damping factor: at each step the surfer follows an outgoing edge with probability 0.85, or teleports uniformly with probability 0.15. The stationary distribution sums to 1, so a node's score is its share of the total "rank mass". Use the Specific view to read concentration on the few hubs; the Generic scatter shows how PageRank deviates from raw degree.`
-const EIGENVECTOR_EXPLANATION = `Eigenvector centrality is the leading eigenvector of the adjacency matrix on the largest connected component: a node is important if its neighbors are important. Diffusive influence dominates over local degree. The decay-from-core view buckets nodes by rank shell from the spectral peak; flat decay means a single core, fast decay means a star-like core-periphery.`
+const EIGENVECTOR_EXPLANATION = `Eigenvector centrality is the leading eigenvector of the adjacency matrix on the largest connected component: a node is important if its neighbors are important. Diffusive influence dominates over local degree. The By-Measure bars rank nodes by their share of the total eigenvector mass — a few long bars over a flat tail mark a tight spectral core; the vs-Degree scatter shows how far eigenvector deviates from raw degree.`
 const BETWEENNESS_EXPLANATION = `Betweenness counts the fraction of shortest paths that pass through a node — a measure of how indispensable it is as a bridge. Heavy-tailed networks have a few "structural holes" concentrating most of the betweenness mass; the Lorenz curve makes that inequality visible at a glance, with Gini summarizing it in one number.`
 const CLOSENESS_EXPLANATION = `Closeness is the inverse of the average shortest-path distance to all other reachable nodes, normalized per-component with Wasserman-Faust so values across components are comparable. Variants (undirected / out / in) honor edge direction. On directed graphs with a near-DAG structure (e.g. MC1), the out/in variants degenerate because strongly-connected components are nearly singletons — the panel falls back to a static explanation in that case.`
 const COMPARISON_EXPLANATION = `The four centralities measure different aspects: PageRank (rank mass), Eigenvector (spectral diffusion), Betweenness (bridges), Closeness (proximity). Their pairwise correlations reveal which structural axes are aligned in your graph and which are independent. A scatter matrix with log axes flattens heavy tails and surfaces deviation; Spearman's rank correlation is robust to the outliers typical of centrality distributions.`
@@ -147,10 +149,7 @@ const ALL_SPECS = [
     component: CentralityPanel,
     componentProps: { measure: 'spectral_pagerank' },
     explanation: PAGERANK_EXPLANATION,
-    controlsSchema: {
-      ...CENTRALITY_BASE_CONTROLS,
-      topN:      { default: 20 },
-    },
+    controlsSchema: { ...CENTRALITY_BASE_CONTROLS },
   },
 
   {
@@ -162,10 +161,7 @@ const ALL_SPECS = [
     component: CentralityPanel,
     componentProps: { measure: 'spectral_eigenvector' },
     explanation: EIGENVECTOR_EXPLANATION,
-    controlsSchema: {
-      ...CENTRALITY_BASE_CONTROLS,
-      anchor: { default: 'top' },
-    },
+    controlsSchema: { ...CENTRALITY_BASE_CONTROLS },
   },
 
   {
@@ -177,11 +173,7 @@ const ALL_SPECS = [
     component: CentralityPanel,
     componentProps: { measure: 'betweenness' },
     explanation: BETWEENNESS_EXPLANATION,
-    controlsSchema: {
-      ...CENTRALITY_BASE_CONTROLS,
-      lorenzOverlay:  { default: true },
-      lorenzOverlayK: { default: 5 },
-    },
+    controlsSchema: { ...CENTRALITY_BASE_CONTROLS },
   },
 
   {
@@ -196,7 +188,6 @@ const ALL_SPECS = [
     controlsSchema: {
       ...CENTRALITY_BASE_CONTROLS,
       closeDirection: { default: 'undirected' },
-      closeSort:      { default: 'median' },
     },
   },
 
@@ -209,8 +200,7 @@ const ALL_SPECS = [
     component: CentralityComparison,
     explanation: COMPARISON_EXPLANATION,
     controlsSchema: {
-      logAxes:     { default: true },
-      correlation: { default: 'spearman' },
+      logAxes: { default: true },
     },
   },
 
