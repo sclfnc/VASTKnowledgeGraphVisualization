@@ -77,10 +77,15 @@ export function mergeLayers(layers) {
   return { nodes: [...nodeMap.values()], edges: [...edgeMap.values()] }
 }
 
-// Keep only nodes that belong to ≥ minLayers layers, plus the edges where both
+// Keep nodes that belong to ≥ minLayers layers, plus the edges where both
 // endpoints survive. Used by EgoComparison's "intersection only" view.
+// Ego nodes (the user's explicit picks) are always kept, even when they share
+// nothing with the other egos — they are the anchors of the comparison, not
+// alters to be filtered out.
 export function filterIntersection(graph, minLayers = 2) {
-  const kept = new Set(graph.nodes.filter(n => n.layers.size >= minLayers).map(n => n.id))
+  const kept = new Set(
+    graph.nodes.filter(n => n.layers.size >= minLayers || n.isEgoOf.size > 0).map(n => n.id),
+  )
   return {
     nodes: graph.nodes.filter(n => kept.has(n.id)),
     edges: graph.edges.filter(e => kept.has(e.source) && kept.has(e.target)),
