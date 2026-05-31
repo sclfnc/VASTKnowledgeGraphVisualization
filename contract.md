@@ -20,7 +20,7 @@ The contract is **"consume the mask", not "be internally a bitmap"**: a panel co
 narrowing is driven by these masks, regardless of how it stores its own data. No panel reads
 `filters.*` raw to bypass a mask — the only allowed raw read is reflecting a widget the panel itself
 edits (e.g. `ConnectedComponents` reading `wccFilter` to highlight its Top-N button). Panel-private
-`controls` (log scale, top-N, bin size, anchor) touch no bitmap.
+`controls` (log scale, top-N, bin size) touch no bitmap.
 
 **Cross-panel influence is implicit under this contract:** A influences B iff A writes
 `filters`/`selection` (see §Upstream writes) and B consumes the resulting bitmap (every panel does).
@@ -180,4 +180,4 @@ not derivable from the code). Input for the panel-by-panel HCI audit; none decid
 **Cross-panel preset / deep-link.**
 - `connected_components`: accept "isolate these components" from `ego_compare` (each ego lives in one WCC).
 - `ego`: accept "open ego with direction = X" from `edge_flow` arc clicks (needs a signal beyond the current selection broadcast).
-- `cent_comparison`: two-way sync of `controls.correlation` / `logAxes` with the four single-centrality panels (sometimes useful, sometimes annoying).
+- `cent_comparison`: two-way sync of `controls.logAxes` with the four single-centrality panels (sometimes useful, sometimes annoying).

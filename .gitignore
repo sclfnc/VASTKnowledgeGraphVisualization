@@ -13,3 +13,8 @@ api/venv/
 api/__pycache__/
 api/graph_storage/
 docs/interactions/
+# Local report workspace (LaTeX) — never integrate
+tex/
+
+# Course slides — local only, not part of the project
+slides/
