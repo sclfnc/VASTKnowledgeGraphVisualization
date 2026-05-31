@@ -23,10 +23,15 @@ const props = defineProps({
   widened: { type: Boolean, default: false },
   expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
+  theoryTarget: { type: String, default: null },
   mode: { type: String, default: 'node' },  // 'node' | 'edge'
 })
 
 defineEmits(['request-widen', 'request-shrink'])
+
+const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
+const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
+function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 
 const { data, loading, error } = useTimeline(toRef(props, 'graphId'))
 const { color: nodeTypeColor } = useNodeTypeColors(toRef(props, 'schema'))
@@ -83,6 +88,7 @@ const isEmpty = computed(() => !loading.value && data.value && temporalAttrs.val
 const isNoValid = computed(() => !loading.value && activeAttrData.value && activeAttrData.value.valid_count === 0)
 
 const recordLabel = computed(() => props.mode === 'edge' ? 'edges' : 'nodes')
+const typeLabel = computed(() => props.mode === 'edge' ? 'edge type' : 'node type')
 const coverageText = computed(() => {
   const a = activeAttrData.value
   if (!a) return ''
@@ -273,18 +279,83 @@ useD3Chart(chartContainer, render, () => [props.widened, props.expanded])
 
 <template>
   <div class="flex flex-col gap-1.5">
-    <Teleport v-if="controlsTarget && temporalAttrs.length" :to="`#${controlsTarget}`">
-      <div class="grid grid-cols-2 auto-rows-min gap-1.5">
-        <ControlSection title="Attribute" :col-span="2">
+    <Teleport v-if="theoryTarget" :to="`#${theoryTarget}`">
+      <div class="flex flex-col gap-4 text-sm leading-relaxed text-secondary">
+
+        <!-- Attribute switcher: only when the graph has ≥2 temporal attributes
+             (otherwise there's nothing to switch between). -->
+        <section v-if="temporalAttrs.length > 1" class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Temporal attribute</h3>
+          <p>
+            This graph has several time fields. Plot:
+          </p>
           <select
-            class="input-base w-full text-xs px-2 py-1"
+            class="input-base text-xs px-2 py-1 w-full"
             :value="activeAttr ?? ''"
             @change="(e) => updateControl('attr', e.target.value)"
           >
             <option v-for="a in temporalAttrs" :key="a" :value="a">{{ a }}</option>
           </select>
-        </ControlSection>
+        </section>
 
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Reading this timeline</h3>
+          <p>
+            Each bar is a time bin — a <strong>year</strong> or a <strong>decade</strong>. Its height is
+            how many <strong>{{ recordLabel }}</strong> carry a date in that period, for the chosen
+            temporal attribute. The faint grey silhouette behind the bars is the <strong>full-graph
+            total</strong>; the colored bars in front are what survives the current filter, so you read
+            the filter's effect as the gap between the two.
+          </p>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Bins &amp; breakdown</h3>
+          <p>
+            Switch the bin to
+            <button :class="theoryLinkClass(controls.binSize === 'year')"
+              @click="updateControl('binSize', 'year')">year</button>
+            for detail or
+            <button :class="theoryLinkClass(controls.binSize === 'decade')"
+              @click="updateControl('binSize', 'decade')">decade</button>
+            to smooth a sparse, long history. Stack the bars
+            <button :class="theoryLinkClass(controls.breakdown === 'type')"
+              @click="updateControl('breakdown', 'type')">by {{ typeLabel }}</button>
+            to see which kinds dominate each period (colors match every other panel), or collapse to a
+            <button :class="theoryLinkClass(controls.breakdown === 'none')"
+              @click="updateControl('breakdown', 'none')">single series</button>
+            for the plain volume curve.
+          </p>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Dates are messy</h3>
+          <p>
+            Knowledge-graph dates arrive as free-form strings (<code>1998</code>, <code>1998-03</code>,
+            <code>March 1998</code>, epoch seconds…). We parse them with a per-attribute
+            <strong>strategy</strong> and report honest <strong>coverage</strong>: how many values parsed
+            and how many were dropped. If the curve looks wrong, the strategy is usually the cause —
+            <button :class="THEORY_LINK" @click="openTimelineSettings()">open date-parsing settings</button>
+            to change it. Bars are computed only from values that parsed; unparseable ones are excluded,
+            not guessed.
+          </p>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Brushing to a period</h3>
+          <p>
+            Drag across the bars to select a span, or click a single bar for one bin — either writes a
+            <strong>temporal filter</strong> ({{ recordLabel }} scope) that the rest of the dashboard
+            reacts to. It's the time equivalent of brushing in any linked view: narrow the era here,
+            read its structure everywhere else.
+          </p>
+        </section>
+
+      </div>
+    </Teleport>
+
+    <Teleport v-if="controlsTarget && temporalAttrs.length" :to="`#${controlsTarget}`">
+      <div class="grid grid-cols-2 auto-rows-min gap-1.5">
         <ControlSection title="Breakdown">
           <ControlToggleGroup
             :model-value="controls.breakdown"

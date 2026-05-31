@@ -16,7 +16,11 @@ import { onMounted, onBeforeUnmount, toValue, watch } from 'vue'
 
 export function useD3Chart(containerRefOrRefs, render, spanFlags = null) {
   const refs = Array.isArray(containerRefOrRefs) ? containerRefOrRefs : [containerRefOrRefs]
-  let observers = []
+  // Track the element each observer is bound to, so we can rebind when a
+  // container mounts later (e.g. behind a v-else that flips once data arrives)
+  // or swaps elements. A one-shot onMounted misses those — the panel renders
+  // via the data watch but the window-resize observer never attaches.
+  let observers = refs.map(() => ({ ob: null, el: null }))
   let rafId = null
 
   function schedule() {
@@ -24,14 +28,27 @@ export function useD3Chart(containerRefOrRefs, render, spanFlags = null) {
     rafId = requestAnimationFrame(render)
   }
 
-  onMounted(() => {
-    for (const ref of refs) {
+  function syncObservers() {
+    refs.forEach((ref, i) => {
       const el = toValue(ref)
-      if (!el) continue
-      const ob = new ResizeObserver(schedule)
-      ob.observe(el)
-      observers.push(ob)
-    }
+      const slot = observers[i]
+      if (el === slot.el) return
+      if (slot.ob) slot.ob.disconnect()
+      if (el) {
+        const ob = new ResizeObserver(schedule)
+        ob.observe(el)
+        observers[i] = { ob, el }
+      } else {
+        observers[i] = { ob: null, el: null }
+      }
+    })
+  }
+
+  // Rebind whenever any tracked ref changes identity (mount / swap / unmount).
+  watch(refs, syncObservers, { flush: 'post' })
+
+  onMounted(() => {
+    syncObservers()
     render()
   })
 
@@ -42,7 +59,7 @@ export function useD3Chart(containerRefOrRefs, render, spanFlags = null) {
   }
 
   onBeforeUnmount(() => {
-    for (const ob of observers) ob.disconnect()
+    for (const slot of observers) if (slot.ob) slot.ob.disconnect()
     observers = []
     if (rafId) cancelAnimationFrame(rafId)
   })

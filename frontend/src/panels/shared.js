@@ -79,10 +79,18 @@ export function makeTooltip(container) {
 
 // `html === null` updates position only — callers pass null on mousemove to
 // reposition without re-setting (and blanking) the tooltip text.
+//
+// Position is computed with d3.pointer against the tooltip's own container, not
+// event.offsetX/offsetY. offset* is relative to the event *target*, which breaks
+// when the target sits inside a transformed <g> (pan/zoom viewport) or is a
+// clipped shape — the tooltip would jump far off. Pointer-vs-container is stable
+// regardless of the target, and matches offset* when the SVG fills the container.
 export function showTip(tooltip, event, html) {
+  const container = tooltip.node()?.parentNode
+  const [px, py] = container ? d3.pointer(event, container) : [event.offsetX, event.offsetY]
   tooltip.style('opacity', 1)
-    .style('left', (event.offsetX + 12) + 'px')
-    .style('top', (event.offsetY - 20) + 'px')
+    .style('left', (px + 12) + 'px')
+    .style('top', (py - 20) + 'px')
   if (html != null) tooltip.html(html)
 }
 

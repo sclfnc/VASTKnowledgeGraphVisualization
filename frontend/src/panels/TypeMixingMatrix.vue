@@ -14,6 +14,7 @@ import { useD3Chart } from './useD3Chart.js'
 import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS, selectedTypesIn, idsOfTypesSoA } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
+import SliderControl from './controls/SliderControl.vue'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -22,7 +23,13 @@ const props = defineProps({
   widened: { type: Boolean, default: false },
   expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
+  theoryTarget: { type: String, default: null },
 })
+
+// Inline theory-link classes (global Tailwind; the block is teleported out).
+const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
+const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
+function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 
 const emit = defineEmits(['request-widen', 'request-shrink'])
 
@@ -45,7 +52,7 @@ const auxContainer = ref(null)
 let tooltip = null
 
 const SELECTION_CAP = SELECTION_CAPS.type_mixing
-const MARGINS = { top: 50, right: 12, bottom: 14, left: 70 }
+const MARGINS = { top: 78, right: 12, bottom: 14, left: 78 }
 
 const MODE_OPTIONS = [
   { k: 'edges', label: 'Edges' },
@@ -55,6 +62,10 @@ const NORM_OPTIONS = [
   { k: 'none', label: 'None' },
   { k: 'row', label: 'Row' },
   { k: 'col', label: 'Col' },
+]
+const SORT_OPTIONS = [
+  { k: 'volume', label: 'Volume' },
+  { k: 'name', label: 'Name' },
 ]
 
 // Rows/cols collapse to the visible set; Newman r stays anchored to the full graph.
@@ -81,6 +92,41 @@ const edgeTypes = computed(() => {
   for (let i = 0; i < soa.E; i++) if (m.get(i)) present.add(edgeTypeAt(i))
   return allEdgeTypes.value.filter(t => present.has(t))
 })
+
+// Interaction volume per type (row+col sum on the raw matrix). Used to pick
+// which types survive the cap, regardless of the chosen display order.
+const typeVolume = computed(() => {
+  const types = nodeTypes.value
+  const M = activeMatrix.value
+  const vol = new Map(types.map(t => [t, 0]))
+  if (M) {
+    for (const t of types) {
+      for (const u of types) {
+        const v = M[t]?.[u] || 0
+        vol.set(t, vol.get(t) + v)
+        if (u !== t) vol.set(u, vol.get(u) + v)
+      }
+    }
+  }
+  return vol
+})
+
+// The cap always keeps the top-N by volume (so important types aren't dropped),
+// but the DISPLAY order follows the user's Sort choice: by volume (most-connected
+// first) or by name (numeric-aware, so "Dept 2" precedes "Dept 10").
+const orderedTypes = computed(() => {
+  const types = nodeTypes.value
+  if (!types.length) return { labels: [], hiddenCount: 0 }
+  const vol = typeVolume.value
+  const cap = Math.max(2, controls.value.maxTypes ?? 12)
+  const kept = [...types].sort((a, b) => (vol.get(b) - vol.get(a)) || a.localeCompare(b)).slice(0, cap)
+  const labels = controls.value.sort === 'name'
+    ? kept.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    : kept.sort((a, b) => (vol.get(b) - vol.get(a)) || a.localeCompare(b))
+  return { labels, hiddenCount: Math.max(0, types.length - cap) }
+})
+
+const hiddenCount = computed(() => orderedTypes.value.hiddenCount)
 
 // Matrix is always recomputed client-side from edges SoA + activeEdgeMask:
 // no double codepath, edge mask (type/weight/selfLoop) propagates uniformly.
@@ -142,22 +188,27 @@ const activeMatrix = computed(() => {
   return out
 })
 
-function normalizeMatrix(M, types, mode) {
+// `visible` = rows/cols to emit (capped, ordered); `all` = the full type set
+// used for the denominator, so a row/col total stays the TRUE total even when
+// the cap hides some types (those cells just don't get drawn — the percentages
+// don't fake summing to 100% over the visible subset).
+function normalizeMatrix(M, visible, all, mode) {
   if (!M || mode === 'none') return M
+  const denom = all && all.length ? all : visible
   const out = {}
   if (mode === 'row') {
-    for (const t of types) {
-      const total = d3.sum(types, u => M[t]?.[u] || 0)
+    for (const t of visible) {
+      const total = d3.sum(denom, u => M[t]?.[u] || 0)
       out[t] = {}
-      for (const u of types) {
+      for (const u of visible) {
         out[t][u] = total ? (M[t]?.[u] || 0) / total : 0
       }
     }
   } else {
-    for (const t of types) out[t] = {}
-    for (const u of types) {
-      const total = d3.sum(types, t => M[t]?.[u] || 0)
-      for (const t of types) {
+    for (const t of visible) out[t] = {}
+    for (const u of visible) {
+      const total = d3.sum(denom, t => M[t]?.[u] || 0)
+      for (const t of visible) {
         out[t][u] = total ? (M[t]?.[u] || 0) / total : 0
       }
     }
@@ -165,7 +216,11 @@ function normalizeMatrix(M, types, mode) {
   return out
 }
 
-const displayMatrix = computed(() => normalizeMatrix(activeMatrix.value, nodeTypes.value, controls.value.normalize))
+// Normalize the visible (capped, volume-ordered) rows/cols, but with the
+// denominator taken over ALL types — so percentages stay true even when the cap
+// hides some types (their share is simply absent, not redistributed).
+const displayMatrix = computed(() =>
+  normalizeMatrix(activeMatrix.value, orderedTypes.value.labels, nodeTypes.value, controls.value.normalize))
 
 const activeR = computed(() => {
   const a = data.value?.assortativity
@@ -189,7 +244,7 @@ function renderMatrix() {
   d3.select(matrixContainer.value).selectAll('*').remove()
   if (!data.value) return
 
-  const types = nodeTypes.value
+  const types = orderedTypes.value.labels
   if (types.length < 2) return  // empty state handled in template
 
   const M = displayMatrix.value
@@ -252,16 +307,15 @@ function renderMatrix() {
     }
   }
 
-  // Axes — type labels in their per-type color.
+  // Axes — type labels in their per-type color. X labels are rotated -45° so
+  // they never overlap when many types are visible (the cap bounds them, but
+  // even ~12 names overlap horizontally).
   const isNodesMode = controls.value.mode === 'nodes'
-  const xAxis = d3.axisTop(xScale).tickSize(0)
-  g.append('g').call(xAxis).select('.domain').remove()
-  g.selectAll('.tick text').remove()
   types.forEach(t => {
+    const cx = xScale(t) + xScale.bandwidth() / 2
     g.append('text')
-      .attr('x', xScale(t) + xScale.bandwidth() / 2)
-      .attr('y', -8)
-      .attr('text-anchor', 'middle')
+      .attr('transform', `translate(${cx},-6) rotate(-45)`)
+      .attr('text-anchor', 'start')
       .attr('font-size', 10)
       .attr('font-weight', 500)
       .attr('fill', typeColor(t))
@@ -280,14 +334,28 @@ function renderMatrix() {
       .text(t)
   })
 
-  // Axis label headings.
+  // Axis label headings. Source/Target only make sense with a direction; on an
+  // undirected graph the edge matrix is symmetric, so we drop the misleading
+  // From→To wording and just name the axes by what they are (node type).
+  const directed = data.value?.directed ?? false
+  let colLabel, rowLabel
+  if (isNodesMode) {
+    colLabel = 'Neighbor (1-hop)'
+    rowLabel = 'From'
+  } else if (directed) {
+    colLabel = 'Target'
+    rowLabel = 'Source'
+  } else {
+    colLabel = 'Node type'
+    rowLabel = 'Node type'
+  }
   svg.append('text')
     .attr('x', MARGINS.left + innerW / 2)
     .attr('y', 14)
     .attr('text-anchor', 'middle')
     .attr('font-size', 11)
     .attr('fill', '#475569')
-    .text(isNodesMode ? 'Neighbor (1-hop) →' : 'Target →')
+    .text(colLabel)
 
   svg.append('text')
     .attr('transform', `rotate(-90)`)
@@ -296,7 +364,7 @@ function renderMatrix() {
     .attr('text-anchor', 'middle')
     .attr('font-size', 11)
     .attr('fill', '#475569')
-    .text(isNodesMode ? 'From →' : 'Source →')
+    .text(rowLabel)
 }
 
 function cellTooltip(src, dst, raw, normalized) {
@@ -305,7 +373,10 @@ function cellTooltip(src, dst, raw, normalized) {
   const main = isPct
     ? `${FORMATTERS.percent(normalized)} (${fmtRaw} raw)`
     : fmtRaw
-  return `<b>${src}</b> → <b>${dst}</b><br>${main}`
+  // Arrow only when direction is meaningful (directed edges); otherwise a dash.
+  const directed = (data.value?.directed ?? false) && controls.value.mode === 'edges'
+  const sep = directed ? '→' : '·'
+  return `<b>${src}</b> ${sep} <b>${dst}</b><br>${main}`
 }
 
 function selectCell(src, dst) {
@@ -373,7 +444,7 @@ function renderAux() {
 
 function renderAll() { renderMatrix(); renderAux() }
 
-watch([data, controls, () => props.widened, nodeTypes, edgeTypes, activeMatrix, selectedNodeTypes], () => nextTick(renderAll), { deep: true })
+watch([data, controls, () => props.widened, nodeTypes, edgeTypes, activeMatrix, orderedTypes, selectedNodeTypes], () => nextTick(renderAll), { deep: true })
 
 useD3Chart([matrixContainer, auxContainer], renderAll, () => [props.widened, props.expanded])
 
@@ -390,6 +461,61 @@ const isFilteredEmpty = computed(() =>
 
 <template>
   <div class="flex flex-col gap-1.5">
+    <Teleport v-if="theoryTarget" :to="`#${theoryTarget}`">
+      <div class="flex flex-col gap-4 text-sm leading-relaxed text-secondary">
+
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Reading this matrix</h3>
+          <p>
+            Each cell <strong>(row → column)</strong> measures how the row type connects to the column
+            type. Darker = more. A <strong>diagonal-heavy</strong> matrix means types mostly connect
+            within themselves (assortative); bright <strong>off-diagonal</strong> cells mean two types
+            bridge to each other. {{ data?.directed ? 'On this directed graph rows are the source type, columns the target.' : 'The graph is undirected, so the matrix is symmetric.' }}
+          </p>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Edges vs Neighbors</h3>
+          <p>
+            The
+            <button :class="theoryLinkClass(controls.mode === 'edges')"
+              @click="updateControl('mode', 'edges')">Edges</button>
+            mode counts <strong>how many connections</strong> run between two types — every edge counts,
+            even repeats. The
+            <button :class="theoryLinkClass(controls.mode === 'nodes')"
+              @click="updateControl('mode', 'nodes')">Neighbors</button>
+            mode counts <strong>how many distinct partners</strong> — the same neighbor reached many
+            times counts once.
+          </p>
+          <p class="text-[13px] text-muted">
+            Example: a person who recorded the <em>same</em> song three times →
+            <strong>Edges = 3</strong> (three links) but <strong>Neighbors = 1</strong> (one distinct
+            song). If the three records were three <em>different</em> songs, both are 3. So the two modes
+            differ only when multiple edges hit the same node — Edges shows traffic, Neighbors shows reach.
+          </p>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <h3 class="text-xs font-semibold uppercase tracking-widest text-muted">Normalizing &amp; the number r</h3>
+          <p>
+            Raw counts let big types dominate. Normalize by
+            <button :class="theoryLinkClass(controls.normalize === 'row')"
+              @click="updateControl('normalize', 'row')">row</button>
+            ("of everything a row type connects to, what share goes here?"),
+            <button :class="theoryLinkClass(controls.normalize === 'col')"
+              @click="updateControl('normalize', 'col')">column</button>,
+            or keep
+            <button :class="theoryLinkClass(controls.normalize === 'none')"
+              @click="updateControl('normalize', 'none')">raw</button>
+            counts. The <strong>Newman r</strong> below summarizes the whole matrix in one number:
+            r≈1 strongly assortative (like connects to like), r≈−1 disassortative, r≈0 random. It is
+            always computed on the full graph, so it doesn't change when you cap or filter the view.
+          </p>
+        </section>
+
+      </div>
+    </Teleport>
+
     <Teleport v-if="controlsTarget" :to="`#${controlsTarget}`">
       <div class="grid grid-cols-2 auto-rows-min gap-1.5">
         <ControlSection title="Mode">
@@ -408,7 +534,27 @@ const isFilteredEmpty = computed(() =>
           />
         </ControlSection>
 
-        <ControlSection v-if="controls.mode === 'edges'" title="Edge Type" :col-span="2">
+        <ControlSection title="Sort" :col-span="2">
+          <ControlToggleGroup
+            :model-value="controls.sort"
+            :options="SORT_OPTIONS"
+            @update:model-value="updateControl('sort', $event)"
+          />
+          <p class="text-[10px] text-muted mt-1 leading-tight">
+            Row/column order. The cap always keeps the most-connected types regardless of this.
+          </p>
+        </ControlSection>
+
+        <SliderControl
+          v-if="nodeTypes.length > 6"
+          title="Max types"
+          :col-span="2"
+          :model-value="controls.maxTypes"
+          :min="5" :max="30" :step="1"
+          @update:model-value="updateControl('maxTypes', $event)"
+        />
+
+        <ControlSection v-if="controls.mode === 'edges' && edgeTypes.length > 1" title="Edge Type" :col-span="2">
           <select
             class="input-base w-full text-xs px-2 py-1"
             :value="controls.edgeTypeFilter ?? ''"
@@ -419,7 +565,7 @@ const isFilteredEmpty = computed(() =>
           </select>
         </ControlSection>
 
-        <ControlSection title="Detail" :col-span="2">
+        <ControlSection v-if="edgeTypes.length > 1" title="Detail" :col-span="2">
           <button class="text-[11px] text-sky-600 hover:underline" @click="toggleAux">
             {{ widened ? 'Hide per-edge-type r' : 'Show per-edge-type r' }}
           </button>
@@ -453,6 +599,9 @@ const isFilteredEmpty = computed(() =>
           </p>
           <p v-else class="text-[10px] leading-tight text-muted px-1 text-center">
             Newman r computed on the full graph; matrix shows the currently visible type rows/columns.
+          </p>
+          <p v-if="hiddenCount > 0" class="text-[10px] leading-tight text-muted px-1 text-center">
+            Showing the {{ controls.maxTypes }} highest-volume types; {{ hiddenCount }} more hidden (raise “Max types” in settings). Newman r still uses the full graph.
           </p>
           <p v-if="selection.overflow > 0" class="text-[10px] italic text-amber-600 px-1 text-center">
             Selection capped at {{ SELECTION_CAP }} — +{{ selection.overflow }} more not selected.

@@ -339,7 +339,13 @@ def compute_schema(G, name='Graph'):
     weighted = len(distinct_weights) > 1
     weight_range = [min(weights), max(weights)] if weighted else None
 
-    temporal_attrs = sorted({a for a in node_attrs if any(h in a.lower() for h in TEMPORAL_HINTS)})
+    edge_attrs = {k for d in edge_data for k in d}
+    # Temporal attrs split by scope (name-hint heuristic) so the dashboard can
+    # exclude the node/edge timeline panel when its scope has none.
+    temporal_attrs_node = sorted({a for a in node_attrs if any(h in a.lower() for h in TEMPORAL_HINTS)})
+    temporal_attrs_edge = sorted({a for a in (edge_attrs - RESERVED_EDGE_ATTRS)
+                                  if any(h in a.lower() for h in TEMPORAL_HINTS)})
+    temporal_attrs = temporal_attrs_node  # backward-compat alias (node scope)
 
     # Total degree only; frontend splits in/out for directed graphs.
     degrees = [d for _, d in G.degree()]
@@ -416,6 +422,8 @@ def compute_schema(G, name='Graph'):
         'node_types_detail': node_types_detail,
         'edge_types_detail': edge_types_detail,
         'temporal_attrs': temporal_attrs,
+        'temporal_attrs_node': temporal_attrs_node,
+        'temporal_attrs_edge': temporal_attrs_edge,
         'self_loops': self_loops,
         'acyclic': acyclic,
         'degree_range': degree_range,

@@ -30,7 +30,7 @@ const BETWEENNESS_EXPLANATION = `Betweenness counts the fraction of shortest pat
 const CLOSENESS_EXPLANATION = `Closeness is the inverse of the average shortest-path distance to all other reachable nodes, normalized per-component with Wasserman-Faust so values across components are comparable. Variants (undirected / out / in) honor edge direction. On directed graphs with a near-DAG structure (e.g. MC1), the out/in variants degenerate because strongly-connected components are nearly singletons — the panel falls back to a static explanation in that case.`
 const COMPARISON_EXPLANATION = `The four centralities measure different aspects: PageRank (rank mass), Eigenvector (spectral diffusion), Betweenness (bridges), Closeness (proximity). Their pairwise correlations reveal which structural axes are aligned in your graph and which are independent. A scatter matrix with log axes flattens heavy tails and surfaces deviation; Spearman's rank correlation is robust to the outliers typical of centrality distributions.`
 
-const EGO_EXPLANATION = `An ego network is the local neighborhood around a chosen node — the "ego" — together with its alters at distance up to k hops. k=1 is the immediate neighborhood; k=2 adds friends-of-friends; k=3 widens to the next shell. On directed graphs the BFS follows outgoing edges only (out-ego), since in/out semantics describe different processes and would conflate them in one view. When the neighborhood exceeds the cap, alters are sampled stratified by node type so rare types are preserved instead of being washed out by the dominant majority.`
+const EGO_EXPLANATION = `An ego network is the local neighborhood around a chosen node — the "ego" — together with its alters at distance up to k hops. k=1 is the immediate neighborhood; k=2 adds friends-of-friends; k=3 widens to the next shell. On directed graphs a Direction control (out / in / both) selects which edges the BFS follows, since in/out semantics describe different processes. When the neighborhood exceeds the cap, alters are sampled stratified by node type so rare types are preserved instead of being washed out by the dominant majority. Drag nodes to untangle the layout, drag the background to pan, scroll to zoom.`
 
 const EGO_COMPARISON_EXPLANATION = `Comparing multiple ego networks reveals whether nodes appear in one neighborhood, several, or all of them — the structural overlap between distinct local universes. Each ego gets a distinct hue; nodes shared across ego networks render as a pie of their layers, so a fully multi-colored node sits at the intersection of every chosen ego. The "Show non-common nodes" toggle lets you switch between the union view (context: how big each neighborhood is, where the intersection sits inside them) and the intersection-only view (focus: is the overlap dense and connected, or a sparse coincidence?). Up to 4 egos can be compared at once — beyond that the multi-hue encoding becomes unreadable.`
 
@@ -216,10 +216,10 @@ const ALL_SPECS = [
     // Defaults-only; drawer is composed manually inside the component.
     controlsSchema: {
       k:              { default: 1 },
-      cap:            { default: 300 },
-      direction:      { default: 'out' },
-      showEdgeLabels: { default: false },
+      cap:            { default: 150 },
+      direction:      { default: 'both' },
       highlight:      { default: 'type' },
+      highlightTypes: { default: [] },
       linkDistance:   { default: 40 },
       chargeStrength: { default: -150 },
     },
@@ -234,10 +234,13 @@ const ALL_SPECS = [
     component: EgoComparisonPanel,
     explanation: EGO_COMPARISON_EXPLANATION,
     controlsSchema: {
-      k:               { default: 1 },
-      cap:             { default: 300 },
-      direction:       { default: 'out' },
+      cap:             { default: 150 },
+      direction:       { default: 'both' },
       showNonCommon:   { default: true },
+      layout:          { default: 'force' },
+      vennSpread:      { default: 1.0 },
+      vennOverlap:     { default: 1.12 },
+      highlightTypes:  { default: [] },
       linkDistance:    { default: 40 },
       chargeStrength:  { default: -150 },
     },
@@ -302,6 +305,8 @@ const ALL_SPECS = [
       mode:           { default: 'edges' },
       normalize:      { default: 'none' },
       edgeTypeFilter: { default: null },
+      maxTypes:       { default: 12 },
+      sort:           { default: 'volume' },
     },
   },
 
@@ -320,12 +325,8 @@ const ALL_SPECS = [
       return `${nt} node types × ${et} edge types. ${schema?.directed ? 'Directed: arrows show source→target.' : 'Undirected: arcs without direction; each pair counted once.'}`
     },
     controlsSchema: {
-      srcTypeFilter:  { default: null },
-      dstTypeFilter:  { default: null },
-      edgeTypeFilter: { default: null },
-      topN:           { default: 50 },
-      minFlow:        { default: 0 },
-      normalize:      { default: false },
+      hiddenTypes:    { default: [] },
+      hideSelfLoops:  { default: false },
     },
   },
 
@@ -401,6 +402,8 @@ const ALL_SPECS = [
     status: 'implemented',
     component: ActivityTimeline,
     componentProps: { mode: 'node' },
+    // Excluded from the dashboard when the graph has no node-level temporal attr.
+    available: (schema) => (schema?.temporal_attrs_node?.length ?? 0) > 0,
     explanation: `Timeline of node-level temporal attributes (creation dates, release years, etc.). Each bar is one year (or decade); the stacked breakdown shows which node types dominate each period. The brush writes a temporal filter with scope='node' that future readers can opt into.`,
     contextualizeExplanation: (schema, data) => {
       if (!data) return null  // PanelFocus → static fallback
@@ -422,6 +425,8 @@ const ALL_SPECS = [
     status: 'implemented',
     component: ActivityTimeline,
     componentProps: { mode: 'edge' },
+    // Excluded from the dashboard when the graph has no edge-level temporal attr.
+    available: (schema) => (schema?.temporal_attrs_edge?.length ?? 0) > 0,
     explanation: `Timeline of edge-level temporal attributes (transaction dates, rating timestamps, etc.). Stack is by edge type. Brush writes a temporal filter with scope='edge'.`,
     contextualizeExplanation: (schema, data) => {
       if (!data) return null  // PanelFocus → static fallback
