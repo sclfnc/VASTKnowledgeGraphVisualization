@@ -23,6 +23,7 @@ const props = defineProps({
   schema: { type: Object, default: null },
   graphId: { type: String, default: null },
   widened: { type: Boolean, default: false },
+  expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
 })
 
@@ -156,6 +157,7 @@ const { reconcile } = useForceGraph({
   renderEdge,
   getRadius: nodeRadius,
   onNodeClick,
+  spanFlags: () => [props.widened, props.expanded],
 })
 
 watch([activeNodeMask, activeEdgeMask], () => reconcile())

@@ -21,6 +21,13 @@ export function useForceGraph({
   onSvgBuild = null,
   renderOverlay = null,
   overlayTick = null,
+  // Optional getter returning the reactive grid-span flags
+  // (e.g. `() => [props.widened, props.expanded]`). Maximize/widen change the
+  // card's grid span; the ResizeObserver can miss that transition tick, so we
+  // call resize() after the layout settles. Double rAF: first frame applies the
+  // span, second reads the settled size. Single source of truth for span-driven
+  // resizing — do NOT re-implement the watch in panels.
+  spanFlags = null,
 }) {
   let simulation = null
   let svgSel = null
@@ -54,9 +61,15 @@ export function useForceGraph({
     if (svgSel) { svgSel.remove(); svgSel = null }
     currentW = el.clientWidth || 1
     currentH = el.clientHeight || 1
+    // Absolute-positioned so the SVG never contributes to the container's
+    // in-flow height. The container is aspect-ratio driven (4/3): if the SVG
+    // were in flow, its explicit height would gonfiare the container and the
+    // two would feed each other, leaving the card stuck tall after a shrink.
     svgSel = d3.select(el).append('svg')
       .attr('width', currentW).attr('height', currentH)
       .style('display', 'block')
+      .style('position', 'absolute')
+      .style('inset', '0')
     if (onSvgBuild) onSvgBuild({ svg: svgSel })
     linksG = svgSel.append('g').attr('stroke-linecap', 'round')
     nodesG = svgSel.append('g')
@@ -161,6 +174,12 @@ export function useForceGraph({
 
   watch(graphRef, () => reconcile(), { deep: false })
 
+  if (spanFlags) {
+    watch(spanFlags, () => {
+      requestAnimationFrame(() => requestAnimationFrame(resize))
+    })
+  }
+
   watch(
     [() => toValue(linkDistance), () => toValue(chargeStrength)],
     ([dist, charge]) => {
@@ -176,5 +195,5 @@ export function useForceGraph({
     if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
   })
 
-  return { rebuild, reconcile }
+  return { rebuild, reconcile, resize }
 }

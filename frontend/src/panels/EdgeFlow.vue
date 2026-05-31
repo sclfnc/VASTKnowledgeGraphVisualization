@@ -21,6 +21,7 @@ const props = defineProps({
   schema: { type: Object, default: null },
   graphId: { type: String, default: null },
   widened: { type: Boolean, default: false },
+  expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
 })
 
@@ -380,7 +381,7 @@ function renderAll() { renderMain(); renderTable() }
 
 watch([data, controls, () => props.widened, liveFlows, selectedNodeTypes], () => nextTick(renderAll), { deep: true })
 
-useD3Chart([mainContainer, tableContainer], renderAll)
+useD3Chart([mainContainer, tableContainer], renderAll, () => [props.widened, props.expanded])
 
 function toggleWiden() {
   if (props.widened) emit('request-shrink')

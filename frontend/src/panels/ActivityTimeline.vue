@@ -21,6 +21,7 @@ const props = defineProps({
   schema: { type: Object, default: null },
   graphId: { type: String, default: null },
   widened: { type: Boolean, default: false },
+  expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
   mode: { type: String, default: 'node' },  // 'node' | 'edge'
 })
@@ -266,7 +267,8 @@ function onBarClick(year) {
 }
 
 watch([data, controls, () => props.widened, scopeMask, () => props.mode], () => nextTick(render), { deep: true })
-useD3Chart(chartContainer, render)
+
+useD3Chart(chartContainer, render, () => [props.widened, props.expanded])
 </script>
 
 <template>

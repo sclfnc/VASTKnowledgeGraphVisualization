@@ -119,6 +119,7 @@ function toggleLock() {
         :schema="schema"
         :graph-id="graphId"
         :widened="widened"
+        :expanded="expanded"
         :controls-target="drawerReady ? drawerId : null"
         @request-widen="$emit('request-widen')"
         @request-shrink="$emit('request-shrink')"

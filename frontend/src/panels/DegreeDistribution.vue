@@ -23,6 +23,8 @@ const props = defineProps({
   panelSpec: { type: Object, required: true },
   schema: { type: Object, default: null },
   graphId: { type: String, default: null },
+  widened: { type: Boolean, default: false },
+  expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
   theoryTarget: { type: String, default: null },
 })
@@ -297,7 +299,7 @@ watch(
   { deep: true },
 )
 
-useD3Chart(chartContainer, renderChart)
+useD3Chart(chartContainer, renderChart, () => [props.widened, props.expanded])
 
 function buildPMF(seq) {
   const freq = new Map()

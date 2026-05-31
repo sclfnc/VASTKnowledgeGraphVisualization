@@ -24,6 +24,7 @@ const props = defineProps({
   schema: { type: Object, default: null },
   graphId: { type: String, default: null },
   widened: { type: Boolean, default: false },
+  expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
 })
 
@@ -235,6 +236,7 @@ const { reconcile } = useForceGraph({
   onSvgBuild,
   renderOverlay,
   overlayTick,
+  spanFlags: () => [props.widened, props.expanded],
 })
 
 // Reconcile on mask flip — opacity attenuation reads activeNodeMask via isActiveId.

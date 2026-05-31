@@ -23,6 +23,7 @@ const props = defineProps({
   schema: { type: Object, default: null },
   graphId: { type: String, default: null },
   widened: { type: Boolean, default: false },
+  expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
   // Set only when mounted inside PanelFocus (the theory modal). There the
   // grid's side-by-side widen isn't available, so the drill-down replaces the
@@ -371,7 +372,7 @@ watch([data, controls, () => props.widened, activeNodeMask, selectedMask, compon
 // chart (drill-as-replacement) in the focus modal.
 watch(selectedComponent, () => nextTick(inFocus.value ? renderMain : renderDrill))
 
-useD3Chart([mainContainer, drillContainer], renderAll)
+useD3Chart([mainContainer, drillContainer], renderAll, () => [props.widened, props.expanded])
 
 // No cap: a capped broadcast is a *lying* selection (an arbitrary 500-node
 // subset that diverges from the chart once a filter changes the active set).

@@ -20,6 +20,7 @@ const props = defineProps({
   schema: { type: Object, default: null },
   graphId: { type: String, default: null },
   widened: { type: Boolean, default: false },
+  expanded: { type: Boolean, default: false },
   controlsTarget: { type: String, default: null },
 })
 
@@ -374,7 +375,7 @@ function renderAll() { renderMatrix(); renderAux() }
 
 watch([data, controls, () => props.widened, nodeTypes, edgeTypes, activeMatrix, selectedNodeTypes], () => nextTick(renderAll), { deep: true })
 
-useD3Chart([matrixContainer, auxContainer], renderAll)
+useD3Chart([matrixContainer, auxContainer], renderAll, () => [props.widened, props.expanded])
 
 function toggleAux() {
   if (props.widened) emit('request-shrink')
