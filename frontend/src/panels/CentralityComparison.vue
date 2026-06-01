@@ -10,7 +10,7 @@ import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore } from '@/stores/selection.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { FORMATTERS, MARGINS_DEFAULT, makeTooltip, showTip, hideTip, drawAxes, drawGrid, pearson, spearman, svgFrame, ATTENUATED_OPACITY } from './shared.js'
+import { FORMATTERS, MARGINS_DEFAULT, makeTooltip, showTip, hideTip, drawAxes, drawGrid, pearson, spearman, svgFrame, ATTENUATED_OPACITY, theoryLinkClass, SLATE, COLOR_SCHEME } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlSwitch from './controls/ControlSwitch.vue'
 
@@ -36,7 +36,7 @@ const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { nodeType: effNodeType } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { activeNodeMask, isActive, isSelected, selectedMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
-const { controls, updateControl } = usePanel(props, props.panelSpec?.id, null)
+const { controls, updateControl } = usePanel(props, props.panelSpec?.id)
 const chartContainer = ref(null)
 const detailContainer = ref(null)
 
@@ -151,10 +151,6 @@ function clickPair(kRow, kCol) {
   detailPair.value = [kRow, kCol]
 }
 
-// Theory-drawer interactive links.
-const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
-const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
-function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 // Open a pair from a theory link (canonical row>col order: [row, col]).
 function openPair(a, b) {
   const i = MEASURE_KEYS.indexOf(a), j = MEASURE_KEYS.indexOf(b)
@@ -225,14 +221,14 @@ function renderChart() {
       const cellG = root.append('g').attr('transform', `translate(${cx},${cy})`)
 
       cellG.append('rect').attr('width', cell).attr('height', cell)
-        .attr('fill', '#fff').attr('stroke', '#e2e8f0').attr('stroke-width', 1).attr('rx', 4)
+        .attr('fill', '#fff').attr('stroke', SLATE[200]).attr('stroke-width', 1).attr('rx', 4)
 
       if (row === col) {
         // Diagonal: just the measure name (the correlations live in the cells).
         cellG.append('text')
           .attr('x', cell / 2).attr('y', cell / 2 + 4)
           .attr('text-anchor', 'middle').attr('font-size', '12px')
-          .attr('font-weight', '600').attr('fill', '#0f172a')
+          .attr('font-weight', '600').attr('fill', SLATE[900])
           .text(MEASURE_LABELS[kRow])
       } else if (row > col) {
         const isDetail = detailPair.value && detailPair.value[0] === kRow && detailPair.value[1] === kCol
@@ -244,7 +240,7 @@ function renderChart() {
           .attr('fill', 'transparent').style('cursor', 'pointer')
           .on('click', () => clickPair(kRow, kCol))
         if (isDetail) {
-          cellG.select('rect').attr('stroke', '#0f172a').attr('stroke-width', 1.5).attr('fill', 'none').lower()
+          cellG.select('rect').attr('stroke', SLATE[900]).attr('stroke-width', 1.5).attr('fill', 'none').lower()
         }
         const pts = m
           .filter(r => (!controls.value.logAxes || (r[kCol] > 0 && r[kRow] > 0)))
@@ -253,7 +249,7 @@ function renderChart() {
           .attr('cy', d => ys(d[kRow]))
           .attr('r', d => isSelected(d.id) ? 2.6 : 1.6)
           .attr('fill', d => typeColor(effNodeType(d)))
-          .attr('stroke', d => isSelected(d.id) ? '#0f172a' : 'none')
+          .attr('stroke', d => isSelected(d.id) ? SLATE[900] : 'none')
           .attr('stroke-width', d => isSelected(d.id) ? 0.8 : 0)
           .attr('opacity', d => isActive(d.id) ? 0.55 : ATTENUATED_OPACITY)
           .style('pointer-events', 'none')  // clicks fall through to the cell hit-rect (drill)
@@ -264,21 +260,21 @@ function renderChart() {
         const abs = Math.abs(r)
         const isDetail = detailPair.value && detailPair.value[0] === kCol && detailPair.value[1] === kRow
         cellG.append('rect').attr('width', cell).attr('height', cell)
-          .attr('fill', r >= 0 ? '#0ea5e9' : '#ef4444')
+          .attr('fill', r >= 0 ? COLOR_SCHEME.accentBright : COLOR_SCHEME.danger)
           .attr('opacity', Math.min(0.4, abs * 0.4))
           .attr('rx', 4)
           .style('cursor', 'pointer')
           .on('click', () => clickPair(kCol, kRow))  // mirror → same [row,col] as the scatter
         if (isDetail) {
           cellG.append('rect').attr('width', cell).attr('height', cell)
-            .attr('fill', 'none').attr('stroke', '#0f172a').attr('stroke-width', 1.5).attr('rx', 4)
+            .attr('fill', 'none').attr('stroke', SLATE[900]).attr('stroke-width', 1.5).attr('rx', 4)
             .style('pointer-events', 'none')
         }
         cellG.append('text')
           .attr('x', cell / 2).attr('y', cell / 2 + 4)
           .attr('text-anchor', 'middle')
           .attr('font-size', Math.max(11, cell * 0.18))
-          .attr('font-weight', '600').attr('fill', '#0f172a')
+          .attr('font-weight', '600').attr('fill', SLATE[900])
           .style('pointer-events', 'none')
           .text(r.toFixed(2))
       }
@@ -287,7 +283,7 @@ function renderChart() {
 
   svg.append('text')
     .attr('x', PAD_OUT).attr('y', side - 6)
-    .attr('font-size', '10px').attr('fill', '#94a3b8')
+    .attr('font-size', '10px').attr('fill', SLATE[400])
     .text('Closeness: undirected · Spearman ρ · click a cell to drill')
 }
 
@@ -337,7 +333,7 @@ function renderDetail() {
     .attr('cy', d => ys(d[kRow]))
     .attr('r', d => isSelected(d.id) ? 4 : 2.6)
     .attr('fill', d => typeColor(effNodeType(d)))
-    .attr('stroke', d => isSelected(d.id) ? '#0f172a' : 'none')
+    .attr('stroke', d => isSelected(d.id) ? SLATE[900] : 'none')
     .attr('stroke-width', d => isSelected(d.id) ? 1 : 0)
     .attr('opacity', d => isActive(d.id) ? 0.6 : ATTENUATED_OPACITY)
     .style('pointer-events', 'none')
@@ -356,7 +352,7 @@ function renderDetail() {
   const prTxt = dd.pr == null ? 'n/a' : dd.pr.toFixed(2)
   svg.append('text')
     .attr('x', margins.left).attr('y', totalH - 6)
-    .attr('font-size', '10px').attr('fill', '#64748b')
+    .attr('font-size', '10px').attr('fill', SLATE[500])
     .text(`Spearman ρ ${dd.rho.toFixed(2)} · Pearson(log-log) ${prTxt} · n=${FORMATTERS.integer(dd.n)}`)
 }
 

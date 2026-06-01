@@ -12,7 +12,7 @@ import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useTimelineSettingsModal } from '@/composables/useTimelineSettingsModal.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS } from './shared.js'
+import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS, theoryLinkClass, SLATE, COLOR_SCHEME } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 
@@ -29,10 +29,6 @@ const props = defineProps({
 
 defineEmits(['request-widen', 'request-shrink'])
 
-const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
-const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
-function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
-
 const { data, loading, error } = useTimeline(toRef(props, 'graphId'))
 const { color: nodeTypeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { color: edgeTypeColor } = useEdgeTypeColors(toRef(props, 'schema'))
@@ -45,7 +41,7 @@ const { activeNodeMask, activeEdgeMask } = usePanelContextFromProps(props)
 const scopeMask = computed(() => props.mode === 'edge' ? activeEdgeMask.value : activeNodeMask.value)
 const typeAt = (idx) => props.mode === 'edge' ? edgeTypeAt(idx) : nodeTypeAt(idx)
 const { openTimelineSettings } = useTimelineSettingsModal()
-const { controls, updateControl } = usePanel(props, null, data)
+const { controls, updateControl } = usePanel(props, null)
 
 const chartContainer = ref(null)
 let tooltip = null
@@ -133,15 +129,15 @@ function render() {
   const tickValues = bins.map(b => b.year).filter((_, i) => i % step === 0)
   g.append('g').attr('transform', `translate(0,${innerH})`)
     .call(d3.axisBottom(xScale).tickValues(tickValues).tickFormat(d => String(d)))
-    .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[500])
 
   g.append('g').call(d3.axisLeft(yScale).ticks(5).tickFormat(FORMATTERS.siCompact))
-    .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[500])
 
   svg.append('text')
     .attr('x', MARGINS.left + innerW / 2)
     .attr('y', totalH - 4)
-    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#475569')
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', SLATE[600])
     .text(activeAttr.value)
 
   // Baseline silhouette: the full-graph bin, drawn only where the filter hides
@@ -153,7 +149,7 @@ function render() {
       .attr('y', d => yScale(d.total))
       .attr('width', xScale.bandwidth())
       .attr('height', d => innerH - yScale(d.total))
-      .attr('fill', '#cbd5e1')
+      .attr('fill', SLATE[300])
       .attr('opacity', 0.5)
   }
 
@@ -183,7 +179,7 @@ function render() {
       .attr('y', d => yScale(d.activeTotal))
       .attr('width', xScale.bandwidth())
       .attr('height', d => innerH - yScale(d.activeTotal))
-      .attr('fill', '#0284c7')
+      .attr('fill', COLOR_SCHEME.accent)
       .attr('opacity', 0.9)
       .style('cursor', 'pointer')
       .on('mouseover', (ev, d) => showTip(tooltip, ev, binTooltip(d.year)))

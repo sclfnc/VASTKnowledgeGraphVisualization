@@ -2,11 +2,9 @@
 // EXTENSION: focus modal — chart on the left, theory drawer on the right.
 // Closes on ✕, on backdrop click, and on Escape.
 //
-// Theory has two tiers: a panel may Teleport a rich, interactive theory block
-// into `#theoryTarget` (it gets `controls` + live data, so inline links can
-// drive the chart). If it doesn't, we fall back to the static
-// `contextualizeExplanation(schema, null)` / `explanation` string.
-import { onMounted, onUnmounted, computed, ref, nextTick, watch } from 'vue'
+// The mounted panel Teleports its interactive theory block into `#theoryTarget`
+// (it receives `controls` + live data, so inline links can drive the chart).
+import { onMounted, onUnmounted, ref, nextTick, watch } from 'vue'
 import { X } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -18,50 +16,19 @@ const emit = defineEmits(['close'])
 
 const theoryTarget = 'panel-focus-theory'
 const theoryReady = ref(false)
-// Tracks whether the mounted panel actually filled the teleport target, so we
-// only hide the static fallback when a rich block is present. The panel mounts
-// + fetches async, so the teleport can land after our first check — a
-// MutationObserver keeps the flag in sync as children appear/disappear.
-const hasRichTheory = ref(false)
-let observer = null
 
-function watchTeleport() {
-  const el = document.getElementById(theoryTarget)
-  if (!el) return
-  const sync = () => { hasRichTheory.value = el.childElementCount > 0 }
-  sync()
-  observer?.disconnect()
-  observer = new MutationObserver(sync)
-  observer.observe(el, { childList: true })
-}
-
+// The teleport target must exist before the panel mounts into it, so flip
+// `theoryReady` one tick after the panel changes.
 watch(() => props.panel, async (p) => {
   theoryReady.value = false
-  hasRichTheory.value = false
-  observer?.disconnect()
   if (!p) return
   await nextTick()
   theoryReady.value = true
-  await nextTick()
-  watchTeleport()
 }, { immediate: true })
-
-const explanation = computed(() => {
-  if (!props.panel) return ''
-  const contextualize = props.panel.contextualizeExplanation
-  if (contextualize && typeof contextualize === 'function') {
-    const contextual = contextualize(props.schema, null)
-    if (contextual) return contextual
-  }
-  return props.panel.explanation || 'Explanation coming soon.'
-})
 
 const onKeydown = (e) => { if (e.key === 'Escape') emit('close') }
 onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
-  observer?.disconnect()
-})
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -93,7 +60,6 @@ onUnmounted(() => {
         </div>
         <div class="w-[30rem] shrink-0 overflow-y-auto border-l border-slate-200 p-10 text-sm leading-relaxed text-secondary">
           <div :id="theoryTarget" />
-          <p v-if="!hasRichTheory" class="whitespace-pre-line">{{ explanation }}</p>
         </div>
       </div>
     </div>

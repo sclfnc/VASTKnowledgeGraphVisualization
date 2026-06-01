@@ -75,6 +75,7 @@ _load_locks: Dict[str, threading.Lock] = {}
 
 
 def _load_lock_for(graph_id: str) -> threading.Lock:
+    """Get-or-create the per-graph load lock so concurrent first-loads of one graph serialize."""
     with _load_locks_mutex:
         lock = _load_locks.get(graph_id)
         if lock is None:

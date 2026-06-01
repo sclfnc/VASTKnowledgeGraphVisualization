@@ -16,7 +16,7 @@ import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
 import {
   FORMATTERS, makeTooltip, showTip, hideTip,
-  drawGrid, drawAxes, svgFrame, ATTENUATED_OPACITY,
+  drawGrid, drawAxes, svgFrame, ATTENUATED_OPACITY, SLATE, effectiveTypeListOr, theoryLinkClass,
 } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
@@ -35,7 +35,7 @@ const props = defineProps({
 const { data, status } = useCentrality(props.measure)
 const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { nodeType: effNodeType, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
-const { controls, updateControl } = usePanel(props, props.panelSpec?.id, data)
+const { controls, updateControl } = usePanel(props, props.panelSpec?.id)
 const selection = useSelectionStore()
 const { ids: filterSelected } = storeToRefs(selection)
 const { activeNodeMask, isActive, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
@@ -123,13 +123,6 @@ const theoryStats = computed(() => {
     typeCount: new Set(vals.map(r => effNodeType(r))).size,
   }
 })
-
-// Inline theory links double as control toggles; active = filled pill.
-function theoryLinkClass(active) {
-  return active
-    ? 'rounded px-1.5 py-0.5 text-[13px] font-medium bg-slate-900 text-white'
-    : 'rounded px-1.5 py-0.5 text-[13px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200'
-}
 
 watch(
   [data, status, controls, filterSelected, activeNodeMask],
@@ -220,7 +213,7 @@ function renderGenericScatter() {
     .attr('cy', d => yScale(d.value))
     .attr('r', 3)
     .attr('fill', d => typeColor(effNodeType(d)))
-    .attr('stroke', d => selectedSet.has(d.id) ? '#0f172a' : 'none')
+    .attr('stroke', d => selectedSet.has(d.id) ? SLATE[900] : 'none')
     .attr('stroke-width', d => selectedSet.has(d.id) ? 1.5 : 0)
     .attr('opacity', d => isActive(d.id) ? 0.7 : ATTENUATED_OPACITY)
     .style('pointer-events', 'none')
@@ -254,7 +247,7 @@ function renderGenericScatter() {
   if (captions.length) {
     svg.append('text')
       .attr('x', totalW - 8).attr('y', totalH - 4)
-      .attr('text-anchor', 'end').attr('font-size', '10px').attr('fill', '#94a3b8')
+      .attr('text-anchor', 'end').attr('font-size', '10px').attr('fill', SLATE[400])
       .text(captions.join(' · '))
   }
 }
@@ -331,15 +324,15 @@ function renderRankMassBars() {
   const truncate = s => s.length > 14 ? s.slice(0, 12) + '…' : s
   const yAxis = d3.axisLeft(yScale).tickFormat(d => truncate(String(d)))
   g.append('g').call(yAxis)
-    .selectAll('text').attr('font-size', 10).attr('fill', '#475569')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[600])
 
   const xAxis = d3.axisBottom(xScale).ticks(4, '.0%')
   g.append('g').attr('transform', `translate(0,${innerH})`).call(xAxis)
-    .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[500])
 
   svg.append('text')
     .attr('x', MARGINS.left + innerW / 2).attr('y', totalH - 4)
-    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#475569')
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', SLATE[600])
     .text(`% of total ${labelFor.value} mass`)
 
   const selectedSet = new Set(filterSelected.value ?? [])
@@ -351,7 +344,7 @@ function renderRankMassBars() {
     .attr('width', d => xScale(d.value / denom))
     .attr('height', yScale.bandwidth())
     .attr('fill', d => typeColor(effNodeType(d)))
-    .attr('stroke', d => selectedSet.has(d.id) ? '#0f172a' : 'none')
+    .attr('stroke', d => selectedSet.has(d.id) ? SLATE[900] : 'none')
     .attr('stroke-width', d => selectedSet.has(d.id) ? 1.5 : 0)
     .attr('opacity', d => isActive(d.id) ? 0.85 : ATTENUATED_OPACITY)
     .style('cursor', 'pointer')
@@ -366,7 +359,7 @@ function renderRankMassBars() {
     .attr('x', d => xScale(d.value / denom) + 4)
     .attr('y', d => yScale(d.id) + yScale.bandwidth() / 2)
     .attr('dy', '0.35em')
-    .attr('font-size', 10).attr('fill', '#475569')
+    .attr('font-size', 10).attr('fill', SLATE[600])
     .text(d => `${((d.value / denom) * 100).toFixed(2)}%`)
 
   // Legend, left-anchored inside the reserved right band so it grows rightward
@@ -380,7 +373,7 @@ function renderRankMassBars() {
       .attr('fill', typeColor(t))
     svg.append('text').attr('x', legendX + 8).attr('y', ly + 4)
       .attr('text-anchor', 'start').attr('font-size', '10px')
-      .attr('fill', '#64748b').text(t)
+      .attr('fill', SLATE[500]).text(t)
   })
 }
 
@@ -388,7 +381,7 @@ function renderRankMassBars() {
 // empty `[]` from Remove all) → exactly that set. An empty set yields charts
 // with no marks — callers render an empty-state caption.
 function computedShowTypes() {
-  const all = nodeTypeList.value.length ? nodeTypeList.value : (props.schema?.node_types ?? [])
+  const all = effectiveTypeListOr(nodeTypeList.value, props.schema?.node_types)
   const sel = controls.value.showTypes
   if (sel == null) return new Set(all)
   return new Set(sel)
@@ -455,7 +448,7 @@ const typePeakDesc = computed(() => {
     const v = r.value || 0
     if (v > (peak.get(t) ?? -Infinity)) peak.set(t, v)
   }
-  const all = nodeTypeList.value.length ? nodeTypeList.value : (props.schema?.node_types ?? [])
+  const all = effectiveTypeListOr(nodeTypeList.value, props.schema?.node_types)
   // Stable total order: peak desc, ties broken by label.
   return [...all].sort((a, b) => (peak.get(b) ?? -Infinity) - (peak.get(a) ?? -Infinity) || a.localeCompare(b))
 })

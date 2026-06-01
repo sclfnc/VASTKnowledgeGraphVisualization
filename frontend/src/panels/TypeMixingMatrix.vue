@@ -11,7 +11,7 @@ import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore, SELECTION_CAPS } from '@/stores/selection.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS, selectedTypesIn, idsOfTypesSoA } from './shared.js'
+import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS, selectedTypesIn, idsOfTypesSoA, theoryLinkClass, effectiveTypeListOr, SLATE, COLOR_SCHEME } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 import SliderControl from './controls/SliderControl.vue'
@@ -26,11 +26,6 @@ const props = defineProps({
   theoryTarget: { type: String, default: null },
 })
 
-// Inline theory-link classes (global Tailwind; the block is teleported out).
-const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
-const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
-function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
-
 const emit = defineEmits(['request-widen', 'request-shrink'])
 
 const { data, loading, error } = useTypeMixing(toRef(props, 'graphId'))
@@ -40,7 +35,7 @@ const { color: typeColor } = useNodeTypeColors(toRef(props, 'schema'))
 const { nodeTypeAt, edgeTypeAt, nodeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { activeNodeMask, activeEdgeMask, selectedMask, edgeFilterActive, noNodesActive } = usePanelContextFromProps(props)
 const selection = useSelectionStore()
-const { controls, updateControl } = usePanel(props, 'type_mixing', data)
+const { controls, updateControl } = usePanel(props, 'type_mixing')
 
 // Effective node types with ≥1 node in the current selection. A cell (t,u) is
 // outlined when t or u is in this set (cap-safe). Shared helper, same logic in EdgeFlow.
@@ -70,7 +65,7 @@ const SORT_OPTIONS = [
 
 // Rows/cols collapse to the visible set; Newman r stays anchored to the full graph.
 // `nodeTypeList` returns the effective labels (auto-promoted) or raw types.
-const allNodeTypes = computed(() => nodeTypeList.value.length ? nodeTypeList.value : (data.value?.node_types || []))
+const allNodeTypes = computed(() => effectiveTypeListOr(nodeTypeList.value, data.value?.node_types))
 const allEdgeTypes = computed(() => data.value?.edge_types || [])
 // Contract: visible rows/cols are derived from the global masks, not from the raw
 // filters.nodeTypes/edgeTypes chip arrays. A type is visible iff it has ≥1 element
@@ -84,13 +79,38 @@ const nodeTypes = computed(() => {
   for (let i = 0; i < soa.N; i++) if (m.get(i)) present.add(nodeTypeAt(i))
   return allNodeTypes.value.filter(t => present.has(t))
 })
-const edgeTypes = computed(() => {
-  const soa = edgesSoA.value
-  const m = activeEdgeMask.value
-  if (!soa || !m) return allEdgeTypes.value
+// One controls-independent walk over the active edges (re-runs only on
+// edges/mask change): the present edge types AND the per-(src_type, edge_type,
+// dst_type) counts that the 'edges' matrix is a cheap re-aggregation of — so
+// mode and edge-type-filter toggles never re-scan the edges. Effective-type
+// aware via nodeTypeAt/edgeTypeAt.
+const edgeAgg = computed(() => {
+  const soaE = edgesSoA.value
+  const eMask = activeEdgeMask.value
+  if (!soaE || !eMask) return null
   const present = new Set()
-  for (let i = 0; i < soa.E; i++) if (m.get(i)) present.add(edgeTypeAt(i))
-  return allEdgeTypes.value.filter(t => present.has(t))
+  const byTriple = new Map()  // st -> et -> dt -> count
+  for (let i = 0; i < soaE.E; i++) {
+    if (!eMask.get(i)) continue
+    const et = edgeTypeAt(i)
+    present.add(et)
+    const st = nodeTypeAt(soaE.source[i])
+    const dt = nodeTypeAt(soaE.target[i])
+    let byEt = byTriple.get(st)
+    if (!byEt) { byEt = new Map(); byTriple.set(st, byEt) }
+    let byDt = byEt.get(et)
+    if (!byDt) { byDt = new Map(); byEt.set(et, byDt) }
+    byDt.set(dt, (byDt.get(dt) || 0) + 1)
+  }
+  return { present, byTriple }
+})
+
+// Visible edge types: those with ≥1 active edge (effective labels), in schema
+// order. Falls back to the full list before the SoA/mask loads.
+const edgeTypes = computed(() => {
+  const agg = edgeAgg.value
+  if (!agg) return allEdgeTypes.value
+  return allEdgeTypes.value.filter(t => agg.present.has(t))
 })
 
 // Interaction volume per type (row+col sum on the raw matrix). Used to pick
@@ -128,13 +148,15 @@ const orderedTypes = computed(() => {
 
 const hiddenCount = computed(() => orderedTypes.value.hiddenCount)
 
-// Matrix is always recomputed client-side from edges SoA + activeEdgeMask:
-// no double codepath, edge mask (type/weight/selfLoop) propagates uniformly.
+// Mixing matrix, derived client-side so the edge mask (type/weight/selfLoop)
+// propagates uniformly. 'edges' mode is a cheap re-aggregation of the
+// precomputed triple counts — no edge re-scan on mode/filter toggle. 'nodes'
+// mode needs per-node identity for distinct-neighbor dedup, so it keeps its own
+// walk over the active edges.
 const activeMatrix = computed(() => {
+  const agg = edgeAgg.value
   const soaN = nodesSoA.value
-  const soaE = edgesSoA.value
-  const eMask = activeEdgeMask.value
-  if (!soaN || !soaE || !eMask) return null
+  if (!agg || !soaN) return null
 
   const types = allNodeTypes.value
   if (!types.length) return null
@@ -145,25 +167,25 @@ const activeMatrix = computed(() => {
     for (const u of types) out[t][u] = 0
   }
 
-  const localEdgeTypeFilter = (controls.value.mode === 'edges' && controls.value.edgeTypeFilter)
-    ? controls.value.edgeTypeFilter
-    : null
-  const directed = data.value?.directed ?? false
-
   if (controls.value.mode === 'edges') {
-    for (let i = 0; i < soaE.E; i++) {
-      if (!eMask.get(i)) continue
-      if (localEdgeTypeFilter && soaE.edgeTypes[soaE.type[i]] !== localEdgeTypeFilter) continue
-      const st = nodeTypeAt(soaE.source[i])
-      const dt = nodeTypeAt(soaE.target[i])
-      if (st in out && dt in out[st]) out[st][dt] += 1
+    const filter = controls.value.edgeTypeFilter || null
+    for (const [st, byEt] of agg.byTriple) {
+      if (!(st in out)) continue
+      for (const [et, byDt] of byEt) {
+        if (filter && et !== filter) continue
+        for (const [dt, c] of byDt) {
+          if (dt in out[st]) out[st][dt] += c
+        }
+      }
     }
     return out
   }
 
   // 'nodes' mode: count distinct 1-hop neighbors per (src_type, dst_type).
   // Undirected → symmetric (each edge contributes to both src→dst and dst→src).
-  // Nested Map avoids string-key fragility on type names with special chars.
+  const soaE = edgesSoA.value
+  const eMask = activeEdgeMask.value
+  const directed = data.value?.directed ?? false
   const reached = new Map()  // Map<srcType, Map<dstType, Set<nodeIdx>>>
   const add = (st, dt, nodeIdx) => {
     let row = reached.get(st)
@@ -280,7 +302,7 @@ function renderMatrix() {
         .attr('width', xScale.bandwidth())
         .attr('height', yScale.bandwidth())
         .attr('fill', colorScale(v))
-        .attr('stroke', sel ? '#0f172a' : '#fff')
+        .attr('stroke', sel ? SLATE[900] : '#fff')
         .attr('stroke-width', sel ? 2 : 1)
         .style('cursor', 'pointer')
         .on('mouseover', (ev) => showTip(tooltip, ev, cellTooltip(t, u, raw, v)))
@@ -300,7 +322,7 @@ function renderMatrix() {
           .attr('dy', '0.35em')
           .attr('text-anchor', 'middle')
           .attr('font-size', 10)
-          .attr('fill', lum < 60 ? '#fff' : '#1e293b')
+          .attr('fill', lum < 60 ? '#fff' : SLATE[800])
           .attr('pointer-events', 'none')
           .text(label)
       }
@@ -354,7 +376,7 @@ function renderMatrix() {
     .attr('y', 14)
     .attr('text-anchor', 'middle')
     .attr('font-size', 11)
-    .attr('fill', '#475569')
+    .attr('fill', SLATE[600])
     .text(colLabel)
 
   svg.append('text')
@@ -363,7 +385,7 @@ function renderMatrix() {
     .attr('y', 14)
     .attr('text-anchor', 'middle')
     .attr('font-size', 11)
-    .attr('fill', '#475569')
+    .attr('fill', SLATE[600])
     .text(rowLabel)
 }
 
@@ -404,22 +426,22 @@ function renderAux() {
 
   svg.append('text')
     .attr('x', margins.left + innerW / 2).attr('y', 14)
-    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#475569')
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', SLATE[600])
     .text('Assortativity r per edge type')
 
   const xScale = d3.scaleLinear().domain([-1, 1]).range([0, innerW])
   const yScale = d3.scaleBand().domain(rows.map(r => r[0])).range([0, innerH]).padding(0.15)
 
   g.append('g').call(d3.axisLeft(yScale).tickSize(0))
-    .selectAll('text').attr('font-size', 10).attr('fill', '#475569')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[600])
   g.append('g').attr('transform', `translate(0,${innerH})`)
     .call(d3.axisBottom(xScale).ticks(5).tickFormat(FORMATTERS.fixed1))
-    .selectAll('text').attr('font-size', 10).attr('fill', '#475569')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[600])
 
   g.append('line')
     .attr('x1', xScale(0)).attr('x2', xScale(0))
     .attr('y1', 0).attr('y2', innerH)
-    .attr('stroke', '#cbd5e1').attr('stroke-dasharray', '2,2')
+    .attr('stroke', SLATE[300]).attr('stroke-dasharray', '2,2')
 
   g.selectAll('rect.bar').data(rows).join('rect')
     .attr('class', 'bar')
@@ -427,7 +449,7 @@ function renderAux() {
     .attr('height', yScale.bandwidth())
     .attr('x', d => xScale(Math.min(0, d[1])))
     .attr('width', d => Math.abs(xScale(d[1]) - xScale(0)))
-    .attr('fill', d => d[1] > 0.1 ? '#10b981' : d[1] < -0.1 ? '#ef4444' : '#94a3b8')
+    .attr('fill', d => d[1] > 0.1 ? COLOR_SCHEME.success : d[1] < -0.1 ? COLOR_SCHEME.danger : SLATE[400])
     .attr('opacity', 0.85)
     .style('cursor', 'pointer')
     .on('click', (_, d) => updateControl('edgeTypeFilter', controls.value.edgeTypeFilter === d[0] ? null : d[0]))
@@ -438,7 +460,7 @@ function renderAux() {
     .attr('y', d => yScale(d[0]) + yScale.bandwidth() / 2)
     .attr('dy', '0.35em')
     .attr('text-anchor', d => d[1] >= 0 ? 'start' : 'end')
-    .attr('font-size', 10).attr('fill', '#475569')
+    .attr('font-size', 10).attr('fill', SLATE[600])
     .text(d => FORMATTERS.number(d[1]))
 }
 

@@ -177,6 +177,7 @@ def percentile(sorted_data, p):
 
 
 def _infer_attr_kind(values):
+    """Coarse attribute kind from a value sample: 'boolean' | 'numeric' | 'categorical'; None if all-null."""
     sample = [v for v in values if v is not None]
     if not sample:
         return None
@@ -198,6 +199,7 @@ def _classify_attr(name, values):
 
 
 def _summarize_attr(values, kind):
+    """Compact per-kind summary: numeric range, boolean true/false counts, categorical top-K + distinct, temporal min/max."""
     sample = [v for v in values if v is not None]
     if not sample:
         return None
@@ -321,6 +323,9 @@ def _compute_auto_promotion(types_detail, total_count, values_iter_factory):
 
 
 def compute_schema(G, name='Graph'):
+    """Lightweight graph schema: node/edge types + per-type attribute detail, structural flags
+    (directed/weighted/bipartite/self-loops/acyclic), degree/weight ranges, temporal attrs by
+    scope, and the auto-promotion pick. Cached per graph_id."""
     nodes_data = list(G.nodes(data=True))
     edge_data = [d for _, _, d in G.edges(data=True)]
 

@@ -25,6 +25,7 @@ _YEAR_REGEX = re.compile(r'\b(1\d{3}|2[01]\d{2})\b')
 
 
 def _try_int_year(v):
+    """Plain calendar year as int/float in [1000, 2200]; rejects bools and out-of-range."""
     if isinstance(v, bool):
         return None
     if isinstance(v, (int, float)):
@@ -35,6 +36,7 @@ def _try_int_year(v):
 
 
 def _try_unix_ts(v):
+    """Unix epoch seconds (> 1e9) → calendar year (UTC); None otherwise."""
     if isinstance(v, bool):
         return None
     if isinstance(v, (int, float)) and v > 1e9:
@@ -46,6 +48,7 @@ def _try_unix_ts(v):
 
 
 def _try_iso(v):
+    """ISO-8601 string → year (tolerates a trailing 'Z'); None if unparseable."""
     if not isinstance(v, str):
         return None
     try:
@@ -55,6 +58,7 @@ def _try_iso(v):
 
 
 def _try_regex(v):
+    """First 19xx/20xx/21xx year found anywhere in a string."""
     if not isinstance(v, str):
         return None
     m = _YEAR_REGEX.search(v)
@@ -107,6 +111,7 @@ def _densify(bins_sparse, idx_sparse):
 
 
 def _to_decade_bins(dense_bins):
+    """Collapse dense per-year bins into per-decade bins (totals, by_type, and idx merged)."""
     by_dec = {}
     for b in dense_bins:
         dec = (b['year'] // 10) * 10
@@ -119,6 +124,7 @@ def _to_decade_bins(dense_bins):
 
 
 def _custom_regex_strategy(pattern):
+    """Build a parser from a user regex: first capture group → int year; None if the pattern is invalid."""
     try:
         rx = re.compile(pattern)
     except re.error:
@@ -238,6 +244,8 @@ def _per_attr_summary(records, attr_iter, get_data, get_breakdown_key, get_index
 
 
 def compute_timeline(graph_id, G, overrides=None):
+    """Per-attribute temporal bins for both node- and edge-scope, with a configurable
+    (auto-sniffed or per-attribute overridden) date-parsing strategy."""
     # Canonical SoA index maps so per-bin `idx` lists align with /nodes/ and
     # /edges/. Nodes: position in node_order (degree-desc) — same ordering as
     # /nodes/. Edges: edge_id = position in the canonical edge walk (matches

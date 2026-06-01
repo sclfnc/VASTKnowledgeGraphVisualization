@@ -12,7 +12,7 @@ import { useSelectionStore } from '@/stores/selection.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import { useFilterShortcuts } from '@/composables/useFilterShortcuts.js'
 import { Bitset } from '@/utils/bitset.js'
-import { makeTooltip, showTip, hideTip, FORMATTERS } from './shared.js'
+import { makeTooltip, showTip, hideTip, FORMATTERS, theoryLinkClass, SLATE, COLOR_SCHEME } from './shared.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
 import ControlSection from './controls/ControlSection.vue'
@@ -47,7 +47,7 @@ const { activeNodeMask, selectedMask, noNodesActive } = usePanelContextFromProps
 const selection = useSelectionStore()
 const filters = useFiltersStore()
 const { filterToComponent, clearWccFilter } = useFilterShortcuts()
-const { controls, updateControl } = usePanel(props, 'connectivity', data)
+const { controls, updateControl } = usePanel(props, 'connectivity')
 const mainContainer = ref(null)
 const drillContainer = ref(null)
 const selectedId = ref(null)
@@ -308,13 +308,6 @@ const selectedComponent = computed(() => {
 
 const MARGINS = { top: 8, right: 12, bottom: 28, left: 44 }
 
-// Inline link classes for the theory block. Tailwind utilities (global) rather
-// than scoped CSS, because the block is teleported out of this component's tree
-// where scoped `data-v-*` rules don't reliably apply.
-const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
-const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
-function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
-
 const VIEW_OPTIONS = [{ k: 'bubbles', label: 'Bubbles' }, { k: 'bars', label: 'Bars' }]
 // SCC is only meaningful on directed graphs. On an undirected graph WCC ≡ SCC,
 // so we drop the toggle entirely (a disabled pill invites a dead click) and show
@@ -452,7 +445,7 @@ function renderBubbles(container, totalW, totalH, comps) {
   const leaves = root.leaves()
   const maxSize = d3.max(sized, c => c._active) || 1
   // Sky palette mid-tone matches COLOR_SCHEME.accent (sky-600) used by other panels.
-  const colorScale = d3.scaleSequential(d3.interpolateLab('#e0f2fe', '#0369a1')).domain([0, Math.log10(maxSize + 1)])
+  const colorScale = d3.scaleSequential(d3.interpolateLab(COLOR_SCHEME.accentPale, COLOR_SCHEME.accentDark)).domain([0, Math.log10(maxSize + 1)])
 
   // Three label tiers by bubble radius: combined "N (pct%)" needs the most room;
   // below that show the percentage alone (compact); below that, no label (the
@@ -472,7 +465,7 @@ function renderBubbles(container, totalW, totalH, comps) {
   node.append('circle')
     .attr('r', d => d.r)
     .attr('fill', d => colorScale(Math.log10(d.data._active + 1)))
-    .attr('stroke', d => selectedId.value === d.data.id ? '#0f172a' : '#fff')
+    .attr('stroke', d => selectedId.value === d.data.id ? SLATE[900] : '#fff')
     .attr('stroke-width', 1)
     .attr('opacity', d => markOpacity(d.data))
 
@@ -489,7 +482,7 @@ function renderBubbles(container, totalW, totalH, comps) {
     .attr('dy', '-0.4em')
     .attr('font-size', d => Math.min(d.r * 0.35, 12))
     .attr('font-weight', '500')
-    .attr('fill', d => d.data._active > maxSize / 4 ? 'rgba(255,255,255,0.8)' : '#64748b')
+    .attr('fill', d => d.data._active > maxSize / 4 ? 'rgba(255,255,255,0.8)' : SLATE[500])
     .text(d => `#${comps.findIndex(c => c.id === d.data.id) + 1}`)
 
   labelGroup.append('text')
@@ -497,7 +490,7 @@ function renderBubbles(container, totalW, totalH, comps) {
     .attr('dy', d => d.r >= rankRadiusThreshold ? '0.85em' : '0.35em')
     .attr('font-size', d => Math.min(d.r * 0.45, 14))
     .attr('font-weight', '600')
-    .attr('fill', d => d.data._active > maxSize / 4 ? '#fff' : '#1e293b')
+    .attr('fill', d => d.data._active > maxSize / 4 ? '#fff' : SLATE[800])
     .text(d => formatLabel(d.data, totalNodes, d.r < combinedRadiusThreshold))
 }
 
@@ -532,19 +525,19 @@ function renderBars(container, totalW, totalH, comps) {
     .tickValues(comps.map((_, i) => i).filter(i => i % step === 0))
     .tickFormat(i => `#${i + 1}`)
   g.append('g').call(yAxis)
-    .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[500])
 
   const xAxis = d3.axisBottom(xScale).ticks(5, '~s')
   g.append('g').attr('transform', `translate(0,${innerH})`).call(xAxis)
-    .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[500])
 
   svg.append('text')
     .attr('x', MARGINS.left + innerW / 2).attr('y', totalH - 4)
-    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#475569')
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', SLATE[600])
     .text('Component size')
 
   // Sky palette mid-tone matches COLOR_SCHEME.accent (sky-600) used by other panels.
-  const colorScale = d3.scaleSequential(d3.interpolateLab('#e0f2fe', '#0369a1')).domain([0, Math.log10(maxSize + 1)])
+  const colorScale = d3.scaleSequential(d3.interpolateLab(COLOR_SCHEME.accentPale, COLOR_SCHEME.accentDark)).domain([0, Math.log10(maxSize + 1)])
 
   // Skip text label when the band is shorter than this; tooltip still works.
   const minBandForLabel = 12
@@ -556,7 +549,7 @@ function renderBars(container, totalW, totalH, comps) {
     .attr('width', d => xScale(Math.max(1, d._active)))
     .attr('height', yScale.bandwidth())
     .attr('fill', d => colorScale(Math.log10(d._active + 1)))
-    .attr('stroke', d => selectedId.value === d.id ? '#0f172a' : 'none')
+    .attr('stroke', d => selectedId.value === d.id ? SLATE[900] : 'none')
     .attr('stroke-width', d => selectedId.value === d.id ? 1 : 0)
     .attr('opacity', d => markOpacity(d))
     .style('cursor', 'pointer')
@@ -572,7 +565,7 @@ function renderBars(container, totalW, totalH, comps) {
       .attr('x', d => xScale(Math.max(1, d._active)) + 4)
       .attr('y', (_, i) => yScale(i) + yScale.bandwidth() / 2)
       .attr('dy', '0.35em')
-      .attr('font-size', 10).attr('fill', '#475569').attr('pointer-events', 'none')
+      .attr('font-size', 10).attr('fill', SLATE[600]).attr('pointer-events', 'none')
       .text(d => formatLabel(d, totalNodes))
   }
 }
@@ -625,14 +618,14 @@ function renderDrill(container = drillContainer.value) {
   const yScale = d3.scaleBand().domain(entries.map(d => d[0])).range([0, innerH]).padding(0.2)
 
   g.append('g').call(d3.axisLeft(yScale))
-    .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[500])
   g.append('g').attr('transform', `translate(0,${innerH})`)
     .call(d3.axisBottom(xScale).ticks(4, '~s'))
-    .selectAll('text').attr('font-size', 10).attr('fill', '#64748b')
+    .selectAll('text').attr('font-size', 10).attr('fill', SLATE[500])
 
   svg.append('text')
     .attr('x', margins.left + innerW / 2).attr('y', totalH - 4)
-    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#475569')
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', SLATE[600])
     .text('Node count')
 
   const drillTip = makeTooltip(container)
@@ -640,7 +633,7 @@ function renderDrill(container = drillContainer.value) {
     .attr('x', 0).attr('y', d => yScale(d[0]))
     .attr('width', d => xScale(d[1]))
     .attr('height', yScale.bandwidth())
-    .attr('fill', d => d[0].startsWith(OTHER_LABEL_PREFIX) ? '#94a3b8' : typeColor(d[0]))
+    .attr('fill', d => d[0].startsWith(OTHER_LABEL_PREFIX) ? SLATE[400] : typeColor(d[0]))
     .attr('opacity', 0.85)
     .style('cursor', 'pointer')
     .on('mouseover', (ev, d) => showTip(drillTip, ev, `<strong>${d[0]}</strong><br>${d[1].toLocaleString()} nodes in this component`))
@@ -661,7 +654,7 @@ function renderDrill(container = drillContainer.value) {
     .attr('dy', '0.35em')
     .attr('text-anchor', d => isInside(d) ? 'end' : 'start')
     .attr('font-size', 10)
-    .attr('fill', d => isInside(d) ? '#fff' : '#475569')
+    .attr('fill', d => isInside(d) ? '#fff' : SLATE[600])
     .attr('pointer-events', 'none')
     .text(d => d[1].toLocaleString())
 }

@@ -1,10 +1,10 @@
 # panels/ — Interactive D3 Panels for Guide Mode
 
 Self-contained Vue components rendered inside `GuidePanel`. Each panel:
-- Fetches its own data via a dedicated composable (`useMetrics`, `useDegreeFit`, `useComponents`, `useGraphNodes`, `useCentrality`, `useEgoSubgraph`, `useTypeMixing`, `useEdgeFlow`, `useTimeline`, …) — or reads directly from the `useSchema` payload when the panel is metadata-only.
+- Fetches its own data via a dedicated composable (`useDegreeFit`, `useComponents`, `useGraphNodes`, `useCentrality`, `useEgoSubgraph`, `useTypeMixing`, `useEdgeFlow`, `useTimeline`, …) — or reads directly from the `useSchema` payload when the panel is metadata-only.
 - Renders via `useD3Chart` (ResizeObserver + RAF + initial render) for static charts, or `useForceGraph` for force-directed (`EgoNetworkPanel`, `EgoComparisonPanel`).
 - Exposes controls via `Teleport` into the collapsible drawer inside `GuidePanel`.
-- Shows contextual theory text only inside the `PanelFocus` modal.
+- Teleports an interactive theory block into the `PanelFocus` modal drawer (`#theoryTarget`).
 
 ## Status
 
@@ -67,10 +67,11 @@ panels/
   status: 'implemented',      // 'implemented' | 'planned' | 'stub'
   component: DegreeDistribution,
   componentProps: { mode: 'node' },                     // optional, for parametric panels (CentralityPanel, ActivityTimeline)
-  explanation: '...',                                   // static fallback for theory drawer
-  contextualizeExplanation: (schema, data) => `...`,    // adapted text (preferred)
+  available: (schema) => true,                          // optional predicate — hide panel when its data is absent
   controlsSchema: { ... },     // declarative spec — usePanel reads only `default` per field
 }
+// Theory text is no longer a spec field: each component Teleports an interactive
+// block into PanelFocus's #theoryTarget drawer (it receives controls + live data).
 ```
 
 ## Authoring a new panel
@@ -124,13 +125,13 @@ Layout inside the drawer: `grid grid-cols-2 auto-rows-min gap-1.5`. `ControlSect
 
 ## Shared utilities (`shared.js`)
 
-Constants: `COLOR_SCHEME`, `MARGINS_DEFAULT`, `LAYER_PALETTE` (4-hue ordinal for ego layers), `FIT_COLORS` (powerlaw / exponential / poisson / lognormal), `FORMATTERS` (number / integer / percent / siPrefix / exponential).
+Constants: `COLOR_SCHEME` (semantic + sky accents), `SLATE` (neutral grey scale), `MARGINS_DEFAULT`, `LAYER_PALETTE` (4-hue ordinal for ego layers), `FORMATTERS` (number / integer / percent / siPrefix / exponential).
 
 Stats: `pearson(xs, ys)`, `spearman(xs, ys) = pearson(rank(xs), rank(ys))`, `summaryStats(seq)` (mean/median/IQR/whisker bounds).
 
 D3 helpers: `drawAxes(g, xScale, yScale, innerW, innerH, opts)`, `drawGrid(g, xScale, yScale, innerW, innerH)`, `drawLine(g, pts, xScale, yScale, color, dashArray, accessors)`, `drawTypeLegend(svg, totalW, types, typeColor)`.
 
-Tooltips: `makeTooltip(container)` (creates a div), `showTip(tooltip, event, html)`, `hideTip(tooltip)`, `attachTooltip(selection, htmlFn, tooltip)` (binds mouseover/mousemove/mouseout in one call), `attachVLineTooltip(g, x, h, html, tooltip)`.
+Tooltips: `makeTooltip(container)` (creates a div), `showTip(tooltip, event, html)`, `hideTip(tooltip)`, `attachVLineTooltip(g, x, h, html, tooltip)`. Theory-drawer links: `theoryLinkClass(on)` (shared underline-sky style).
 
 Formatters: `formatAttrSummary(attr)`, `formatCoverage(coverage)`.
 

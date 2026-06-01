@@ -3,9 +3,28 @@
 import * as d3 from 'd3'
 
 export const COLOR_SCHEME = {
-  accent: '#0284c7',
-  success: '#10b981',
-  grid: '#e1e1e1', // internal: used by drawGrid below
+  accent: '#0284c7',       // sky-600
+  accentBright: '#0ea5e9', // sky-500
+  accentDark: '#0369a1',   // sky-700
+  accentPale: '#e0f2fe',   // sky-100
+  success: '#10b981',      // emerald-500
+  danger: '#ef4444',       // red-500
+  grid: '#e1e1e1',         // internal: used by drawGrid below
+}
+
+// Neutral slate scale (Tailwind names) — single source for the grey hues panels
+// scatter across axis labels, strokes, and muted text. Reference SLATE[n]
+// instead of pasting raw #hex: D3 sets these as SVG presentation attributes, so
+// Tailwind utility classes aren't available at this layer.
+export const SLATE = {
+  200: '#e2e8f0',
+  300: '#cbd5e1',
+  400: '#94a3b8',
+  500: '#64748b',
+  600: '#475569',
+  700: '#334155',
+  800: '#1e293b',
+  900: '#0f172a',
 }
 
 // Default chart margins; panels with long category labels override left/right.
@@ -26,14 +45,6 @@ export const ATTENUATED_OPACITY = 0.12
 
 // EgoComparison pie semantics break above 4 hues.
 export const LAYER_PALETTE = ['#0ea5e9', '#f59e0b', '#10b981', '#a855f7']
-
-// Degree-fit families → fixed colors.
-export const FIT_COLORS = {
-  powerlaw: '#ef4444',
-  exponential: '#f97316',
-  poisson: '#8b5cf6',
-  lognormal: '#06b6d4',
-}
 
 export const FORMATTERS = {
   number: d3.format('.2f'),
@@ -96,14 +107,6 @@ export function showTip(tooltip, event, html) {
 
 export function hideTip(tooltip) { tooltip.style('opacity', 0) }
 
-// Standard mouseover/mousemove/mouseout triple; mousemove updates position only.
-export function attachTooltip(selection, htmlFn, tooltip) {
-  return selection
-    .on('mouseover', (event, d) => showTip(tooltip, event, htmlFn(d, event)))
-    .on('mousemove', (event) => showTip(tooltip, event, null))
-    .on('mouseout', () => hideTip(tooltip))
-}
-
 // Inline legend in the top-right corner of an SVG. Vertical stack of
 // (circle, label) pairs. `typeColor(type)` returns the dot color.
 export function drawTypeLegend(svg, totalW, types, typeColor) {
@@ -116,35 +119,6 @@ export function drawTypeLegend(svg, totalW, types, typeColor) {
       .attr('text-anchor', 'end').attr('font-size', '10px')
       .attr('fill', '#64748b').text(t)
   })
-}
-
-// Intersect `all` with a filters-store list; empty/null filter means "no filter".
-export function visibleSubset(filterList, all) {
-  if (!filterList || filterList.length === 0) return all
-  const visible = new Set(filterList)
-  return all.filter(t => visible.has(t))
-}
-
-// Membership predicate from a filters-store list; empty/null accepts everything.
-export function visibleSetPred(filterList) {
-  if (!filterList || filterList.length === 0) return () => true
-  const visible = new Set(filterList)
-  return t => visible.has(t)
-}
-
-// Collect node ids whose type matches, capped at `cap`.
-export function idsOfTypes(nodes, types, cap = Infinity) {
-  if (!Array.isArray(nodes)) return []
-  const want = types instanceof Set ? types
-    : new Set(Array.isArray(types) ? types : [types])
-  const out = []
-  for (const n of nodes) {
-    if (want.has(n.type)) {
-      out.push(n.id)
-      if (out.length >= cap) break
-    }
-  }
-  return out
 }
 
 // Pearson correlation; 0 on empty or zero-variance input.
@@ -327,6 +301,21 @@ export function idsOfTypesSoA(soa, types, typeAt) {
   }
   return out
 }
+
+// Effective type list with a fallback: the auto-promotion-aware `nodeTypeList`
+// (or `edgeTypeList`) when populated, else the panel's payload type array.
+// Replaces the `list.length ? list : (data.value?.x_types ?? [])` idiom.
+export function effectiveTypeListOr(effectiveList, fallback) {
+  return effectiveList?.length ? effectiveList : (fallback ?? [])
+}
+
+// Theory-drawer inline link styling. Panels Teleport a rich theory block into
+// PanelFocus and expose clickable inline controls (e.g. "hide self-loops") that
+// drive the chart. `theoryLinkClass(on)` toggles resting vs active (pressed)
+// look — single source so every panel's theory links match.
+export const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
+export const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
+export function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 
 // Deterministic [0, 1) from a string key (FNV-1a hash). Use instead of
 // Math.random() for jitter/layout that must stay stable across re-renders —

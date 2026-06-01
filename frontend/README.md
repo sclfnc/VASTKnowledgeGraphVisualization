@@ -52,7 +52,7 @@ src/
 │   ├── useEffectiveType(s).js                              # effective-type labels (auto-promotion)
 │   ├── useAttributeIndex.js                                # per-(type,attr) filter bitsets (incl. text identifiers)
 │   ├── useNodeTypeColors.js / useEdgeTypeColors.js         # deterministic, effective-aware type → hex
-│   ├── useMetrics / useDegreeFit / useComponents / useTypeMixing / useEdgeFlow / useTimeline / useEgoSubgraph
+│   ├── useDegreeFit / useComponents / useTypeMixing / useEdgeFlow / useTimeline / useEgoSubgraph
 │   ├── useCentralityPoller.js + useCentrality / useAllCentralities   # single global poller + consumers
 │   ├── useNodeInspect / useNodeNeighbors / useEdgeInspect  # sidebar inspector data
 │   ├── useFilterShortcuts.js                               # "filter to this type/component" mutation helpers

@@ -13,7 +13,7 @@ import { useSelectionStore } from '@/stores/selection.js'
 import { useForceGraph } from '@/composables/useForceGraph.js'
 import { usePanel } from './usePanel.js'
 import { fromEgoPayload } from './layeredGraph.js'
-import { makeTooltip, showTip, hideTip } from './shared.js'
+import { makeTooltip, showTip, hideTip, theoryLinkClass, SLATE } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 import SliderControl from './controls/SliderControl.vue'
@@ -29,11 +29,6 @@ const props = defineProps({
 })
 
 defineEmits(['request-widen', 'request-shrink'])
-
-// Inline theory-link classes (global Tailwind; the block is teleported out).
-const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
-const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
-function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 
 const selection = useSelectionStore()
 const { ids: selectedRef } = storeToRefs(selection)
@@ -185,7 +180,7 @@ function renderNode(g, d) {
 
 function renderEdge(sel) {
   sel
-    .attr('stroke', '#94a3b8')
+    .attr('stroke', SLATE[400])
     .attr('stroke-width', 1)
     .attr('stroke-opacity', d => isEdgeActive(d.edge_id) ? 0.7 : 0.1)
     .attr('marker-end', isDirected.value ? 'url(#ego-arrow)' : null)
@@ -212,7 +207,7 @@ function onSvgBuild({ svg }) {
     .attr('orient', 'auto')
     .append('path')
     .attr('d', 'M0,-4L8,0L0,4')
-    .attr('fill', '#94a3b8')
+    .attr('fill', SLATE[400])
 }
 
 const { reconcile } = useForceGraph({

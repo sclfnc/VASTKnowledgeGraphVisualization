@@ -13,7 +13,7 @@ import { useSelectionStore, MAX_LAYERS } from '@/stores/selection.js'
 import { useForceGraph } from '@/composables/useForceGraph.js'
 import { usePanel } from './usePanel.js'
 import { fromEgoPayload, mergeLayers, filterIntersection } from './layeredGraph.js'
-import { makeTooltip, showTip, hideTip, LAYER_PALETTE } from './shared.js'
+import { makeTooltip, showTip, hideTip, LAYER_PALETTE, theoryLinkClass, SLATE } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlSwitch from './controls/ControlSwitch.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
@@ -65,11 +65,6 @@ const DIRECTION_OPTIONS = [
   { k: 'both', label: 'Both' },
 ]
 
-// Inline theory-link classes (global Tailwind, not scoped — the block is
-// teleported out of this component's tree). Mirrors ConnectedComponents.
-const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
-const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
-function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 function theorySetControl(field, value) { updateControl(field, value) }
 
 // Summary numbers for the contextual theory text.
@@ -236,7 +231,7 @@ const vennActive = computed(() =>
 // per-circle radii (data-driven, not a fixed polygon).
 const pairCounts = computed(() => {
   const n = egos.value.length
-  const pc = Array.from({ length: n }, () => new Array(n).fill(0))
+  const pc = Array.from({ length: n }, () => Array.from({ length: n }, () => 0))
   for (const node of merged.value.nodes) {
     if (node.isEgoOf?.size > 0) continue
     const ls = [...node.layers]
@@ -254,7 +249,7 @@ const pairCounts = computed(() => {
 // Drives circle radius (∝ size) so the cap visibly inflates/deflates areas.
 const egoSizes = computed(() => {
   const n = egos.value.length
-  const sizes = new Array(n).fill(0)
+  const sizes = Array.from({ length: n }, () => 0)
   for (const node of merged.value.nodes) {
     if (node.isEgoOf?.size > 0) continue
     for (const li of node.layers) sizes[li]++
@@ -285,7 +280,7 @@ function ringOrder(n, pc) {
     if (sc > bestScore) { bestScore = sc; best = c }
   }
   // best[slot] = layer → invert to pos[layer] = slot.
-  const pos = new Array(n)
+  const pos = Array.from({ length: n })
   best.forEach((layer, slot) => { pos[layer] = slot })
   return pos
 }
@@ -307,7 +302,7 @@ function polyRadius(count, w, h, spread = 1) {
 function circleRadii(sizes, verts, pc, ringR, overlap = 1.12) {
   const n = sizes.length
   const maxSize = Math.max(1, ...sizes)
-  const radii = new Array(n)
+  const radii = Array.from({ length: n })
   for (let i = 0; i < n; i++) {
     // Area ∝ size → radius ∝ √size; map normalized √ onto [0.7, 1.3]·ringR.
     const frac = Math.sqrt(sizes[i] / maxSize) // 0..1
@@ -337,7 +332,7 @@ function vennVertices(count, w, h, pos, spread) {
     const slotXY = [[cx - R, cy], [cx + R, cy]]
     return [slotXY[pos[0]], slotXY[pos[1]]]
   }
-  const verts = new Array(count)
+  const verts = Array.from({ length: count })
   for (let layer = 0; layer < count; layer++) {
     const slot = pos[layer]
     const a = -Math.PI / 2 + (slot * 2 * Math.PI) / count
@@ -571,7 +566,7 @@ function renderBackdrop({ backdrop, width, height }) {
     const base = circles[reg.base]
     inner.append('circle')
       .attr('cx', base.cx).attr('cy', base.cy).attr('r', base.r)
-      .attr('fill', '#475569').attr('fill-opacity', 0.001)
+      .attr('fill', SLATE[600]).attr('fill-opacity', 0.001)
       .attr('pointer-events', 'all')
       .on('mouseover', (e) => tooltip && showTip(tooltip, e, regionTooltipHtml(reg)))
       .on('mousemove', (e) => tooltip && showTip(tooltip, e, null))
@@ -582,7 +577,7 @@ function renderBackdrop({ backdrop, width, height }) {
     // — e.g. triples at 4 egos where circles can't form a real overlap area.
     host.append('circle')
       .attr('cx', reg.cx).attr('cy', reg.cy).attr('r', 13)
-      .attr('fill', '#475569').attr('fill-opacity', 0.001)
+      .attr('fill', SLATE[600]).attr('fill-opacity', 0.001)
       .attr('pointer-events', 'all')
       .on('mouseover', (e) => tooltip && showTip(tooltip, e, regionTooltipHtml(reg)))
       .on('mousemove', (e) => tooltip && showTip(tooltip, e, null))
@@ -591,7 +586,7 @@ function renderBackdrop({ backdrop, width, height }) {
     if (reg.layers.length >= 3) {
       host.append('circle')
         .attr('cx', reg.cx).attr('cy', reg.cy).attr('r', 3)
-        .attr('fill', 'none').attr('stroke', '#64748b')
+        .attr('fill', 'none').attr('stroke', SLATE[500])
         .attr('stroke-width', 1).attr('stroke-opacity', 0.4)
         .attr('pointer-events', 'none')
     }

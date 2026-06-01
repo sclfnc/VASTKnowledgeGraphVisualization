@@ -62,6 +62,8 @@ def _summarize(G, components):
 
 
 def compute_components(G):
+    """Connectivity breakdown: weakly connected components always, plus strongly connected
+    components on directed graphs (per-component records + aggregate counts)."""
     wcc = _summarize(G, nx.weakly_connected_components(G) if G.is_directed() else nx.connected_components(G))
     result = {'wcc': wcc, 'directed': G.is_directed()}
     if G.is_directed():

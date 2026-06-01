@@ -9,7 +9,7 @@ interactively explorable — no notebook, no `nx.degree_centrality(G)`, no boile
 Developed for an academic project on visual analytics for knowledge graphs (Course on Visual
 Analytics, VAST Challenge 2025 — Design Challenge).
 
-**Status:** v0.6.0 — work in progress.
+**Status:** v0.6.1 — work in progress.
 **Branch:** `api-integration`
 **Current focus:** the entire effort is on **Guide mode**. Graph mode is intentionally a placeholder.
 
@@ -153,10 +153,11 @@ Six datasets are exposed via `GET /datasets/`:
 - **email_eu_core** — Email Eu-Core (directed, real department node types)
 - **movielens_small** — MovieLens Small (larger, weighted, temporal)
 
-The four NetworkX graphs are normalized at load time to expose `Node Type` / `Edge Type` keys so the
-schema endpoint works uniformly with the MC1 convention. Single-type graphs with one discriminator
-attribute (Karate's `club`, Davis' `bipartite`) flow through **auto-promotion**: that attribute
-becomes the effective type everywhere (colors, legends, chip group).
+The built-in NetworkX graphs are loaded as-is — no synthetic `Node Type` is injected. Single-type
+graphs with one discriminator attribute (Karate's `club`, Davis' `bipartite`) flow through
+**auto-promotion**: that attribute becomes the effective type everywhere (colors, legends, chip
+group); les_misérables / florentine simply present as a single type. The two larger built-ins
+(email-eu-core, MovieLens) carry real `Node Type` / `Edge Type` set by their loaders.
 
 ---
 

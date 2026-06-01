@@ -28,6 +28,7 @@ def _log_grid(k_lo, k_hi, n=GRID_SIZE):
 
 
 def _ll_per_point(total_ll, n):
+    """Per-point log-likelihood (total LL / n) — comparable across families; None on empty/non-finite."""
     if total_ll is None or n == 0:
         return None
     val = total_ll / n
@@ -52,6 +53,7 @@ def _fit_with_library(seq):
 
 
 def _fit_powerlaw(fit, k_max, n):
+    """Power-law family fit → curve payload (gamma, grid, pmf, ccdf, per-point ll); None on failure."""
     try:
         pl = fit.power_law
         grid = _log_grid(1, k_max)
@@ -72,6 +74,7 @@ def _fit_powerlaw(fit, k_max, n):
 
 
 def _fit_exponential(fit, k_max, n):
+    """Exponential family fit → curve payload (lambda, grid, pmf, ccdf, per-point ll); None on failure."""
     try:
         ex = fit.exponential
         grid = _log_grid(1, k_max)
@@ -92,6 +95,7 @@ def _fit_exponential(fit, k_max, n):
 
 
 def _fit_lognormal(fit, k_max, n):
+    """Log-normal family fit → curve payload (mu, sigma, grid, pmf, ccdf, per-point ll); None on failure."""
     try:
         ln = fit.lognormal
         grid = _log_grid(1, k_max)
@@ -140,6 +144,8 @@ def _fit_poisson(seq, k_max):
 
 
 def fit_degree_sequence(seq):
+    """Fit all four families to one degree sequence (xmin=1). Returns {family: payload|None};
+    sequences shorter than 5 are too small to fit and yield all-None."""
     if not seq or len(seq) < 5:
         return {"powerlaw": None, "exponential": None, "poisson": None, "lognormal": None}
     k_max = int(max(seq))
@@ -159,6 +165,7 @@ def fit_degree_sequence(seq):
 
 
 def compute_degree_fit(G):
+    """Degree-distribution fits for the whole graph plus a per-node-type breakdown."""
     degree_seq = [d for _, d in G.degree()]
 
     by_type = {}

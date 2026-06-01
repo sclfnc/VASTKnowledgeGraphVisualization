@@ -12,7 +12,7 @@ import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore } from '@/stores/selection.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, selectedTypesIn, idsOfTypesSoA } from './shared.js'
+import { makeTooltip, showTip, hideTip, selectedTypesIn, idsOfTypesSoA, theoryLinkClass, effectiveTypeListOr, SLATE } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlSwitch from './controls/ControlSwitch.vue'
 
@@ -25,10 +25,6 @@ const props = defineProps({
   controlsTarget: { type: String, default: null },
   theoryTarget: { type: String, default: null },
 })
-
-const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
-const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
-function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
 
 const emit = defineEmits(['request-widen', 'request-shrink'])
 
@@ -44,36 +40,41 @@ const selection = useSelectionStore()
 // meta-node and the arcs that touch a selected type. Cap-safe. Same helper as TypeMixing.
 const selectedNodeTypes = computed(() =>
   selectedTypesIn(nodesSoA.value?.N ?? 0, selectedMask.value, nodeTypeAt))
-const { controls, updateControl } = usePanel(props, 'edge_flow', data)
+const { controls, updateControl } = usePanel(props, 'edge_flow')
 
-// Always recompute flows from edges SoA + activeEdgeMask: single codepath,
-// edge filters (type/weight/selfLoop) propagate uniformly.
-// Nested Map keyed by tuple-of-Maps avoids string-split fragility on type
-// names with separator-like characters.
-const liveFlows = computed(() => {
-  const soaN = nodesSoA.value
+// Single O(E) walk over the edges SoA — runs only when the edges/mask change,
+// NOT when a filter chip toggles. Per (src_type, edge_type, dst_type) triple it
+// keeps the edge count AND the set of node indices the triple touches, so the
+// downstream filter + node-sizing work from this small precomputed structure
+// instead of re-scanning thousands of edges on every click. Nested Maps (not
+// string keys) avoid separator fragility on type names.
+const flowIndex = computed(() => {
   const soaE = edgesSoA.value
   const eMask = activeEdgeMask.value
-  if (!soaN || !soaE || !eMask) return []
+  if (!nodesSoA.value || !soaE || !eMask) return []
   const directed = data.value?.directed ?? false
-  const acc = new Map()  // Map<st, Map<et, Map<dt, count>>>
+  const acc = new Map()  // st -> et -> dt -> { count, nodes:Set }
   for (let i = 0; i < soaE.E; i++) {
     if (!eMask.get(i)) continue
-    let st = nodeTypeAt(soaE.source[i])
-    let dt = nodeTypeAt(soaE.target[i])
+    const s = soaE.source[i], t = soaE.target[i]
+    let st = nodeTypeAt(s), dt = nodeTypeAt(t)
     if (!directed && st > dt) { const tmp = st; st = dt; dt = tmp }
     const et = soaE.edgeTypes[soaE.type[i]]
     let byEt = acc.get(st)
     if (!byEt) { byEt = new Map(); acc.set(st, byEt) }
     let byDt = byEt.get(et)
     if (!byDt) { byDt = new Map(); byEt.set(et, byDt) }
-    byDt.set(dt, (byDt.get(dt) || 0) + 1)
+    let rec = byDt.get(dt)
+    if (!rec) { rec = { count: 0, nodes: new Set() }; byDt.set(dt, rec) }
+    rec.count++
+    rec.nodes.add(s)
+    rec.nodes.add(t)
   }
   const out = []
   for (const [src_type, byEt] of acc) {
     for (const [edge_type, byDt] of byEt) {
-      for (const [dst_type, count] of byDt) {
-        out.push({ src_type, edge_type, dst_type, count })
+      for (const [dst_type, rec] of byDt) {
+        out.push({ src_type, edge_type, dst_type, count: rec.count, nodes: rec.nodes })
       }
     }
   }
@@ -91,8 +92,7 @@ const MARGINS = { top: 20, right: 20, bottom: 20, left: 20 }
 const { color: edgeColor } = useEdgeTypeColors(toRef(props, 'schema'))
 
 // Effective node-type list (auto-promotion aware).
-const allNodeTypes = computed(() =>
-  nodeTypeList.value.length ? nodeTypeList.value : (data.value?.node_types ?? []))
+const allNodeTypes = computed(() => effectiveTypeListOr(nodeTypeList.value, data.value?.node_types))
 
 // SINGLE filter axis. Edge Type Flow is about relationships, so when the graph
 // has ≥2 edge types we filter by edge type; with one (or none) the per-arc color
@@ -113,7 +113,7 @@ const hiddenTypes = computed(() => new Set(controls.value.hiddenTypes || []))
 const candidateFlows = computed(() => {
   const hidden = hiddenTypes.value
   const mode = filterMode.value
-  let list = liveFlows.value
+  let list = flowIndex.value
   if (controls.value.hideSelfLoops) list = list.filter(f => f.src_type !== f.dst_type)
   if (hidden.size) {
     if (mode === 'edge') list = list.filter(f => !hidden.has(f.edge_type))
@@ -126,43 +126,26 @@ const candidateFlows = computed(() => {
 // many call sites below read clearly ("the flows on screen").
 const filteredFlows = candidateFlows
 
-// Nodes + edges actually touched by the VISIBLE flows. A second pass over the
-// edges SoA keeps only edges whose (src_type, edge_type, dst_type) triple
-// survived every refiner + the Top-N cap, then collects the distinct node
-// indices per type and the edge count. This makes the meta-node sizes and the
-// caption react live: a type with no visible edge disappears entirely.
+// Nodes + edges touched by the VISIBLE flows, folded straight out of the
+// precomputed per-triple node sets — no edge re-scan on filter toggle. Each
+// distinct node is bucketed once by its own effective type (global Set dedups
+// across triples), so the meta-node sizes and the caption stay exact and react
+// live: a type with no visible edge drops out entirely.
 const visibleStats = computed(() => {
-  const soaE = edgesSoA.value
-  const eMask = activeEdgeMask.value
-  const empty = { nodesByType: new Map(), edgeCount: 0, nodeCount: 0 }
-  if (!soaE || !eMask) return empty
-  const directed = data.value?.directed ?? false
-  // Allowed triples from the visible flows (undirected flows were normalized
-  // st≤dt in liveFlows, so match the same orientation here).
-  const allowed = new Set()
-  for (const f of candidateFlows.value) allowed.add(`${f.src_type} ${f.edge_type} ${f.dst_type}`)
-  if (!allowed.size) return empty
-
   const nodesByType = new Map()
   const allNodes = new Set()
   let edgeCount = 0
   const touch = (idx) => {
+    if (allNodes.has(idx)) return
+    allNodes.add(idx)
     const t = nodeTypeAt(idx)
     let s = nodesByType.get(t)
     if (!s) { s = new Set(); nodesByType.set(t, s) }
     s.add(idx)
-    allNodes.add(idx)
   }
-  for (let i = 0; i < soaE.E; i++) {
-    if (!eMask.get(i)) continue
-    let st = nodeTypeAt(soaE.source[i])
-    let dt = nodeTypeAt(soaE.target[i])
-    if (!directed && st > dt) { const tmp = st; st = dt; dt = tmp }
-    const et = soaE.edgeTypes[soaE.type[i]]
-    if (!allowed.has(`${st} ${et} ${dt}`)) continue
-    touch(soaE.source[i])
-    touch(soaE.target[i])
-    edgeCount++
+  for (const f of candidateFlows.value) {
+    edgeCount += f.count
+    for (const idx of f.nodes) touch(idx)
   }
   return { nodesByType, edgeCount, nodeCount: allNodes.size }
 })
@@ -209,8 +192,7 @@ const visibleTypes = computed(() => {
   // Only types actually touched by a visible edge (from visibleStats); a type
   // with no live edge disappears. Type list uses effective labels.
   const touched = visibleStats.value.nodesByType
-  const all = nodeTypeList.value.length ? nodeTypeList.value : (data.value?.node_types ?? [])
-  const list = all.filter(t => (touched.get(t)?.size || 0) > 0)
+  const list = allNodeTypes.value.filter(t => (touched.get(t)?.size || 0) > 0)
   // Order by volume desc so heavy types cluster; ties keep stable list order.
   const vol = typeVolume.value
   return [...list].sort((a, b) => (vol.get(b) || 0) - (vol.get(a) || 0))
@@ -241,7 +223,7 @@ function arcShades(hex) {
   return { src: src.formatHex(), dst: dst.formatHex() }
 }
 // Direction-encoding key, demoed on a neutral slate. Directed graphs only.
-const dirKey = computed(() => arcShades('#64748b'))
+const dirKey = computed(() => arcShades(SLATE[500]))
 function chipStyle(shown, color) {
   return shown
     ? { background: color, borderColor: color, color: '#fff', opacity: 1 }
@@ -267,7 +249,7 @@ function renderMain() {
   const types = visibleTypes.value
   if (!types.length) {
     svg.append('text').attr('x', totalW / 2).attr('y', totalH / 2)
-      .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#94a3b8')
+      .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', SLATE[400])
       .text('No flows match the current filters')
     return
   }
@@ -320,7 +302,7 @@ function renderMain() {
     .attr('x', '-40%').attr('y', '-40%').attr('width', '180%').attr('height', '180%')
   shadow.append('feDropShadow')
     .attr('dx', 0).attr('dy', 1).attr('stdDeviation', 1.5)
-    .attr('flood-color', '#0f172a').attr('flood-opacity', 0.18)
+    .attr('flood-color', SLATE[900]).attr('flood-opacity', 0.18)
 
   const arcsG = svg.append('g').attr('class', 'arcs')
   const selTypes = selectedNodeTypes.value
@@ -433,7 +415,7 @@ function renderMain() {
     g.append('circle')
       .attr('r', p.r)
       .attr('fill', typeColor(t))
-      .attr('stroke', nodeSelected ? '#0f172a' : '#fff')
+      .attr('stroke', nodeSelected ? SLATE[900] : '#fff')
       .attr('stroke-width', nodeSelected ? 2 : 0.75)
       .attr('stroke-opacity', nodeSelected ? 1 : 0.7)
       .attr('filter', 'url(#ef-node-shadow)')
@@ -451,7 +433,7 @@ function renderMain() {
         .attr('x', Math.cos(ang) * (p.r + 5))
         .attr('y', Math.sin(ang) * (p.r + 5))
         .attr('text-anchor', outward).attr('dy', '0.32em')
-        .attr('font-size', 10).attr('font-weight', 600).attr('fill', '#334155')
+        .attr('font-size', 10).attr('font-weight', 600).attr('fill', SLATE[700])
         .attr('pointer-events', 'none').text(t)
       // White halo so the label stays legible where it overlaps a ribbon.
       label.clone(true).lower()

@@ -10,7 +10,7 @@ import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useSelectionStore } from '@/stores/selection.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import {
-  FORMATTERS, COLOR_SCHEME, summaryStats,
+  FORMATTERS, COLOR_SCHEME, SLATE, summaryStats, theoryLinkClass,
   makeTooltip, showTip, hideTip, attachVLineTooltip,
   drawGrid, drawAxes, drawLine,
 } from './shared.js'
@@ -92,7 +92,7 @@ const selectedDegrees = computed(() => {
   return { byType, all }
 })
 
-const { controls, updateControl } = usePanel(props, 'degree', activeData)
+const { controls, updateControl } = usePanel(props, 'degree')
 const chartContainer = ref(null)
 const view = ref('PMF')
 
@@ -242,13 +242,6 @@ const theoryFit = computed(() => {
   return { best: entries[0], entries }
 })
 
-// Inline link classes for the theory block. Tailwind utilities (global) rather
-// than scoped CSS, because the block is teleported out of this component's tree
-// where scoped `data-v-*` rules don't reliably apply.
-const THEORY_LINK = 'underline underline-offset-2 font-medium text-sky-700 hover:text-sky-900 cursor-pointer'
-const THEORY_LINK_ON = 'no-underline font-medium text-sky-700 bg-sky-100 rounded px-1 cursor-pointer'
-function theoryLinkClass(on) { return on ? THEORY_LINK_ON : THEORY_LINK }
-
 const VIEWS = ['PMF', 'CCDF']
 const VIEW_OPTIONS = VIEWS.map(v => ({ k: v, label: v }))
 // Per-type makes sense only when there are ≥2 effective types — on a single-type
@@ -337,7 +330,7 @@ function buildScales(visible, innerW, lineH, useLogX, useLogY) {
 // One family at a time on the chart (mutually exclusive radio); the family is
 // identified by the radio + legend label, not by color. The curve is a
 // neutral reference line so the data marks stay the primary signal.
-const FIT_CURVE_COLOR = '#ef4444'  // red-500 — saturated "model overlay" hue
+const FIT_CURVE_COLOR = COLOR_SCHEME.danger  // saturated "model overlay" hue
 const FIT_CURVE_DASH = '3,3'       // dashed = theoretical model, not measured
 const FIT_NAMES = ['powerlaw', 'exponential', 'poisson', 'lognormal']
 
@@ -368,7 +361,7 @@ function drawFitCurves(g, fitParams, xScale, yScale, isCCDF, n, yMode, useLogX, 
 
 
 // Grey baseline overlay; hidden when active == baseline to avoid clutter.
-const BASELINE_COLOR = '#94a3b8'   // slate-400
+const BASELINE_COLOR = SLATE[400]
 const BASELINE_LINE_OPACITY = 0.4
 const BASELINE_RECT_OPACITY = 0.06
 
@@ -707,7 +700,7 @@ function renderChart() {
           .attr('fill', color).attr('opacity', 0.8)
       }
       g.append('text').attr('x', lx - 18).attr('y', ly + 4)
-        .attr('text-anchor', 'end').attr('font-size', '11px').attr('fill', '#64748b').text(label)
+        .attr('text-anchor', 'end').attr('font-size', '11px').attr('fill', SLATE[500]).text(label)
     })
   }
 

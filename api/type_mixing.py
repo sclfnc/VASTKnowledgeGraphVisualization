@@ -27,30 +27,38 @@ import networkx as nx
 from schema import node_type, edge_type
 
 
-def _simple_undirected_projection_all(G):
-    """
-    Collapse a (possibly multi/directed) graph into a simple undirected graph
-    carrying the `Node Type` attribute. Parallel edges → single edge. Self-loops
-    excluded. Used for assortativity so Newman's r is interpretable on the
-    canonical scale.
-    """
-    H = nx.Graph()
-    for n, d in G.nodes(data=True):
-        H.add_node(n, **{k: v for k, v in d.items() if k == 'Node Type'})
-    for u, v in G.edges():
-        if u != v:
-            H.add_edge(u, v)
-    return H
+def _build_projections(G):
+    """Single edge walk → the simple+undirected projection of the whole graph
+    plus one projection per edge type, all in one pass.
 
+    Parallel edges collapse to a single edge; self-loops are excluded. Each
+    projection carries the `Node Type` attribute only on the endpoints it
+    actually touches — that is all `attribute_assortativity_coefficient` reads
+    (isolated nodes don't affect r), so the per-projection node walk is skipped.
+    Replaces the previous (1 + #edge_types) full edge walks with one.
+    """
+    node_types = {n: node_type(G, n) for n in G.nodes()}
+    H_all = nx.Graph()
+    H_by_type = {}
 
-def _simple_undirected_projection_for_type(G, target_type):
-    H = nx.Graph()
-    for n, d in G.nodes(data=True):
-        H.add_node(n, **{k: v for k, v in d.items() if k == 'Node Type'})
+    def _add(H, u, v):
+        if u not in H:
+            H.add_node(u, **{'Node Type': node_types[u]})
+        if v not in H:
+            H.add_node(v, **{'Node Type': node_types[v]})
+        H.add_edge(u, v)
+
     for u, v, d in G.edges(data=True):
-        if u != v and edge_type(d) == target_type:
-            H.add_edge(u, v)
-    return H
+        if u == v:
+            continue
+        _add(H_all, u, v)
+        et = edge_type(d)
+        H_et = H_by_type.get(et)
+        if H_et is None:
+            H_et = nx.Graph()
+            H_by_type[et] = H_et
+        _add(H_et, u, v)
+    return H_all, H_by_type
 
 
 def _assortativity_safe(H):
@@ -73,13 +81,17 @@ def compute_type_mixing(G):
     edge_types = sorted({edge_type(d) for *_, d in G.edges(data=True)})
     directed = G.is_directed()
 
-    # Assortativity on simple+undirected projection (full graph; frontend caveats under filter).
-    H = _simple_undirected_projection_all(G)
-    overall = _assortativity_safe(H)
-    per_edge_type = {}
-    for et in edge_types:
-        H_et = _simple_undirected_projection_for_type(G, et)
-        per_edge_type[et] = _assortativity_safe(H_et)
+    # Assortativity on simple+undirected projections (full graph; frontend
+    # caveats under filter). One edge walk builds the global projection plus one
+    # per edge type. An edge type carried only by self-loops has no inter-node
+    # structure, so its assortativity is undefined → None (the frontend renders
+    # "N/A" and omits it from the per-edge-type bars).
+    H_all, H_by_type = _build_projections(G)
+    overall = _assortativity_safe(H_all)
+    per_edge_type = {
+        et: _assortativity_safe(H_by_type[et]) if et in H_by_type else None
+        for et in edge_types
+    }
 
     return {
         'node_types': node_types,

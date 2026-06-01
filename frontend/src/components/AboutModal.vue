@@ -1,5 +1,5 @@
 <script setup>
-// EXTENSION: about modal — branding, project context, stack, author, progress.
+// EXTENSION: about modal — branding, project context, stack, credits.
 import { onMounted, onUnmounted } from 'vue'
 import { Telescope, X, Github } from 'lucide-vue-next'
 import { useAppVersion } from '../composables/useAppVersion.js'
@@ -54,15 +54,33 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <div class="space-y-2 text-sm leading-relaxed text-secondary">
           <p>
             A visual analytics prototype for exploring knowledge graphs through coordinated D3
-            panels. Academic project.
+            panels.
+          </p>
+
+          <p>
+            <span class="font-medium text-primary">Project.</span> Built for the
+            <a
+              href="https://vast-challenge.github.io/2025/DC.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium text-primary underline decoration-slate-300 underline-offset-2 hover:decoration-slate-900"
+            >VAST Challenge 2025 — Design Challenge</a>
+            in the Visual Analytics course (University of Pisa), on top of the group's shared
+            repositories under the VA602AA-master organisation — the original
+            <a
+              href="https://github.com/VA602AA-master/VASTKnowledgeGraphVisualization"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium text-primary underline decoration-slate-300 underline-offset-2 hover:decoration-slate-900"
+            >dashboard repository</a>
+            and the shared <span class="font-medium text-primary">VASTKnowledgeGraphAPI</span>.
           </p>
 
           <p>
             <span class="font-medium text-primary">Panels.</span> Degree distribution,
             connected components, four centrality measures (PageRank, Eigenvector,
             Betweenness, Closeness) plus a comparison matrix, ego network and multi-ego
-            comparison, type-mixing matrix, edge-type flow, node and edge attribute schema,
-            activity timeline.
+            comparison, type-mixing matrix, edge-type flow, and node/edge activity timelines.
           </p>
 
           <p>
@@ -72,9 +90,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </p>
 
           <p>
-            <span class="font-medium text-primary">Per-panel affordances.</span> Pin restricts
-            a panel to the current selection; Lock freezes a snapshot independently of live
-            mutations.
+            <span class="font-medium text-primary">Per-panel affordances.</span> Lock freezes a
+            panel on its current snapshot (filters + selection), independent of live mutations;
+            a detail view adds a per-panel theory drawer.
           </p>
         </div>
 
@@ -118,12 +136,24 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <hr class="my-5 border-slate-200" />
 
         <div>
-          <p class="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">Next steps</p>
-          <ol class="list-decimal space-y-1.5 pl-5 text-sm text-secondary">
-            <li>Panel-by-panel HCI audit, including cross-panel relationships.</li>
-            <li>Visual-Analytics-specific layout pass: at least two alternative encodings per panel
-              where meaningful — one for data scientists, one for non-experts.</li>
-          </ol>
+          <p class="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">Credits</p>
+          <dl class="space-y-1.5 text-sm">
+            <div>
+              <dt>
+                <a
+                  href="https://github.com/sclfnc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 font-medium text-primary underline decoration-slate-300 underline-offset-2 hover:decoration-slate-900"
+                ><Github :size="13" /> Francesco Secoli</a>
+              </dt>
+              <dd class="text-xs text-muted">Design &amp; implementation — the Telescope dashboard (frontend + API integration)</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-primary">Salvo Rinzivillo</dt>
+              <dd class="text-xs text-muted">Visual Analytics course — supervision</dd>
+            </div>
+          </dl>
         </div>
 
         <hr class="my-5 border-slate-200" />
