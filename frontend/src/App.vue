@@ -10,7 +10,6 @@ import { useGraphEdges, GRAPH_EDGES_KEY } from './composables/useGraphEdges.js'
 import { useEffectiveTypes, EFFECTIVE_TYPES_KEY } from './composables/useEffectiveTypes.js'
 import { useAttributeIndex, ATTRIBUTE_INDEX_KEY } from './composables/useAttributeIndex.js'
 import { useCentralityPoller } from './composables/useCentralityPoller.js'
-import AppSidebar from './components/AppSidebar.vue'
 import AboutModal from './components/AboutModal.vue'
 import TimelineParsingSettingsModal from './components/TimelineParsingSettingsModal.vue'
 

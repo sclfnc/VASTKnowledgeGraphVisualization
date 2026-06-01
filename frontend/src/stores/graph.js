@@ -7,13 +7,11 @@ import { ref } from 'vue'
 
 export const useGraphStore = defineStore('graph', () => {
   const graphId = ref(null)
-  const mode = ref('guide')
 
   const setGraphId = (id) => {
     graphId.value = id
-    mode.value = 'guide'
   }
   const setMode = (m) => { mode.value = m }
 
-  return { graphId, mode, setGraphId, setMode }
+  return { graphId, setGraphId }
 })
