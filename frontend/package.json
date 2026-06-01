@@ -1,6 +1,6 @@
 {
   "name": "package.json",
-  "version": "0.0.0",
+  "version": "0.6.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,13 +12,16 @@
     "lint:eslint": "eslint . --fix --cache"
   },
   "dependencies": {
+    "@vueform/slider": "^2.1.10",
+    "d3": "^7.9.0",
+    "lucide-vue-next": "^1.0.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.31",
     "vue-router": "^5.0.4"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.1.4",
     "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.1.4",
     "@vitejs/plugin-vue": "^6.0.5",
     "eslint": "^10.1.0",
     "eslint-plugin-oxlint": "~1.57.0",
@@ -28,7 +31,7 @@
     "oxlint": "~1.57.0",
     "tailwindcss": "^4.1.4",
     "vite": "^8.0.3",
-    "vite-plugin-vue-devtools": "^8.1.1"
+    "vite-plugin-vue-devtools": "^8.1.2"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

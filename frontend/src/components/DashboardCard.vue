@@ -12,10 +12,10 @@ defineProps({
 </script>
 
 <template>
-  <article class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">{{ subtitle }}</p>
-    <h3 class="mt-1 text-base font-semibold text-slate-900">{{ title }}</h3>
-    <div class="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+  <article class="card-elev rounded-2xl p-4">
+    <p class="text-xs font-semibold uppercase tracking-wide text-secondary">{{ subtitle }}</p>
+    <h3 class="mt-1 text-base font-semibold text-primary">{{ title }}</h3>
+    <div class="mt-4 rounded-lg border border-dashed border-slate-300 surface-recessed p-4 text-sm text-secondary">
       <slot />
     </div>
   </article>

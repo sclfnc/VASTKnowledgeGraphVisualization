@@ -1,0 +1,71 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+__init__.py
+# ...except the one marking tests/ as a package, so layouts/CI that import the
+# suite as `api.tests` (or run with importlib import mode) don't break.
+!tests/__init__.py
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+venv.bak/
+venvold/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+instance/
+.webassets-cache/
+
+# Django stuff:
+*.sqlite3
+*.db
+
+# Local settings
+local_settings.py
+
+# Graph storage: uploads, regenerated built-in caches, and the built-in source
+# data are all transient. The source data (email-eu / MovieLens) is fetched on
+# first use from its official host by builtin_download.py — never committed.
+graph_storage/
+
+# Sample data
+sample_graph.json
+
+# Upstream API reference (read-only working copy, never committed)
+_upstream_ref/
+
+# Stray upstream conftest variant — the merged conftest.py is committed instead.
+tests/conftest_upstream.py

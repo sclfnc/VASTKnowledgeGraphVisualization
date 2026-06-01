@@ -1,0 +1,20 @@
+*.md
+!README.md
+!contract.md
+!README.sclfnc.md
+.*
+!.gitignore
+data/*
+!data/download_github_zip.py
+!data/README.md
+notebooks/*
+_upstream_ref/
+api/venv/
+api/__pycache__/
+api/graph_storage/
+docs/interactions/
+# Local report workspace (LaTeX) — never integrate
+tex/
+
+# Course slides — local only, not part of the project
+slides/
