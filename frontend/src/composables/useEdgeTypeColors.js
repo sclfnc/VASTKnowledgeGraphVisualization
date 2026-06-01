@@ -6,14 +6,17 @@
 import { computed, toValue } from 'vue'
 import { injectEffectiveTypes } from './useEffectiveTypes.js'
 
+// 22 saturated, well-separated hues. The yellows and washed-out pastels of the
+// old Tableau10+Set3 mix read poorly on white, so the extension uses stronger,
+// distinct tones (no near-white yellow).
 const PALETTE = [
-  // Tableau10 (10)
+  // Tableau10 minus its weak yellow (#edc949 dropped)
   '#4e79a7', '#f28e2c', '#e15759', '#76b7b2', '#59a14f',
-  '#edc949', '#af7aa1', '#ff9da7', '#9c755f', '#bab0ab',
-  // Set3 extension (12)
-  '#8dd3c7', '#ffffb3', '#bebada', '#fb8072', '#80b1d3',
-  '#fdb462', '#b3de69', '#fccde5', '#d9d9d9', '#bc80bd',
-  '#ccebc5', '#ffed6f',
+  '#af7aa1', '#ff9da7', '#9c755f', '#b07aa1', '#499894',
+  // Saturated extension
+  '#d37295', '#86bcb6', '#a14e9c', '#e6842a', '#6b4c9a',
+  '#3a7d44', '#c4622d', '#5878a3', '#b5482e', '#7b6888',
+  '#2f9e8f', '#9d5fa8',
 ]
 
 export function useEdgeTypeColors(schemaRef) {

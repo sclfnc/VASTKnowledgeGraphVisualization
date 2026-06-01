@@ -13,10 +13,12 @@
 import { computed, toValue } from 'vue'
 import { injectEffectiveTypes } from './useEffectiveTypes.js'
 import { injectGraphNodes } from './useGraphNodes.js'
+import { injectGraphEdges } from './useGraphEdges.js'
 
 export function useEffectiveType(graphId, schemaRef) {
   const { data: effData } = injectEffectiveTypes(graphId)
   const { nodes } = injectGraphNodes(graphId)
+  const { edges } = injectGraphEdges(graphId)
 
   const nodeLabels = computed(() => effData.value?.node ?? null)
   const edgeLabels = computed(() => effData.value?.edge ?? null)
@@ -54,6 +56,9 @@ export function useEffectiveType(graphId, schemaRef) {
   function edgeTypeAt(idx) {
     const labels = edgeLabels.value
     if (labels && idx >= 0 && idx < labels.length) return labels[idx]
+    // Fallback (no edge promotion): raw type from the edges SoA, mirroring nodeTypeAt.
+    const e = edges.value
+    if (e && idx >= 0 && idx < e.E) return e.edgeTypes[e.type[idx]] ?? null
     return null
   }
 

@@ -529,9 +529,10 @@ const isFilteredEmpty = computed(() =>
             or keep
             <button :class="theoryLinkClass(controls.normalize === 'none')"
               @click="updateControl('normalize', 'none')">raw</button>
-            counts. The <strong>Newman r</strong> below summarizes the whole matrix in one number:
+            counts. The <strong>Newman r</strong> below summarizes the matrix in one number:
             r≈1 strongly assortative (like connects to like), r≈−1 disassortative, r≈0 random. It is
-            always computed on the full graph, so it doesn't change when you cap or filter the view.
+            computed on the full graph, except when you pick a single edge type, where it is computed
+            for that edge type alone.
           </p>
         </section>
 
@@ -616,6 +617,9 @@ const isFilteredEmpty = computed(() =>
             <span v-if="controls.edgeTypeFilter && controls.mode === 'edges'" class="text-muted">· edge type: {{ controls.edgeTypeFilter }}</span>
           </div>
           <p v-if="noNodesActive" class="text-[10px] italic text-amber-600 px-1 text-center">No data under current filters.</p>
+          <p v-else-if="controls.edgeTypeFilter && controls.mode === 'edges'" class="text-[10px] leading-tight text-muted px-1 text-center">
+            Newman r computed for the {{ controls.edgeTypeFilter }} edges only; matrix shows the currently visible type rows/columns.
+          </p>
           <p v-else-if="edgeFilterActive" class="text-[10px] italic text-muted px-1 text-center">
             Newman r computed on the full graph; matrix counts reflect the active edge subset.
           </p>

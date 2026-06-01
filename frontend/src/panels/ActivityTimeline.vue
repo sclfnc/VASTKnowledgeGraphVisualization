@@ -12,7 +12,7 @@ import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useTimelineSettingsModal } from '@/composables/useTimelineSettingsModal.js'
 import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
-import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS, theoryLinkClass, SLATE, COLOR_SCHEME } from './shared.js'
+import { makeTooltip, showTip, hideTip, svgFrame, FORMATTERS, theoryLinkClass, drawTypeLegend, SLATE, COLOR_SCHEME } from './shared.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
 
@@ -173,6 +173,8 @@ function render() {
       .on('mousemove', (ev) => showTip(tooltip, ev, null))
       .on('mouseout', () => hideTip(tooltip))
       .on('click', (_, d) => onBarClick(d.data.year))
+    // Inline legend so the type colours read without hovering (shared map).
+    drawTypeLegend(svg, totalW, activeTypes, typeColor)
   } else {
     g.selectAll('rect.bar').data(active).join('rect').attr('class', 'bar')
       .attr('x', d => xScale(d.year))

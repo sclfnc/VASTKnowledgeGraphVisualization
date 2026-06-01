@@ -56,7 +56,7 @@ def _load_email_eu_core():
 
 
 def _load_movielens_small():
-    """MovieLens Latest Small (GroupLens, CC BY 4.0): bipartite User→Movie graph.
+    """MovieLens Latest Small (GroupLens, CC BY 4.0): bipartite User--Movie rating graph, analysed undirected.
     Source : https://grouplens.org/datasets/movielens/latest/
     Licence: CC BY 4.0  (https://files.grouplens.org/datasets/movielens/ml-latest-small-README.html)
 
@@ -88,7 +88,12 @@ def _load_movielens_small():
                 "genres": row["genres"].replace("|", ", "),
             }
 
-    G = nx.DiGraph()
+    # Undirected: a rating links a user and a movie. Structural analysis
+    # (centrality, components) treats the bipartite graph as undirected, so
+    # path-based measures stay meaningful — a directed User->Movie graph has
+    # no intermediary nodes, making betweenness identically zero and closeness
+    # degenerate.
+    G = nx.Graph()
 
     with open(ratings_file, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):

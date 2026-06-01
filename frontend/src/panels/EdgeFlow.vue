@@ -341,15 +341,23 @@ function renderMain() {
         const ctrl = { x: a.x + (a.r + loopR) * ox, y: a.y + (a.r + loopR) * oy }
         path = `M${srcPt.x},${srcPt.y} Q${ctrl.x},${ctrl.y} ${dstPt.x},${dstPt.y}`
       } else {
-        // Chord bent toward the disk centre, proportionally to its length —
-        // long crossings bow inward (light edge-bundling). Siblings fan out.
+        // Chord bowed to ONE side of the straight line so the two senses of a
+        // pair (A→B and B→A) take opposite curves instead of overlapping. The
+        // side is keyed to a CANONICAL endpoint order (min→max type name), not
+        // to this arc's own a/b orientation: otherwise the normal and the sign
+        // flip together and cancel, leaving both senses on the same curve.
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
-        const dx = b.x - a.x, dy = b.y - a.y
-        const len = Math.hypot(dx, dy) || 1
-        const nx = -dy / len, ny = dx / len
-        const pull = 0.42 * (len / (2 * radius))
-        const bcx = mx + (cx - mx) * pull
-        const bcy = my + (cy - my) * pull
+        // Canonical perpendicular: always computed lo→hi so it is identical for
+        // both senses; the direction sign then sends each sense to its own side.
+        const lo = src < dst ? a : b
+        const hi = src < dst ? b : a
+        const cdx = hi.x - lo.x, cdy = hi.y - lo.y
+        const clen = Math.hypot(cdx, cdy) || 1
+        const nx = -cdy / clen, ny = cdx / clen
+        const dirSign = src < dst ? 1 : -1
+        const bow = dirSign * (0.22 * clen + 18)
+        const bcx = mx + nx * bow
+        const bcy = my + ny * bow
         const offset = (idx - (arcs.length - 1) / 2) * (sw + 7)
         const ctrl = { x: bcx + nx * offset, y: bcy + ny * offset }
         // Anchor on the node rims, spread a little along the perimeter so
