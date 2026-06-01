@@ -17,10 +17,6 @@ import TimelineParsingSettingsModal from './components/TimelineParsingSettingsMo
 const graphStore = useGraphStore()
 const { open: aboutOpen, closeAbout } = useAboutModal()
 
-// AppSidebar takes over all chrome (brand, Mode, Contents/Filters toggle,
-// Dataset, About) whenever a graph is loaded. During onboarding the
-// DatasetView card owns its own branding header — no sidebar needed.
-const sidebarActive = computed(() => Boolean(graphStore.graphId))
 
 // Per-graph singleton resources provided at the App root so both AppSidebar
 // (AttributeFilters) and GuideView (panel grid) share the same instances.
@@ -53,16 +49,7 @@ provide('centralityStatus', centralityStatus)
 
 <template>
   <div class="min-h-screen surface-recessed">
-    <AppSidebar v-if="sidebarActive" />
-
-    <main
-      class="w-full pb-4 pt-3 md:pb-6 md:pt-3"
-      :class="sidebarActive
-        ? 'pl-[316px] pr-4 md:pr-6'
-        : 'mx-auto max-w-[1600px] px-4 md:px-6'"
-    >
-      <RouterView />
-    </main>
+    <RouterView />
 
     <AboutModal :open="aboutOpen" @close="closeAbout" />
     <TimelineParsingSettingsModal />

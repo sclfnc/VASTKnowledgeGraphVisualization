@@ -87,7 +87,7 @@ async function onLoad() {
   } else if (selectedBuiltin.value) {
     data = await loadBuiltin(selectedBuiltin.value)
   }
-  if (data) router.push({ name: 'home' })
+  if (data) router.push({ name: 'graph' })
 }
 
 function fmtSize(bytes) {
