@@ -34,7 +34,7 @@ Any suitable knowledge-graph-like dataset may be used to motivate or illustrate 
 
 This repository tracks the team's meetings and design decisions. A working reference implementation
 — a FastAPI backend plus a Vue 3 + D3 frontend ("Telescope") — is developed by [@sclfnc](https://github.com/sclfnc)
-on the `api-integration` branch; see [`README.sclfnc.md`](README.sclfnc.md) for its design and usage.
+on the `api-integration` branch; see [`docs/sclfnc/`](docs/sclfnc/) for its design, contract, and usage.
 
 
 ## Working Approach

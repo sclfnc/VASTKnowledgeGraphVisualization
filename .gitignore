@@ -1,7 +1,6 @@
 *.md
 !README.md
-!contract.md
-!README.sclfnc.md
+!docs/**
 .*
 !.gitignore
 data/*
@@ -15,6 +14,3 @@ api/graph_storage/
 docs/interactions/
 # Local report workspace (LaTeX) — never integrate
 tex/
-
-# Course slides — local only, not part of the project
-slides/

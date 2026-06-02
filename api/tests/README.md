@@ -16,7 +16,7 @@ Contains pytest fixtures that are shared across all test files:
 - `cleanup_graph_storage()`: Cleans up graph storage after tests
 - `load_builtin()`: Factory that loads a built-in dataset and yields its graph_id (cleans up files after)
 - `karate()` / `email_eu()` / `movielens()`: Convenience fixtures over `load_builtin` for the three datasets the modular suite exercises
-- `seed_default_graph()`: Session-scoped, autouse. Writes a synthetic `graph_storage/default-graph.json` (using MC1's type names) so the file-based tests below pass on a clean, offline checkout, then removes it. Leaves a real `default-graph.json` untouched if one is already present.
+- `seed_default_graph()`: Session-scoped, autouse. Writes a synthetic `graph_storage/default-graph.json` (using MC1's type names) so the file-based tests below pass on a clean, offline checkout, then removes it. If a real `default-graph.json` is already present, it is left untouched.
 
 ### `test_api.py`
 Main test suite covering:
@@ -37,15 +37,16 @@ Tests specifically for the `default-graph.json` file in `graph_storage`:
 - Tests file-based workflows
 
 > Note: `test_api.py`, `test_cors.py` and `test_default_graph_file.py` are the upstream files,
-> **vendored here unchanged**. Upstream, `test_default_graph_file.py` runs against the
-> non-redistributable MC1 `default-graph.json`; here the `seed_default_graph` fixture writes a small
-> synthetic stand-in (with MC1's type names) so the suite is green on a clean checkout — see the
+> **vendored here unchanged**. Upstream, `test_default_graph_file.py` runs against the MC1
+> `default-graph.json`, which cannot be redistributed. Here the `seed_default_graph` fixture writes a
+> small synthetic stand-in (with MC1's type names) so the suite is green on a clean checkout — see the
 > fixture note above. The test files themselves are not modified.
 
 ### `test_modular.py`
 Test suite for the modular endpoints added on top of the legacy contract (the per-panel data
-endpoints, indices, and analysis routes). Loads real built-in datasets via the `karate` / `email_eu`
-/ `movielens` fixtures and checks each endpoint's payload shape and key invariants, grouped by class:
+endpoints, indices, and analysis routes). It loads real built-in datasets via the `karate` /
+`email_eu` / `movielens` fixtures and checks each endpoint's payload shape and key invariants, grouped
+by class:
 - **Schema**: auto-promotion of a single-type graph's discriminator attribute (Karate's `club`)
 - **NodeIndex / EdgeIndex**: degree-desc node ordering, SoA edge index alignment, weighted vs unweighted payloads
 - **EffectiveTypes / AttributeIndex**: effective-type labels and the per-(type, attr) filter buckets

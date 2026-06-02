@@ -8,7 +8,7 @@ the code — the panel components in `frontend/src/panels/` and the registry `in
 ## 1. Bitmap-truth (the three shared bitmaps)
 
 Common state lives in two Pinia stores (`filters`, `selection`) and is exposed as **three public
-bitmaps** that every panel consumes via [`usePanelContext`](frontend/src/composables/usePanelContext.js):
+bitmaps** that every panel consumes via [`usePanelContext`](../../frontend/src/composables/usePanelContext.js):
 
 | Bitmap | Source store | Built in | Predicate |
 |--------|--------------|----------|-----------|
@@ -16,24 +16,24 @@ bitmaps** that every panel consumes via [`usePanelContext`](frontend/src/composa
 | `activeEdgeMask` | `filters` | `useFilteredModel` | `isEdgeActive(edgeId)` |
 | `selectedMask` / `selectedEdgeMask` | `selection` | `usePanelContext` | `isSelected(id)` / `isEdgeSelected(edgeId)` |
 
-The contract is **"consume the mask", not "be internally a bitmap"**: a panel complies if its
-narrowing is driven by these masks, regardless of how it stores its own data. No panel reads
-`filters.*` raw to bypass a mask — the only allowed raw read is reflecting a widget the panel itself
-edits (e.g. `ConnectedComponents` reading `wccFilter` to highlight its Top-N button). Panel-private
-`controls` (log scale, top-N, bin size) touch no bitmap.
+The contract is **"consume the mask", not "be internally a bitmap"**: a panel complies if these masks
+drive its narrowing, no matter how it stores its own data. No panel reads `filters.*` raw to skip a
+mask — the only allowed raw read is showing the state of a widget the panel itself edits (e.g.
+`ConnectedComponents` reading `wccFilter` to highlight its Top-N button). Panel-private `controls`
+(log scale, top-N, bin size) touch no bitmap.
 
-**Cross-panel influence is implicit under this contract:** A influences B iff A writes
+**Cross-panel influence is implicit under this contract:** A influences B only if A writes
 `filters`/`selection` (see §Upstream writes) and B consumes the resulting bitmap (every panel does).
-That is why no relationship matrix is needed — it would repeat `mask-only` in every cell.
+That is why no relationship matrix is needed — it would just repeat `mask-only` in every cell.
 
-Which panel writes what is read off the code: grep a panel component for `filters.` / `selection.`
+To see which panel writes what, read the code: grep a panel component for `filters.` / `selection.`
 writes. Today four panels write `filters.*` — `connectivity` (`wccFilter`), `degree` (`degree`, via
 plot brush), `timeline_node` / `timeline_edge` (`temporalFilter`) — plus `AttributeFilters` (the
 sidebar editor). Everything else writes `selection`.
 
 ## 2. Mask-only
 
-Derived quantities **must** stay anchored to the full graph and let filters attenuate only the marks.
+Derived quantities **must** stay anchored to the full graph and let filters dim only the marks.
 Exceptions, by explicit design:
 
 - `type_mixing` — recomputes matrix counts under `activeEdgeMask` client-side. Newman r stays full-graph.
@@ -44,33 +44,33 @@ views. **`timeline_node` / `timeline_edge` are NOT exceptions** (corrected 2026-
 its canonical SoA indices (`bins[i].idx`) and the panel counts `idx ∧ activeMask` per bin, so it
 reacts to every filter like every other panel.
 
-Any new proposal that diverges from mask-only MUST be flagged `[?]` and added to the Open ideas
+Any new proposal that breaks the mask-only rule MUST be flagged `[?]` and added to the Open ideas
 backlog below before any code is written.
 
 ## 3. Effective-type
 
 When `schema.auto_promoted.{node|edge}` is non-null, the effective type is the discriminator
 attribute, not the raw `Node Type` / `Edge Type`. Panels that group, color, or chip-toggle by type
-MUST go through [`useEffectiveType`](frontend/src/composables/useEffectiveType.js)
+MUST go through [`useEffectiveType`](../../frontend/src/composables/useEffectiveType.js)
 (`nodeType(item)` / `nodeTypeAt(idx)` / `nodeTypeList`). Filter writes against the type chip group
-propagate to the effective set via [`useFilteredModel`](frontend/src/composables/useFilteredModel.js).
+propagate to the effective set via [`useFilteredModel`](../../frontend/src/composables/useFilteredModel.js).
 
 ## 4. Lock (Isolation)
 
 Per-panel full freeze. The snapshot includes filters JSON + selection array + `activeNodeMask.clone()`
-+ `activeEdgeMask?.clone()` + selection-edge array; while frozen, `usePanelContext` resolves all
-derived state from the snapshot and the panel stops following live mutations until Unlock. Lock is the
-only per-panel freeze mechanism (the Pin mechanism that previously existed was removed 2026-05-27).
++ `activeEdgeMask?.clone()` + selection-edge array; while frozen, `usePanelContext` reads all derived
+state from the snapshot and the panel stops following live changes until Unlock. Lock is the only
+per-panel freeze mechanism (the Pin mechanism that existed before was removed 2026-05-27).
 
 ## Filters
 
-The filter slots (`stores/filters.js`) and what each means beyond what the code shows. Mask
-construction is centralized in `useFilteredModel` (node mask first, edge mask then ANDed with it).
+The filter slots (`stores/filters.js`) and what each one means beyond what the code shows. Mask
+construction lives in one place, `useFilteredModel` (node mask first, then edge mask ANDed with it).
 The only first-class editor is `AttributeFilters.vue` (mounted twice, `mode='node'|'edge'`, in
 `AppSidebar` when `sidebars.mode === 'filters'`): top-level type chip group + structural section
 (degree/weight sliders + hide-isolated/hide-self-loops) + per-type attribute accordions. Accordion
-headers are self-describing — coverage % + a one-line value summary from `schema.*_types_detail` —
-which is why the standalone Attribute Schema panels were folded away.
+headers describe themselves — coverage % + a one-line value summary from `schema.*_types_detail` —
+which is why the standalone Attribute Schema panels were dropped.
 
 **Top-level slots:**
 
@@ -90,27 +90,27 @@ its type's entries. Mutated via `setNodeAttr` / `clearNodeAttrs` (auto-prune emp
 - `categorical → {kind, values: string[]}` — chip multi-select.
 - `numeric → {kind, range: [lo, hi]}` / `date → {kind, range: [yearLo, yearHi]}` — range slider.
 - `boolean → {kind, value: true|false}` — tri-state Any/True/False.
-- `text → {kind, query, mode: 'contains'|'equals'}` — high-cardinality identifiers (`name`, `stage_name`). Backend ships these as an `[idx, str]` list (not bucketed); `attrIndex.bitsetFor` scans client-side. Widget is a search input + contains/exact toggle. Makes identifier-only types (Person, RecordLabel, MusicalGroup on MC1) filterable.
+- `text → {kind, query, mode: 'contains'|'equals'}` — high-cardinality identifiers (`name`, `stage_name`). The backend ships these as an `[idx, str]` list (not bucketed); `attrIndex.bitsetFor` scans them client-side. The widget is a search input + contains/exact toggle. It makes identifier-only types (Person, RecordLabel, MusicalGroup on MC1) filterable.
 
-No panel reads any filter slot back to recompute — they all see the trimmed mask. The only raw reads
-that exist are widget-state reflections of a filter the panel itself edits: `ConnectedComponents`
-reads `wccFilter` (Top-N button state), `DegreeDistribution` reads `degree` (to pre-position its plot
-brush). Both are legitimate — reflecting your own widget, not bypassing the mask.
+No panel reads a filter slot back to recompute — they all see the trimmed mask. The only raw reads
+that exist show the state of a filter the panel itself edits: `ConnectedComponents` reads `wccFilter`
+(Top-N button state), `DegreeDistribution` reads `degree` (to pre-position its plot brush). Both are
+fine — they show the panel's own widget, they do not skip the mask.
 
 **Filter history** (`filterHistory.js`): 20-entry debounced (500 ms) ring buffer, **filters only**
 (selection/isolation are not undoable). Restore intersects the snapshot with the current schema's
 types so a stale snapshot can't reintroduce a deleted type. Undo/redo live in `GraphHeaderStrip`.
 
-**Slots that deliberately don't exist** (proposals, not gaps): `degreeDirection` (in/out/total —
+**Slots that don't exist on purpose** (proposals, not gaps): `degreeDirection` (in/out/total —
 directed graphs have three degree distributions, today one slider); per-type degree filter ("Person
 nodes with deg≥10"); `selectionAsFilter` (deferred — see Tier 4 above). *Removed 2026-05-28: the dead
-`hops` and legacy `attributes` slots — phantom state with no reader/writer.*
+`hops` and legacy `attributes` slots — unused state with no reader/writer.*
 
 ## Selection caps
 
 Aggregate broadcasts MUST cap on write via `selection.replaceCapped(ids, cap)`, which dedups, caps,
 and records `overflow` so the panel can render a "+N more not selected" caption. Source:
-[`selection.js`](frontend/src/stores/selection.js).
+[`selection.js`](../../frontend/src/stores/selection.js).
 
 | Panel                | Cap  | Source constant |
 |----------------------|------|-----------------|
@@ -129,9 +129,9 @@ else routes through `selection`. The proposals below would add more upstream wri
 the policy stays coherent.
 
 **Tier 1 — shift-click "lift to global filter" — partially adopted.** Keep shift-click only where the
-affordance is visible and intuitive; otherwise prefer the explicit "Filter to this" button (Tier 2).
+gesture is visible and easy to guess; otherwise prefer the explicit "Filter to this" button (Tier 2).
 - `degree` shift-click bin → `filters.degree.value = [k, k]`. **Keep** (tooltip on the bin).
-- `mix` cell / aux bar, `flow` arc / meta-node → **Drop**; gesture too hidden, use Tier 2 buttons.
+- `mix` cell / aux bar, `flow` arc / meta-node → **Drop**; gesture too hard to find, use Tier 2 buttons.
 
 **Tier 2 — "Filter to this" buttons — preferred.**
 - `graph_status_inspector`: "Filter to type" → `filters.nodeTypes = [thisType]`; "Filter to component" → `filters.wccFilter = [thisNode.wcc_id]`.
@@ -144,7 +144,7 @@ affordance is visible and intuitive; otherwise prefer the explicit "Filter to th
 - `tNd` / `tEd` cross-writes with `AttributeFilters` date-kind filters on the same attribute.
 
 **Tier 4 — selection-as-filter — deferred (2026-05-27).** Lock already covers the per-panel freeze
-need. If a real request arrives, the preferred path is a global lens toggle that AND-s `selectedMask`
+need. If a real request comes in, the preferred path is a global lens toggle that AND-s `selectedMask`
 into every panel — not a new `filters.*` slot.
 
 ## Anti-patterns to avoid
@@ -156,9 +156,9 @@ into every panel — not a new `filters.*` slot.
 
 ## Open ideas (HCI audit backlog)
 
-Unresolved `[?]`/`[p]` interaction proposals salvaged 2026-05-28 from the per-panel schede (since
-deleted — the descriptive 4/8 of each scheda was code restated in prose; only these design ideas were
-not derivable from the code). Input for the panel-by-panel HCI audit; none decided yet.
+Open `[?]`/`[p]` interaction proposals kept 2026-05-28 from the per-panel schede (since deleted — the
+descriptive 4/8 of each scheda just restated the code in prose; only these design ideas were not
+already in the code). Input for the panel-by-panel HCI audit; none decided yet.
 
 **Drill / brush → selection.**
 - `cent_comparison`: brush a mini-scatter → `selection.replace(ids in rectangle)`. Meta-view, may not want drill semantics.
