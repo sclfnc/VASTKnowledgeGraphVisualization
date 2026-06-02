@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import GuidePanel from '../components/GuidePanel.vue'
 import PanelFocus from '../components/PanelFocus.vue'
@@ -59,6 +59,25 @@ function toggleControls(id) {
 
 function requestWiden(id) { widenedId.value = id }
 function requestShrink(id) { if (widenedId.value === id) widenedId.value = null }
+
+
+// Keep track of viewport width in order to determine if panels should be resizable
+const lgBreakpoint = 1024
+const resizable = ref(window.innerWidth >= lgBreakpoint)
+function handleResizeWindow() {
+  resizable.value = window.innerWidth >= lgBreakpoint
+  console.log(window.innerWidth)
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResizeWindow)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResizeWindow)
+})
+
+
 </script>
 
 <template>
@@ -67,24 +86,24 @@ function requestShrink(id) { if (widenedId.value === id) widenedId.value = null 
       Select a panel from Contents ←
     </div>
 
-    <div class="grid auto-rows-min grid-cols-3 gap-4 items-start">
+    <div class="grid auto-rows-min grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
       <GuidePanel
         v-for="p in renderable" :key="p.id"
         :panel-spec="p"
         :schema="schema"
         :graph-id="graphId"
-        :expanded="expandedId === p.id"
-        :widened="widenedId === p.id"
+        :expanded="(expandedId === p.id) && resizable"
+        :widened="(widenedId === p.id) && resizable"
         :controls-open="controlsOpenId === p.id"
         :drawer-id="drawerIdFor(p.id)"
         :drawer-ready="drawerReady && controlsOpenId === p.id"
+        :resizable="resizable"
         @remove="toggle(p)"
         @focus="focused = p"
         @toggle-expand="toggleExpand(p.id)"
         @toggle-controls="toggleControls(p.id)"
         @request-widen="requestWiden(p.id)"
-        @request-shrink="requestShrink(p.id)"
-      />
+        @request-shrink="requestShrink(p.id)" />
     </div>
   </div>
 
