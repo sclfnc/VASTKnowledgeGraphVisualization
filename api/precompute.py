@@ -24,7 +24,7 @@ _PRECOMPUTE_SEQUENCE = (
 
 
 async def _run(graph_id: str):
-    """Drive the sequence; status written eagerly. One failed measure doesn't block the next."""
+    """Run the sequence; status is written as soon as it changes. One failed measure doesn't block the next."""
     lock = precompute_locks.setdefault(graph_id, asyncio.Lock())
     async with lock:
         centrality_status[graph_id] = dict(EMPTY_CENTRALITY_STATUS)
@@ -51,12 +51,13 @@ async def _run(graph_id: str):
 
 
 async def cancel_all():
-    """Cancel and await each task before wiping its registries (avoids the cleanup/_run race).
+    """Cancel each task and wait for it to stop before clearing its registries.
+    Waiting first avoids a race between this cleanup and `_run` still writing.
 
-    Only the centrality state (status/cache/locks/tasks) is wiped here; the
-    cached `graph_object` is **not** popped — keeping it avoids a needless
-    disk reload when the user reloads the same graph or revisits a previously
-    loaded graph. `register_graph` invalidates everything on (re)register.
+    Only the centrality state (status/cache/locks/tasks) is cleared here. The
+    cached `graph_object` is **not** removed — keeping it avoids a pointless
+    disk reload when the user reloads the same graph or comes back to a graph
+    loaded earlier. `register_graph` clears everything on (re)register.
     """
     for gid, t in list(precompute_tasks.items()):
         t.cancel()
@@ -71,7 +72,8 @@ async def cancel_all():
 
 
 def kickoff(graph_id: str):
-    """Spawn the precompute task for `graph_id`. Idempotent within a session."""
+    """Spawn the precompute task for `graph_id`. Calling it again while a task is
+    still running does nothing — no duplicate task is started."""
     if graph_id in precompute_tasks and not precompute_tasks[graph_id].done():
         return
     precompute_tasks[graph_id] = asyncio.create_task(_run(graph_id))

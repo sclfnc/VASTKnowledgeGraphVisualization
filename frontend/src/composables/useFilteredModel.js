@@ -1,7 +1,7 @@
-// Global filter masks for nodes and edges. The chain is unidirectional —
-// node mask is independent of edge filters; edge mask AND-s with node mask
-// at the final step so an edge is "active" iff it passes all edge filters
-// AND both its endpoints survive the node filters.
+// Global filter masks for nodes and edges. Filtering flows in one direction
+// only: the node mask never depends on edge filters. The edge mask is AND-ed
+// with the node mask at the final step, so an edge counts as "active" only when
+// it passes all edge filters AND both of its endpoints pass the node filters.
 //
 // Pin/Isolation are applied later in usePanelContext.
 import { computed } from 'vue'
@@ -60,9 +60,9 @@ export function useFilteredModel(graphId) {
       }
     }
 
-    // Component filter — scoped slot { scope: 'wcc'|'scc', ids } | legacy array
-    // (read as WCC). The scope selects which membership array to resolve against,
-    // so SCC rank filtering applies the ids to soa.sccId rather than soa.wccId.
+    // Component filter — { scope: 'wcc'|'scc', ids } | old-style array (read as
+    // WCC). The scope picks which membership array to match against, so SCC rank
+    // filtering applies the ids to soa.sccId rather than soa.wccId.
     const cf = filters.wccFilter
     if (cf) {
       const cfIds = Array.isArray(cf) ? cf : cf.ids
@@ -76,9 +76,9 @@ export function useFilteredModel(graphId) {
       }
     }
 
-    // v2: per-type attribute filters. A node passes iff EITHER its type has
-    // no constraints (untouched), OR its type has constraints and the node
-    // matches ALL of them (AND across attrs of the same type).
+    // v2: per-type attribute filters. A node passes if EITHER its type has
+    // no constraints (it was left untouched), OR its type has constraints and
+    // the node matches ALL of them (AND across the attrs of the same type).
     const nodeAttrs = filters.nodeAttrs
     if (nodeAttrs && Object.keys(nodeAttrs).length > 0 && attrIndex.ready.value) {
       const passMask = new Bitset(N)
@@ -101,12 +101,11 @@ export function useFilteredModel(graphId) {
       mask.andInPlace(passMask)
     }
 
-    // v2: temporal filter (single brushed window from ActivityTimeline).
-    // Shape: { attr, scope, range:[lo,hi] }. Applied iff scope === 'node'.
-    // Bypasses the per-type machinery: a temporal brush is global on the attr
-    // regardless of which types carry it. We OR the matching bitsets across
-    // every (type, attr) entry in the index — node passes iff any bucket
-    // contains it.
+    // v2: temporal filter (a single brushed window from ActivityTimeline).
+    // Shape: { attr, scope, range:[lo,hi] }. Applied only when scope === 'node'.
+    // This skips the per-type logic: a temporal brush applies to the attr
+    // across all types that carry it. We OR the matching bitsets over every
+    // (type, attr) entry in the index — a node passes if any bucket contains it.
     const tf = filters.temporalFilter
     if (tf && tf.scope === 'node' && Array.isArray(tf.range) && attrIndex.ready.value) {
       const tfMask = new Bitset(N)
@@ -209,7 +208,7 @@ export function useFilteredModel(graphId) {
       mask.andInPlace(tfMask)
     }
 
-    // Step 5: AND with node mask — edge active iff both endpoints survive
+    // Step 5: AND with node mask — an edge is active only if both endpoints survive
     const nodeMask = activeNodeMask.value
     if (nodeMask) {
       for (let i = 0; i < E; i++) {

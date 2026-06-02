@@ -1,5 +1,5 @@
-// Debounced (300ms) ego subgraph fetcher; empty-state clears bypass the debounce.
-// 422 detail lands in error.value verbatim so the panel renders the message as-is.
+// Debounced (300ms) ego subgraph fetcher; clearing to the empty state skips the debounce.
+// On a 422 the backend detail lands in error.value unchanged, so the panel shows it as-is.
 import { watch, toValue } from 'vue'
 import { apiUrl } from './useApi.js'
 import { useFetch } from './useFetch.js'

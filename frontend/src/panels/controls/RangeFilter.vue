@@ -1,7 +1,7 @@
 <script setup>
-// Range filter primitive: two editable number inputs flanking a slider, with
-// a Mode toggle (Absolute / Percentile). Bidirectional bind — dragging the
-// handles updates the inputs, typing updates the slider.
+// Range filter primitive: two editable number inputs on either side of a
+// slider, plus a Mode toggle (Absolute / Percentile). The binding works both
+// ways — dragging the handles updates the inputs, typing updates the slider.
 //
 // Mode is UI state only; the emitted `range` is **always** in absolute units,
 // so consumers (filters store + useFilteredModel) don't need to know whether
@@ -135,9 +135,9 @@ watch(() => props.mode, () => { syncInputsFromSlider(sliderValue.value) })
 
 <template>
   <div class="flex flex-col">
-    <!-- Inputs flanking the slider: typing commits on blur/Enter.
+    <!-- Inputs on either side of the slider: typing commits on blur/Enter.
          Mode is controlled by the parent (v-model:mode) so the toggle UI
-         can be hoisted next to the section title. -->
+         can be placed next to the section title. -->
     <div class="flex items-center gap-1.5">
       <input
         v-model="minInput"

@@ -44,7 +44,7 @@ function _restoreAttrs(snapAttrs, validTypes) {
 }
 
 function restoreInto(f, snap, schema) {
-  // Belt and braces: drop types not present in the current schema.
+  // Extra safety check: drop types not present in the current schema.
   const validNT = new Set(schema?.node_types ?? [])
   const validET = new Set(schema?.edge_types ?? [])
   f.nodeTypes = validNT.size ? snap.nodeTypes.filter(t => validNT.has(t)) : [...snap.nodeTypes]
@@ -56,9 +56,9 @@ function restoreInto(f, snap, schema) {
   f.temporalFilter = snap.temporalFilter
     ? { attr: snap.temporalFilter.attr, scope: snap.temporalFilter.scope ?? 'node', range: [...snap.temporalFilter.range] }
     : null
-  // Component filter has no schema-derived validity to intersect (ids are
-  // numeric, scope-tagged); restore verbatim. Older snapshots without the key
-  // restore as null (filter cleared), which is the safe default.
+  // The component filter has no schema-derived validity to check against (ids
+  // are numeric and scope-tagged), so restore it unchanged. Older snapshots
+  // without the key restore as null (filter cleared), which is the safe default.
   f.wccFilter = deepClone(snap.wccFilter ?? null)
   f.nodeAttrs = _restoreAttrs(snap.nodeAttrs, validNT)
   f.edgeAttrs = _restoreAttrs(snap.edgeAttrs, validET)
@@ -92,7 +92,7 @@ export const useFilterHistoryStore = defineStore('filterHistory', () => {
     useFiltersStore().$subscribe(() => { if (!isRestoring) schedule() })
   }
 
-  // Seed history with current state; arms the subscription on first call.
+  // Seed history with the current state; starts the subscription on first call.
   function baseline() {
     if (timer) { clearTimeout(timer); timer = null }
     past.value = [capture()]

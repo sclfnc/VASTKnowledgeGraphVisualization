@@ -37,9 +37,9 @@ const selection = useSelectionStore()
 const filters = useFiltersStore()
 const { color: typeColor, stylesFor, d3SymbolType, symbolPath } = useNodeTypeColors(toRef(props, 'schema'))
 
-// Style per type in the active set: {shape, color}. Disambiguates colliding
-// base colors by varying shape AND tonal variant in tandem. Recomputed when
-// overlayTypes changes.
+// Style per type in the active set: {shape, color}. When two types share a base
+// color, it separates them by changing both the shape and the color shade
+// together. Recomputed when overlayTypes changes.
 const activeStyles = computed(() => stylesFor(overlayTypes.value))
 const activeShape = (t) => activeStyles.value[t]?.shape ?? 'circle'
 const activeColor = (t) => activeStyles.value[t]?.color ?? typeColor(t)
@@ -229,7 +229,7 @@ const theoryStats = computed(() => {
     n: seq.length, min, max,
     median: s.median, p25: s.p25, p75: s.p75,
     skewRatio,
-    // "fortemente asimmetrica" se l'hub ha ≥10× il grado mediano.
+    // "strongly skewed" when the top hub has at least 10x the median degree.
     heavyTailed: skewRatio != null && skewRatio >= 10,
   }
 })
@@ -268,20 +268,20 @@ const Y_AXIS_OPTIONS = [{ k: 'count', label: 'Count' }, { k: 'probability', labe
 const SCALE_OPTIONS = [{ k: 'lin', label: 'Lin' }, { k: 'log', label: 'Log' }]
 const MARGINS = { top: 8, right: 12, bottom: 38, left: 44 }
 
-// Selection.ids is listed explicitly: the `selectedDegrees` computed depends on
-// it transitively via `selectedMask`, but the watch comparator can short-circuit
-// on the computed's identity if Vue treats it as "same reference" across reads —
-// reading the raw store array forces the dependency to register.
-// Single getter source (matches the working pattern in ConnectedComponents):
-// passing an array of mixed refs + getters with { deep:true } let Vue's
-// dependency tracking go stale after the first control flip — the chart kept
-// re-rendering but the teleported drawer stopped reflecting state. A getter
-// that returns the value array re-tracks cleanly on every run.
-// Render is deferred to nextTick (matches ConnectedComponents). Calling
-// renderChart synchronously inside the reactive flush ran the D3
-// selectAll('*').remove() + rebuild in the same tick as the teleported drawer's
-// reconciliation, which froze the drawer's control bindings from the second
-// interaction onward. nextTick lets Vue settle the DOM (drawer included) first.
+// selection.ids is listed on its own line on purpose. `selectedDegrees` depends
+// on it indirectly through `selectedMask`, but the watch can miss that change if
+// Vue sees the computed as the "same reference" between reads. Reading the raw
+// store array makes Vue register the dependency.
+// We use a single getter (the same pattern that works in ConnectedComponents):
+// passing an array of mixed refs + getters with { deep:true } made Vue's
+// dependency tracking go stale after the first control change — the chart kept
+// re-rendering but the teleported drawer stopped reflecting state. A getter that
+// returns the value array tracks correctly on every run.
+// Render runs on nextTick (same as ConnectedComponents). Calling renderChart
+// straight away inside the reactive flush ran the D3 selectAll('*').remove() +
+// rebuild in the same tick as the teleported drawer's update, which froze the
+// drawer's control bindings from the second interaction on. nextTick lets Vue
+// settle the DOM (the drawer included) first.
 watch(
   () => [
     activeData.value, baselineData.value, selectedDegrees.value,
@@ -541,7 +541,7 @@ function renderChart() {
     //     y-scale (PMF/CCDF normalised per type, or count scaled by that type's
     //     cardinality), so a single global curve has no common axis to sit on —
     //     it either falls outside the per-type domain (count mode) or compares
-    //     incommensurable shapes. Per-type fitting, on the other hand, would be
+    //     shapes that have no common scale. Per-type fitting, on the other hand, would be
     //     statistically wrong (a fit per matrix/type is not what AIC compares).
     //     So no fit curve here by design; the Fit selector lives in Total only.
     //   - Per-type median / IQR overlays: with N active types each contributing

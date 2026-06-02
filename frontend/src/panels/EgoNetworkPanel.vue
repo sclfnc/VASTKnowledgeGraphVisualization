@@ -44,8 +44,8 @@ const { activeNodeMask, activeEdgeMask, isActive: isActiveId, isEdgeActive } = u
 //     teardown) the head of `selection.ids` is mirrored into the stack head;
 //     this resets the breadcrumb because external sources don't carry a stack.
 //   - On local navigation (push/pop/jump/pick) we broadcast the new head into
-//     selection. `isLocalUpdate` short-circuits the watch so the broadcast
-//     doesn't bounce back and clobber the stack.
+//     selection. `isLocalUpdate` stops the watch from running, so the broadcast
+//     doesn't bounce back and overwrite the stack.
 const egoStack = ref([])
 const activeEgoId = computed(() => egoStack.value[egoStack.value.length - 1] ?? null)
 let isLocalUpdate = false

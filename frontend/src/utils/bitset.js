@@ -1,5 +1,5 @@
-// Uint32-packed bitset. Single building block for all node/edge masks in the
-// cross-panel filter propagation. Backed by Uint32Array(ceil(N/32)); each bit
+// Uint32-packed bitset. The single building block for all node/edge masks that
+// carry filters across panels. Backed by Uint32Array(ceil(N/32)); each bit
 // position `i` lives at word `i >>> 5`, bit `i & 31`.
 //
 // Operations on N=17412 bits (MC1 full graph):

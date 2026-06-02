@@ -49,7 +49,7 @@ from type_mixing import compute_type_mixing
 
 logger = logging.getLogger("telescope.centrality")
 
-# Reject uploads above this threshold to avoid OOM/DoS.
+# Reject uploads larger than this so a huge file cannot exhaust memory or be used as a denial-of-service attack.
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 app = FastAPI(
@@ -60,7 +60,7 @@ app = FastAPI(
 
 # CORS: the regex matches any localhost/127.0.0.1 port (vite picks a free one in
 # 5173–5180). `allow_origins` is also listed explicitly because the upstream CORS
-# test introspects `kwargs["allow_origins"]` — keep both in sync.
+# test reads `kwargs["allow_origins"]` directly — keep both in sync.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost", "http://localhost:5173", "http://127.0.0.1", "http://127.0.0.1:8000"],
@@ -114,9 +114,9 @@ def cached_endpoint(cache_name: str, compute_fn):
 async def upload_graph(file: UploadFile = File(...), name: str = Form(None)):
     """Async because UploadFile.read() is async.
 
-    Shared contract: the upstream tests POST here and assert 201 + `graph_id` +
+    Shared contract: the upstream tests POST here and expect 201 + `graph_id` +
     "Graph uploaded successfully". The modular extras (size cap, precompute
-    kickoff, name field) are additive and don't change that shape.
+    kickoff, name field) are added on top and don't change that response shape.
     """
     if not (file.filename or '').lower().endswith('.json'):
         raise HTTPException(status_code=400, detail="File must have .json extension")
@@ -142,8 +142,8 @@ async def upload_graph(file: UploadFile = File(...), name: str = Form(None)):
         graph_id = str(uuid.uuid4())
         file_path = graph_path(graph_id)
 
-        # Sync disk write moved to executor: blocking the event loop on multi-MB
-        # uploads stalled every other request handler.
+        # The synchronous disk write runs in a thread (executor): writing a
+        # multi-MB upload on the event loop would block every other request.
         def _write_bytes(path, data):
             with open(path, 'wb') as f:
                 f.write(data)
@@ -173,8 +173,8 @@ async def upload_graph(file: UploadFile = File(...), name: str = Form(None)):
 
 
 # --- Modular contract: this backend's own endpoints, one feature module each.
-# --- Stateless w.r.t. filters (full-graph payloads + stable indices). See Design
-# --- model in api/README.md.
+# --- Filters do not change these responses (each one returns the full graph
+# --- plus stable indices). See the Design model in api/README.md.
 
 @app.get("/datasets/", summary="List available built-in datasets")
 def list_datasets():
@@ -185,9 +185,9 @@ def list_datasets():
 async def load_builtin_dataset(name: str):
     """Async because we await the precompute cancellation before registering.
 
-    The built-in loader does NX construction + JSON dump synchronously; for
-    large built-ins (MovieLens ~100k edges) it would stall the event loop, so
-    we hand it off to the default threadpool.
+    The built-in loader builds the NetworkX graph and writes the JSON file
+    synchronously. For large built-ins (MovieLens, ~100k edges) this would
+    block the event loop, so we run it in the default threadpool.
     """
     await precompute.cancel_all()
     graph_id = await asyncio.get_running_loop().run_in_executor(
@@ -425,9 +425,9 @@ def get_ego(graph_id: str, node_id: str, k: int = 1, cap: int = SOFT_CAP_DEFAULT
 
 @app.get("/node-inspect/{graph_id}/{node_id}", summary="Per-node inspector payload")
 def get_node_inspect(graph_id: str, node_id: str):
-    """Compact JSON envelope for the NodeInspector panel: identity + attributes
-    + structural counters + small neighbor sample. Not cached — sync compute is
-    O(degree), and these requests follow user clicks, not bulk operations."""
+    """Compact JSON payload for the NodeInspector panel: identity + attributes
+    + structural counters + a small neighbor sample. Not cached — the synchronous
+    compute is O(degree), and these requests come from user clicks, not bulk work."""
     if graph_id not in graph_registry:
         raise HTTPException(status_code=404, detail="Graph ID not found")
     try:

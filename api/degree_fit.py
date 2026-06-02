@@ -2,9 +2,9 @@
 Fitting theoretical distributions to empirical degree sequences.
 
 All four families are fitted on the full sequence (xmin=1) so the curves
-describe the same data the user sees and the per-point log-likelihoods are
-directly comparable across families. This trades the CSN tail-only purity
-for a single, honest "which shape best matches *these* data" answer.
+describe the same data the user sees, and the per-point log-likelihoods can be
+compared directly across families. We give up the CSN tail-only approach in
+exchange for one honest answer to "which shape best matches *these* data".
 """
 import logging
 import warnings

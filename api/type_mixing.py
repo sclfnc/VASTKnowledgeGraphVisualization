@@ -1,11 +1,12 @@
 """
 Type mixing analysis: assortativity + metadata only.
 
-The frontend recomputes the mixing matrix from the edges SoA + activeEdgeMask
-so peso/self-loop/type filters propagate uniformly. This module owns only:
+The frontend recomputes the mixing matrix from the edges SoA + activeEdgeMask,
+so weight, self-loop, and type filters all apply in the same way. This module
+owns only:
 - node/edge type lists,
-- Newman assortativity (overall + per edge type), too costly to ricomputare
-  in JS over thousands of nodes.
+- Newman assortativity (overall + per edge type), which is too costly to
+  recompute in JS over thousands of nodes.
 
 Returns:
   {
@@ -28,14 +29,15 @@ from schema import node_type, edge_type
 
 
 def _build_projections(G):
-    """Single edge walk → the simple+undirected projection of the whole graph
-    plus one projection per edge type, all in one pass.
+    """One edge walk builds the simple+undirected projection of the whole graph
+    plus one projection per edge type, all in a single pass.
 
-    Parallel edges collapse to a single edge; self-loops are excluded. Each
-    projection carries the `Node Type` attribute only on the endpoints it
+    Parallel edges collapse to one edge; self-loops are excluded. Each
+    projection stores the `Node Type` attribute only on the endpoints it
     actually touches — that is all `attribute_assortativity_coefficient` reads
-    (isolated nodes don't affect r), so the per-projection node walk is skipped.
-    Replaces the previous (1 + #edge_types) full edge walks with one.
+    (isolated nodes don't affect r), so we skip the extra node walk per
+    projection. This replaces the previous (1 + #edge_types) full edge walks
+    with one.
     """
     node_types = {n: node_type(G, n) for n in G.nodes()}
     H_all = nx.Graph()
@@ -62,10 +64,10 @@ def _build_projections(G):
 
 
 def _assortativity_safe(H):
-    # NetworkX returns NaN (no exception) when variance is zero — typically when
-    # the graph carries a single Node Type (Les Misérables collapses to one
-    # type) or when the projection has no edges. NaN is not JSON-compliant, so
-    # surface it as null and let the frontend show "N/A".
+    # NetworkX returns NaN (without raising) when the variance is zero — this
+    # happens when the graph has a single Node Type (Les Misérables is all one
+    # type) or when the projection has no edges. NaN is not valid JSON, so we
+    # return null and let the frontend show "N/A".
     try:
         r = nx.attribute_assortativity_coefficient(H, 'Node Type')
     except Exception:

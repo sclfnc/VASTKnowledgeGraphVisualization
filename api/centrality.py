@@ -20,7 +20,7 @@ def centrality_response(graph_id: str, measure: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail="Graph ID not found")
     status_map = centrality_status.get(graph_id)
     if not status_map:
-        # Graph registered but precompute not yet started — keep frontend polling.
+        # Graph is registered but precompute has not started yet — keep the frontend polling.
         return JSONResponse(status_code=202, content={"status": "pending"})
     state = status_map.get(measure, 'pending')
     if state == 'ready':
@@ -73,8 +73,8 @@ def compute_spectral(G):
     pr_by_node = {idx_to_node[i]: s for i, s in enumerate(pr_scores)}
     pr_values, pr_by_type, pr_top = _build_values(G, pr_by_node)
 
-    # Eigenvector on LCC. On an empty graph (no nodes / no components),
-    # max(empty) raises ValueError — short-circuit instead with zero scores.
+    # Eigenvector on the LCC. On an empty graph (no nodes / no components),
+    # max(empty) raises ValueError — so we return zero scores instead.
     if G.is_directed():
         cc_list = list(nx.weakly_connected_components(G))
     else:
@@ -91,7 +91,8 @@ def compute_spectral(G):
         }
     lcc_nodes = max(cc_list, key=len)
     sub = G.subgraph(lcc_nodes).copy()
-    # NetworKit eigenvector wants undirected + simple — avoid eigenvalue degeneracies.
+    # NetworKit eigenvector needs an undirected, simple graph — this avoids
+    # cases where the eigenvalue computation breaks down.
     sub_simple = nx.Graph(sub)
     nk_sub, sub_idx_to_node = _nk_with_mapping(sub_simple)
     ev = nk.centrality.EigenvectorCentrality(nk_sub)
@@ -167,7 +168,7 @@ def _closeness_variant(G_full, G_variant):
                 val = 0.0
             scores_by_node[node] = float(val)
 
-    # Defensive: variants are built from G_full, coverage is guaranteed.
+    # Safety net: every variant is built from G_full, so all nodes are already covered.
     for n in G_full.nodes():
         scores_by_node.setdefault(n, 0.0)
 
@@ -186,7 +187,9 @@ def _closeness_variant(G_full, G_variant):
 
 
 def compute_closeness(G):
-    """Undirected (always); +out/in on directed graphs. Variants flag `degenerate: true` if SCC ≤ 1%."""
+    """Undirected (always); plus out/in on directed graphs. A variant is flagged
+    `degenerate: true` (the measure has no meaningful value) when its largest SCC
+    holds 1% or less of the nodes."""
     G_und = G.to_undirected() if G.is_directed() else G
     result = {'undirected': _closeness_variant(G, G_und)}
     if G.is_directed():

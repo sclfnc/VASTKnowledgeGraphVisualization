@@ -1,6 +1,6 @@
-// Persistent d3-force lifecycle. Domain-agnostic.
-// Reconciliation: surviving nodes keep x/y; new ones spawn near centroid; edges rebuilt every time.
-// graphRef change → reconcile; linkDistance/chargeStrength change → live tweak; resize → recenter+restart.
+// Persistent d3-force lifecycle. Works for any kind of graph data.
+// Reconciliation: nodes that stay keep their x/y; new ones appear near the centroid; edges are rebuilt every time.
+// graphRef change → reconcile; linkDistance/chargeStrength change → live adjust; resize → recenter + restart.
 // Hooks: renderNode(g,d) on enter+update; renderEdge(sel) post-join; getRadius(d) for collide;
 // onNodeClick(d) / onEdgeClick(d); onSvgBuild({svg}) once per rebuild for <defs>; renderOverlay/overlayTick for parallel layers.
 import { onBeforeUnmount, watch, toValue } from 'vue'
@@ -83,10 +83,10 @@ export function useForceGraph({
     if (svgSel) { svgSel.remove(); svgSel = null; viewportG = null; zoomBehavior = null }
     currentW = el.clientWidth || 1
     currentH = el.clientHeight || 1
-    // Absolute-positioned so the SVG never contributes to the container's
-    // in-flow height. The container is aspect-ratio driven (4/3): if the SVG
-    // were in flow, its explicit height would gonfiare the container and the
-    // two would feed each other, leaving the card stuck tall after a shrink.
+    // Absolute-positioned so the SVG never adds to the container's in-flow
+    // height. The container's height comes from its aspect ratio (4/3): if the
+    // SVG were in flow, its explicit height would inflate the container, the two
+    // would feed each other, and the card would stay tall after a shrink.
     svgSel = d3.select(el).append('svg')
       .attr('width', currentW).attr('height', currentH)
       .style('display', 'block')

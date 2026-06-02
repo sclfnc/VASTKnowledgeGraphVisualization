@@ -1,6 +1,7 @@
 // Reactive fetch of /nodes/{id} with a derived SoA view.
-// `data` is the raw AoS payload (legacy consumers); `nodes` is the SoA
-// (typed arrays + per-type Bitset + idToIdx) consumed by the propagation layer.
+// `data` is the raw AoS payload (array of objects, for older consumers);
+// `nodes` is the SoA (typed arrays + per-type Bitset + idToIdx) used by the
+// layer that propagates filters.
 //
 // Singleton pattern: GuideView calls `useGraphNodes(graphId)` once and
 // `provide('graphNodes', …)`. Consumers should call `injectGraphNodes()`

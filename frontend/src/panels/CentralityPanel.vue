@@ -655,10 +655,10 @@ function removeAllTypes() { updateControl('showTypes', []) }
     </Teleport>
 
     <div v-if="status === 'error'" class="flex flex-1 items-center justify-center text-sm text-red-600 surface-recessed rounded-lg p-3">
-      Errore durante il calcolo di {{ labelFor }}.
+      Error while computing {{ labelFor }}.
     </div>
     <div v-else-if="status === 'cancelled'" class="flex flex-1 items-center justify-center text-sm text-secondary surface-recessed rounded-lg p-3 italic">
-      Calcolo di {{ labelFor }} annullato.
+      {{ labelFor }} computation cancelled.
     </div>
     <div v-else-if="status !== 'ready'" class="flex flex-1 items-center justify-center text-sm text-secondary surface-recessed rounded-lg p-3">
       Computing {{ labelFor }}…

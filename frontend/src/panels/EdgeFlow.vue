@@ -37,7 +37,8 @@ const { activeEdgeMask, selectedMask, edgeFilterActive, noNodesActive } = usePan
 const selection = useSelectionStore()
 
 // Effective node types with ≥1 node in the selection — used to outline the
-// meta-node and the arcs that touch a selected type. Cap-safe. Same helper as TypeMixing.
+// meta-node and the arcs that touch a selected type. Stays within the selection
+// cap. Same helper as TypeMixing.
 const selectedNodeTypes = computed(() =>
   selectedTypesIn(nodesSoA.value?.N ?? 0, selectedMask.value, nodeTypeAt))
 const { controls, updateControl } = usePanel(props, 'edge_flow')

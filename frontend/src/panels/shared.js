@@ -278,8 +278,9 @@ export function formatCoverage(coverage) {
 
 // Set of effective types that have at least one element in `mask`. Shared by
 // type-aggregate panels (TypeMixingMatrix, EdgeFlow) to outline the marks whose
-// type contains a selected node — the cap-safe "this aggregate holds something
-// you selected" signal. `typeAt(i)` resolves the effective type of SoA index i.
+// type contains a selected node — it signals "this aggregate holds something
+// you selected" without hitting the selection cap. `typeAt(i)` resolves the
+// effective type of SoA index i.
 export function selectedTypesIn(count, mask, typeAt) {
   const out = new Set()
   if (!mask) return out
@@ -303,8 +304,8 @@ export function idsOfTypesSoA(soa, types, typeAt) {
 }
 
 // Effective type list with a fallback: the auto-promotion-aware `nodeTypeList`
-// (or `edgeTypeList`) when populated, else the panel's payload type array.
-// Replaces the `list.length ? list : (data.value?.x_types ?? [])` idiom.
+// (or `edgeTypeList`) when it has values, otherwise the panel's payload type
+// array. Replaces the repeated `list.length ? list : (data.value?.x_types ?? [])`.
 export function effectiveTypeListOr(effectiveList, fallback) {
   return effectiveList?.length ? effectiveList : (fallback ?? [])
 }

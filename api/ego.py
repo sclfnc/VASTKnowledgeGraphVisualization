@@ -77,11 +77,11 @@ def _bfs_layers(G, ego, k, hard_cap, hard_timeout_ms, direction='out'):
 
 
 def _stratified_sample(G, alters, soft_cap):
-    """Round-robin pick from per-type buckets; preserves rare-type signals (e.g. Song-ego on MC1).
-    Buckets are ordered by their original BFS-insertion order so picks are
-    deterministic across calls. Within a bucket, higher-degree alters come
-    first (sort by full-graph degree desc) so the sample carries the locally
-    important nodes.
+    """Pick from per-type buckets in turn (round-robin); this keeps rare types
+    visible (e.g. a Song ego on MC1). Buckets follow their original BFS insertion
+    order, so the same input always gives the same picks. Inside a bucket,
+    higher-degree alters come first (sorted by full-graph degree, descending),
+    so the sample keeps the locally important nodes.
     """
     buckets = {}
     for a in alters:

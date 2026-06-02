@@ -134,8 +134,8 @@ export function useAttributeIndex(graphId) {
     return !!entry && Object.keys(entry).length > 0
   }
 
-  // Inverse lookup convenient for accordion rendering: list of {attr, kind, ...}
-  // available on a given type.
+  // Reverse lookup, handy for rendering the accordion: the list of
+  // {attr, kind, ...} available on a given type.
   function attrsFor(scope, type) {
     const payload = _scopePayload(scope)
     if (!payload) return []

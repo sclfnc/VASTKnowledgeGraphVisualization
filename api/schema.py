@@ -152,13 +152,13 @@ def node_type(G, n):
 
 def edge_type(data):
     """Single source of truth for the `Edge Type` lookup. Takes the edge's data
-    dict (works for every walk shape: `G.edges(data=True)`, multigraph keys
-    stripped, or a reverse-mapped attr dict)."""
+    dict (works for every walk shape: `G.edges(data=True)`, multigraph with keys
+    removed, or a reverse-mapped attr dict)."""
     return data.get(_EDGE_TYPE_KEY, UNKNOWN_TYPE)
 
 
 def json_scalar(v):
-    """JSON-safe coercion for arbitrary attr values (numpy scalars, sets,
+    """Convert any attribute value into a JSON-safe form (numpy scalars, sets,
     datetimes, nested containers). Shared by the inspector payloads."""
     if v is None or isinstance(v, (str, int, float, bool)):
         return v
@@ -182,7 +182,7 @@ def percentile(sorted_data, p):
 
 
 def _infer_attr_kind(values):
-    """Coarse attribute kind from a value sample: 'boolean' | 'numeric' | 'categorical'; None if all-null."""
+    """Rough attribute kind from a value sample: 'boolean' | 'numeric' | 'categorical'; None if every value is null."""
     sample = [v for v in values if v is not None]
     if not sample:
         return None
@@ -266,11 +266,11 @@ def effective_type_label(value, attr_kind, attr_name):
 
 
 def _numeric_is_binary(values_iter, attr_name):
-    """Stream-count distinct values of `attr_name`; bail at 3.
+    """Count the distinct values of `attr_name` one by one; stop as soon as we reach 3.
 
-    NaN values are skipped: `nan != nan` would let multiple NaN instances
-    appear as distinct elements in the set and produce a false-positive
-    binary classification.
+    NaN values are skipped: because `nan != nan`, several NaN instances would
+    each look like a different value in the set and wrongly mark the attribute
+    as binary.
     """
     import math
     seen = set()
@@ -287,13 +287,13 @@ def _numeric_is_binary(values_iter, attr_name):
 
 
 def _eligible_for_promotion(a, total_count, values_iter_factory):
-    """An attr can be auto-promoted iff it has full coverage and is plausibly
-    a type discriminator:
-      - categorical: distinct ≥ 2 (any low-/mid-cardinality is fine).
-      - boolean: both True and False values present (distinct = 2 by nature).
-      - numeric: distinct = 2 — captures the bipartite-indicator case
-        (Davis' `bipartite ∈ {0,1}`). Higher-cardinality numeric attrs
-        (weights, scores, frequencies) are not types — refuse.
+    """An attr can be auto-promoted only if every item has it and it looks like
+    a way to tell types apart:
+      - categorical: at least 2 distinct values (few or moderate values is fine).
+      - boolean: both True and False values present (that means 2 distinct values).
+      - numeric: exactly 2 distinct values — this catches the bipartite-indicator
+        case (Davis' `bipartite ∈ {0,1}`). Numeric attrs with more values
+        (weights, scores, frequencies) are not types, so we refuse them.
 
     `values_iter_factory()` yields the data dicts of the scope (nodes or
     edges) — used only by the numeric branch to count distinct values.
@@ -314,8 +314,8 @@ def _eligible_for_promotion(a, total_count, values_iter_factory):
 
 def _compute_auto_promotion(types_detail, total_count, values_iter_factory):
     """Auto-promote rule: if a scope has a single global type AND exactly one
-    eligible discriminator attribute, return `{attr, kind}`; else None. The
-    frontend then treats that attr as the effective type (Karate's club, etc.).
+    attribute that can tell items apart, return `{attr, kind}`; otherwise None.
+    The frontend then treats that attr as the effective type (Karate's club, etc.).
     """
     if len(types_detail) != 1:
         return None

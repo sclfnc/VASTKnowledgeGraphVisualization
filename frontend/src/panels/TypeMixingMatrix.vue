@@ -38,7 +38,8 @@ const selection = useSelectionStore()
 const { controls, updateControl } = usePanel(props, 'type_mixing')
 
 // Effective node types with ≥1 node in the current selection. A cell (t,u) is
-// outlined when t or u is in this set (cap-safe). Shared helper, same logic in EdgeFlow.
+// outlined when t or u is in this set (stays within the selection cap). Shared
+// helper, same logic in EdgeFlow.
 const selectedNodeTypes = computed(() =>
   selectedTypesIn(nodesSoA.value?.N ?? 0, selectedMask.value, nodeTypeAt))
 
@@ -67,10 +68,11 @@ const SORT_OPTIONS = [
 // `nodeTypeList` returns the effective labels (auto-promoted) or raw types.
 const allNodeTypes = computed(() => effectiveTypeListOr(nodeTypeList.value, data.value?.node_types))
 const allEdgeTypes = computed(() => data.value?.edge_types || [])
-// Contract: visible rows/cols are derived from the global masks, not from the raw
-// filters.nodeTypes/edgeTypes chip arrays. A type is visible iff it has ≥1 element
-// surviving the mask — so degree/attr/wcc filters that empty a type drop its row,
-// not just the type chip group. Effective-type aware via nodeTypeAt/edgeTypeAt.
+// Contract: visible rows/cols come from the global masks, not from the raw
+// filters.nodeTypes/edgeTypes chip arrays. A type is visible only if it has ≥1
+// element that survives the mask — so degree/attr/wcc filters that empty a type
+// drop its row, not just the type chip group. Effective-type aware via
+// nodeTypeAt/edgeTypeAt.
 const nodeTypes = computed(() => {
   const soa = nodesSoA.value
   const m = activeNodeMask.value

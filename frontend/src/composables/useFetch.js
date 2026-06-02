@@ -1,9 +1,10 @@
 // EXTENSION: shared fetch wrapper — { data, loading, error, run }.
 // Centralizes loading state, error parsing (FastAPI `detail`), and JSON decoding.
 //
-// Race safety: each `run()` call bumps a monotonic generation token; resolvers
-// for superseded requests are dropped. Without this, rapid graphId switches
-// could let an older response overwrite the newer one.
+// Race safety: each `run()` call increases a generation token (a counter that
+// only goes up). Results from requests that have been replaced by a newer one
+// are dropped. Without this, fast graphId switches could let an older response
+// overwrite the newer one.
 import { ref } from 'vue'
 
 export function useFetch() {

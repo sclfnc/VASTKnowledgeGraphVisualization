@@ -58,7 +58,8 @@ const STRATEGY_OPTIONS = [
   { value: 'regex',    label: 'Custom regex' },
 ]
 
-// Trivial ReDoS guard: reject obvious nested quantifiers (`(.+)+`, `(.*)*`).
+// Simple guard against slow/dangerous regex (ReDoS): reject obvious nested
+// quantifiers like `(.+)+` or `(.*)*` that can make matching extremely slow.
 const REDOS_BLACKLIST = /\((\.\+|\.\*)\)[+*]/
 const PATTERN_MAX_LENGTH = 200
 

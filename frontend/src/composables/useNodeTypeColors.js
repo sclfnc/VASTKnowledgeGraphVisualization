@@ -1,9 +1,10 @@
-// Stable nodeType → color mapping; deterministic per graph since the effective
-// type list (auto-promoted or raw) is sorted lexicographically client-side.
+// Stable nodeType → color mapping. The result is the same every time for a
+// given graph, because the effective type list (auto-promoted or raw) is
+// sorted alphabetically on the client.
 //
 // When auto_promoted.node is active (e.g. Karate's `club`), the type list is
 // the unique effective labels ('Mr. Hi', 'Officer') instead of the raw
-// `Node Type` (which would degenerate to a single `Unknown`). Falls back to
+// `Node Type` (which would collapse to a single `Unknown`). Falls back to
 // `schema.node_types` when no effective list is available.
 //
 // Shape encoding (redundant channel for high-cardinality types): `shapesFor`

@@ -1,8 +1,8 @@
 """
-Edge flow metadata: node/edge type lists, directedness, and per-type
-node counts. Flow tuples (src_type, edge_type, dst_type) are recomputed
-client-side from the edges SoA so peso/self-loop/type filters propagate
-uniformly — backend stays stateless w.r.t. filters.
+Edge flow metadata: node/edge type lists, whether the graph is directed, and
+per-type node counts. The flow tuples (src_type, edge_type, dst_type) are
+recomputed on the client from the edges SoA, so weight, self-loop, and type
+filters all apply in the same way — the backend does not depend on the filters.
 """
 from collections import Counter
 

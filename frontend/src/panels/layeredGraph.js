@@ -1,6 +1,6 @@
 // Unified data model for ego subgraphs (single + multi-ego).
 //
-// Backbone shape:
+// Internal shape:
 //   nodes: [{ id, type, degree, layers: Set<int>, isEgoOf: Set<int>, distance: Map<int, int> }]
 //   edges: [{ source, target, type, layers: Set<int> }]
 //

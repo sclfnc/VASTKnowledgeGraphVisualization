@@ -32,9 +32,9 @@ from node_index import get_node_order
 from timeline import _sniff_strategy
 
 
-# Skip categorical attrs whose distinct-value ratio exceeds this (free-text /
-# identifier names like Song.name, Person.name): a chip multi-select on 8K
-# distinct values is broken UX and gonfia il payload.
+# Skip categorical attrs whose share of distinct values is above this (free-text
+# or identifier fields like Song.name, Person.name): a chip multi-select over 8K
+# distinct values is poor UX and makes the payload much larger.
 IDENTIFIER_CARDINALITY_RATIO = 0.5
 IDENTIFIER_MIN_DISTINCT = 50
 # How many example values to ship alongside a 'text' attr (placeholder hints).
@@ -130,11 +130,11 @@ def _build_group(items_by_type, idx_lookup):
                 # D-i: single distinct value → nothing to filter on.
                 if distinct <= 1:
                     continue
-                # High-cardinality categoricals are identifiers (Song.name,
-                # Person.name): a chip multi-select over thousands of values is
-                # broken UX. Emit them as 'text' instead — a substring/equals
-                # search widget, with values shipped as an [idx, str] list so the
-                # client builds the mask locally (no per-value buckets).
+                # Categoricals with very many distinct values are identifiers
+                # (Song.name, Person.name): a chip multi-select over thousands of
+                # values is poor UX. Send them as 'text' instead — a substring /
+                # equals search widget, with values shipped as an [idx, str] list
+                # so the client builds the mask itself (no per-value buckets).
                 if (distinct >= IDENTIFIER_MIN_DISTINCT
                         and distinct / len(values_present) > IDENTIFIER_CARDINALITY_RATIO):
                     pairs = [[idx, str(v)] for idx, v in values_present]

@@ -18,11 +18,12 @@ from schema import compute_schema, effective_type_label
 
 
 def _compute_node_labels(G, node_order, promo):
-    """promo is `{attr, kind}` (or None). Returns list aligned to node_order.
+    """promo is `{attr, kind}` (or None). Returns a list aligned to node_order.
 
-    Defensive: if every node lacks the promoted attr (graph mutated since the
-    schema was cached, or stale `auto_promoted`), returns None instead of an
-    array of "Unknown" labels — frontend then falls back to raw type cleanly.
+    Safety net: if no node has the promoted attr (the graph changed since the
+    schema was cached, or `auto_promoted` is out of date), returns None instead
+    of a list of "Unknown" labels — the frontend then falls back cleanly to the
+    raw type.
     """
     if not promo:
         return None
@@ -35,10 +36,11 @@ def _compute_node_labels(G, node_order, promo):
 
 
 def _compute_edge_labels(G, promo):
-    """promo is `{attr, kind}` (or None). Returns list aligned to the canonical
+    """promo is `{attr, kind}` (or None). Returns a list aligned to the canonical
     edge walk order (the same order used to assign edge_id in /edges/).
 
-    Same defensive None-on-all-Unknown as `_compute_node_labels`.
+    Same safety net as `_compute_node_labels`: returns None if every label would
+    be "Unknown".
     """
     if not promo:
         return None

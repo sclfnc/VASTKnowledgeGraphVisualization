@@ -1,14 +1,15 @@
-"""Inspector payloads for the sidebar — node and edge, unified (they're duals
-and share the same attr-coercion + reserved-key split).
+"""Inspector payloads for the sidebar — node and edge, kept in one module
+(they mirror each other and share the same JSON value conversion + reserved-key
+split).
 
-- `inspect_node` / `list_neighbors`: per-node envelope + paginated neighbor list.
-  Neighbors sorted `degree desc` (stable secondary key on id) for deterministic
-  pagination, with an optional direction filter on directed graphs.
-- `inspect_edge`: per-edge payload, recovered from `edge_index_map` ((u,v[,key])
-  → edge_id) inverted on demand.
+- `inspect_node` / `list_neighbors`: per-node payload + paginated neighbor list.
+  Neighbors are sorted by `degree desc` (with id as a tie-breaker) so paging is
+  stable, and there is an optional direction filter on directed graphs.
+- `inspect_edge`: per-edge payload, recovered by inverting `edge_index_map`
+  ((u,v[,key]) → edge_id) when needed.
 
-JSON coercion (`json_scalar`) and the type lookups (`node_type`, `edge_type`)
-live in schema.py — single source of truth.
+JSON value conversion (`json_scalar`) and the type lookups (`node_type`,
+`edge_type`) live in schema.py — the single source of truth.
 """
 from typing import Any, Dict, List
 
@@ -45,9 +46,9 @@ def _resolve_node_key(G, node_id):
 
 def _collect_neighbor_records(G, node_id, edge_index_map) -> List[Dict[str, Any]]:
     """Walk every neighbor edge once → flat list sorted by `degree desc`
-    (secondary key on id). Multigraph: parallel edges yield distinct rows,
-    dedup on (other, direction, edge_id). Shared by the preview and the
-    paginated list so there's one walk + sort path."""
+    (with id as a tie-breaker). Multigraph: parallel edges become separate rows,
+    deduplicated on (other, direction, edge_id). Shared by the preview and the
+    paginated list, so there is a single walk + sort path."""
     out: List[Dict[str, Any]] = []
     seen: set = set()
     is_multi = G.is_multigraph()
@@ -145,9 +146,9 @@ def list_neighbors(G, node_id: str, edge_index_map, direction: str = 'all',
 
 
 def inspect_node(G, node_id: str, edge_index_map=None) -> Dict[str, Any]:
-    """Per-node inspector payload. `edge_index_map` (optional) lets neighbor
-    records carry the canonical edge_id for /edge-inspect/ on click.
-    KeyError if the node is missing → HTTP 404."""
+    """Per-node inspector payload. The optional `edge_index_map` lets neighbor
+    records carry the canonical edge_id, so a click can open /edge-inspect/.
+    Raises KeyError if the node is missing → HTTP 404."""
     node_id = _resolve_node_key(G, node_id)
 
     data = dict(G.nodes[node_id])

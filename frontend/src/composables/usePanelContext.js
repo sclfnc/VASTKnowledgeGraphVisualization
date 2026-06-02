@@ -1,6 +1,6 @@
-// Per-panel facade composing filters + isolation + selection.
-// Resolution: isolated → snapshot; else live.
-// Selection follows the live store unless isolated.
+// Per-panel front-end that combines filters + isolation + selection.
+// When the panel is isolated it reads from its snapshot; otherwise it reads
+// live state. Selection follows the live store unless the panel is isolated.
 import { computed, toRef } from 'vue'
 import { useFilteredModel } from './useFilteredModel.js'
 import { injectGraphNodes } from './useGraphNodes.js'
@@ -8,7 +8,7 @@ import { useIsolationStore } from '@/stores/isolation.js'
 import { useSelectionStore } from '@/stores/selection.js'
 import { Bitset } from '@/utils/bitset.js'
 
-// Sugar: panels pass `props` instead of unpacking panelSpec.id + toRef(graphId).
+// Shortcut: panels pass `props` instead of unpacking panelSpec.id + toRef(graphId).
 export function usePanelContextFromProps(props) {
   return usePanelContext(props.panelSpec.id, toRef(props, 'graphId'))
 }

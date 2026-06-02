@@ -19,8 +19,9 @@ Path(GRAPH_STORAGE_DIR).mkdir(exist_ok=True)
 graph_registry: Dict[str, str] = {}
 graph_names: Dict[str, str] = {}
 
-# Per-endpoint result caches keyed by graph_id; invalidated together on (re)register.
-# Specialized caches (non-`Dict[str, Any]` shape) live outside and pop explicitly below.
+# Per-endpoint result caches keyed by graph_id; all cleared together when a graph
+# is (re)registered. Specialized caches (which do not have the `Dict[str, Any]`
+# shape) live outside this dict and are cleared one by one below.
 Caches: Dict[str, Dict[str, Any]] = {
     'schema': {},
     'degree_fit': {},
@@ -32,13 +33,13 @@ Caches: Dict[str, Dict[str, Any]] = {
     'graph_object': {},
     'edge_flow': {},
     'type_mixing': {},
-    # Value is `Dict[overrides_key, payload]`; .pop() still wipes the whole graph_id entry.
+    # Value is `Dict[overrides_key, payload]`; .pop() still drops the whole graph_id entry.
     'timeline': {},
     # Per-(type, attr) precomputed index for v2 filter pipeline.
     'attribute_index': {},
     # Per-item effective_type labels (auto- or manually-promoted attribute);
     # value is `Dict[(node_attr, edge_attr) override key, payload]` so manual
-    # promotion (Phase 7+) slots in without backend touches.
+    # promotion (Phase 7+) fits in without backend changes.
     'effective_types': {},
 }
 
@@ -67,9 +68,9 @@ def graph_path(graph_id: str) -> str:
     return os.path.join(GRAPH_STORAGE_DIR, f"{graph_id}.json")
 
 
-# Per-graph load locks: prevent two concurrent requests from parsing the same
-# graph file twice (RAM spike + wasted CPU). The lock dict itself is mutated
-# under a coarse lock to avoid creating two locks for the same graph_id.
+# Per-graph load locks: stop two concurrent requests from parsing the same
+# graph file at once (which wastes RAM and CPU). The lock dict itself is changed
+# under one shared lock, so we never create two locks for the same graph_id.
 _load_locks_mutex = threading.Lock()
 _load_locks: Dict[str, threading.Lock] = {}
 
@@ -110,11 +111,12 @@ def invalidate_caches(graph_id: str) -> None:
     centrality_cache.pop(graph_id, None)
     precompute_locks.pop(graph_id, None)
     precompute_tasks.pop(graph_id, None)
-    # Snapshot keys: concurrent /ego/ insert under the GIL would raise during iteration.
+    # Iterate over a copy of the keys: a concurrent /ego/ insert could otherwise
+    # change the dict mid-loop and raise an error.
     for key in list(ego_subgraph_cache.keys()):
         if key[0] == graph_id:
             ego_subgraph_cache.pop(key, None)
-    # Drop the per-graph load lock too — no point keeping it if state is gone.
+    # Drop the per-graph load lock too — no point keeping it once the state is gone.
     with _load_locks_mutex:
         _load_locks.pop(graph_id, None)
 
@@ -122,12 +124,12 @@ def invalidate_caches(graph_id: str) -> None:
 def _prune_orphan_uploads() -> None:
     """Delete uploaded graph files no longer referenced by the registry.
 
-    Uploads land as `<uuid>.json` and were never cleaned up — they piled up
-    indefinitely (each MC1 upload is ~6.5 MB). On every (re)registration we drop
+    Uploads are saved as `<uuid>.json` and were never cleaned up — they kept
+    piling up (each MC1 upload is ~6.5 MB). On every (re)registration we delete
     the on-disk files whose graph_id is no longer in the registry. Built-ins
     (`builtin_*.json`, rebuilt on load) and the source data folder
-    (`builtin_data/`) are left untouched. Failures are swallowed: cleanup must
-    never break a registration.
+    (`builtin_data/`) are left untouched. Errors are ignored on purpose: cleanup
+    must never break a registration.
     """
     try:
         for entry in os.scandir(GRAPH_STORAGE_DIR):

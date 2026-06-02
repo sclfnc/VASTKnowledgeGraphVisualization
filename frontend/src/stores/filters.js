@@ -22,16 +22,16 @@ export const useFiltersStore = defineStore('filters', () => {
   const weight = ref(numeric([0, 0]))
   const hideIsolated = ref(false)
   const hideSelfLoops = ref(false)
-  // Open landing point: written by Activity Timeline brush, read by future
-  // panels that want to respect a temporal window. No current consumer.
+  // Open slot for later use: written by the Activity Timeline brush, read by
+  // future panels that want to respect a temporal window. No consumer yet.
   // Shape: null (no filter) | { attr: string, range: [int, int] (inclusive) }
   const temporalFilter = ref(null)
-  // Component filter — scoped slot { scope: 'wcc'|'scc', ids: number[] } | null
-  // (a bare array is read as a legacy WCC list). Component ids are 0-based,
-  // size-desc, matching /components/ and /nodes/.{wcc_id,scc_id}. The scope tags
-  // which membership array useFilteredModel resolves against, because WCC and SCC
-  // id-spaces are not comparable. ConnectedComponents writes it tagged by its
-  // active mode. null = all components.
+  // Component filter — { scope: 'wcc'|'scc', ids: number[] } | null
+  // (a plain array is read as an old-style WCC list). Component ids are 0-based
+  // and sorted by size, matching /components/ and /nodes/.{wcc_id,scc_id}. The
+  // scope says which membership array useFilteredModel should match against,
+  // since WCC and SCC ids do not share the same numbering. ConnectedComponents
+  // writes it tagged by its active mode. null = all components.
   const wccFilter = ref(null)
 
   // v2 per-type attribute filters.

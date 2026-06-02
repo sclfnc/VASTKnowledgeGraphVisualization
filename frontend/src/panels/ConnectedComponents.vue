@@ -236,7 +236,7 @@ const rankRange = computed(() => {
   return [lo, hi]
 })
 
-// A rank window narrows iff it's not the full [1, rankCount] span.
+// A rank window narrows only when it is not the full [1, rankCount] span.
 const filterActive = computed(() => {
   const [lo, hi] = rankRange.value
   return rankCount.value > 0 && (lo > 1 || hi < rankCount.value)
@@ -367,10 +367,10 @@ watch(selectedComponent, () => nextTick(inFocus.value ? renderMain : renderDrill
 
 useD3Chart([mainContainer, drillContainer], renderAll, () => [props.widened, props.expanded])
 
-// No cap: a capped broadcast is a *lying* selection (an arbitrary 500-node
-// subset that diverges from the chart once a filter changes the active set).
-// Consumers read `selectedMask` (a Bitset over N), so the cost is the id-array
-// length, not a per-mark loop — fine even for a 17k-node LCC.
+// No cap: a capped broadcast would be a misleading selection (an arbitrary
+// 500-node subset that drifts away from the chart once a filter changes the
+// active set). Consumers read `selectedMask` (a Bitset over N), so the cost is
+// the id-array length, not a per-mark loop — fine even for a 17k-node LCC.
 function clickComponent(comp) {
   if (selectedId.value === comp.id) {
     selectedId.value = null

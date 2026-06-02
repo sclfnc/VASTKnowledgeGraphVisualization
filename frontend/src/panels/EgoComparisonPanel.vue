@@ -109,7 +109,7 @@ function setLayout(value) {
   updateControl('layout', value)
 }
 
-// Type accentuation: orthogonal to the per-layer pie coloring — it only drives
+// Type accentuation: independent of the per-layer pie coloring — it only changes
 // opacity, so the layer-membership encoding stays intact.
 const highlightSet = computed(() => new Set(controls.value.highlightTypes ?? []))
 function toggleHighlightType(t) {

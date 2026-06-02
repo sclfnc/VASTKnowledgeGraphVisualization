@@ -1,18 +1,18 @@
 """Upstream-compatibility layer — DO NOT fold into the modular backend.
 
 These endpoints (`/summary/`, `/node-types/`, `/edge-types/`, `/set-default/`) and the
-`default_graph_id` constant come from the **original** API on the shared repository. They are
-kept here, byte-for-byte in behaviour, so the upstream `tests/` suite passes unchanged and this
-backend lands as an *additive* PR rather than a replacement.
+`default_graph_id` constant come from the **original** API in the shared repository. They are
+kept here with exactly the same behaviour, so the upstream `tests/` suite still passes and this
+backend can be added as an *additive* PR rather than a replacement.
 
 Everything in this file is "upstream original". The rest of the backend (the 23 modular
-endpoints) is new. The two are deliberately separated so the distinction is obvious and this
-shim can be deleted wholesale once the group migrates to the modular contract.
+endpoints) is new. The two are kept apart on purpose so the difference is clear, and this whole
+compatibility file can be deleted at once when the group moves to the modular contract.
 
-Note: the legacy endpoints intentionally do NOT use the modular `registry.load_graph` /
+Note: the legacy endpoints deliberately do NOT use the modular `registry.load_graph` /
 `schema.*` helpers. The upstream `/set-default/` accepts a graph_id that is a *filename* in
-`graph_storage/` not yet in the registry, and loads it from disk — a path the modular
-`load_graph` (404 on unknown id) does not support. Replicating their load-or-file logic here
+`graph_storage/` not yet in the registry, and loads it from disk — something the modular
+`load_graph` (404 on unknown id) does not support. Repeating their load-or-file logic here
 keeps the modular core clean.
 """
 import json
@@ -34,8 +34,8 @@ router = APIRouter()
 def _load_registered_graph(graph_id: str):
     """Load a graph that is already in the registry. 404 if unknown.
 
-    Upstream reads `id → file_path` from the registry and parses the file every
-    call (no caching) — kept identical so behaviour matches the tests exactly.
+    Upstream reads `id → file_path` from the registry and parses the file on
+    every call (no caching) — kept the same so behaviour matches the tests exactly.
     """
     if graph_id not in graph_registry:
         raise HTTPException(status_code=404, detail="Graph ID not found")
@@ -45,10 +45,10 @@ def _load_registered_graph(graph_id: str):
 
 
 def create_degree_centrality_distribution(graph):
-    """Adaptive-binned degree-centrality histogram (upstream verbatim).
+    """Degree-centrality histogram with bins fitted to the data (kept unchanged from upstream).
 
     10 evenly-spaced bins over the actual value range, plus a `stats` block.
-    Empty graph → just the zeroed `stats`.
+    Empty graph → only the zeroed `stats`.
     """
     values = list(nx.degree_centrality(graph).values())
     if not values:

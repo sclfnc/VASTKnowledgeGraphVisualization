@@ -119,7 +119,7 @@ const detailData = computed(() => {
   return { kRow, kCol, rho, pr, n: m.length }
 })
 
-// Widen meccanica: emit on detailPair change (ConnectedComponents pattern).
+// Widen mechanism: emit on detailPair change (ConnectedComponents pattern).
 // In focus there's no grid to widen — the drill replaces the matrix instead.
 watch(detailPair, (val) => {
   if (inFocus.value) return
@@ -440,7 +440,7 @@ function installScatterBrush(parentG, innerW, innerH, pts, xScale, yScale, kx, k
     </Teleport>
 
     <div v-if="branches === 'error'" class="flex flex-1 items-center justify-center text-sm text-red-600 surface-recessed rounded-lg p-3 text-center">
-      Impossibile calcolare la comparazione: {{ all.failedMeasures.value.join(', ') }} non disponibili.
+      Cannot compute the comparison: {{ all.failedMeasures.value.join(', ') }} unavailable.
     </div>
     <div v-else-if="branches === 'loading'" class="flex flex-1 flex-col items-center justify-center gap-2 text-sm text-secondary surface-recessed rounded-lg p-3">
       <span>Computing centralities…</span>

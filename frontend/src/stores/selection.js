@@ -19,10 +19,10 @@ export const SELECTION_CAPS = {
 
 function makeChannel() {
   const list = ref([])
-  // Last-overflow tracker for replaceCapped: ids dropped on the last capped
-  // broadcast. Consumers (connectivity / type_mixing / edge_flow) read this to
-  // surface a "+N more not selected" caption next to the broadcasting affordance.
-  // Reset to 0 on any non-capped write.
+  // Tracks how many ids replaceCapped dropped on the last capped broadcast.
+  // Consumers (connectivity / type_mixing / edge_flow) read this to show a
+  // "+N more not selected" caption next to the control that sent the selection.
+  // Reset to 0 on any write that is not capped.
   const overflow = ref(0)
 
   function add(id) {

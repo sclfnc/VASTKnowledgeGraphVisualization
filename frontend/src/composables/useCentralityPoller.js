@@ -1,6 +1,7 @@
-// Single global poller for centrality status + data; instantiated once in GuideView,
-// provided to descendants. Polls /centrality-status every POLL_MS until all measures terminal;
-// each 'ready' transition triggers a one-shot fetch. Resets on graphId change, stops on 404.
+// Single global poller for centrality status + data; created once in GuideView and
+// provided to descendants. Polls /centrality-status every POLL_MS until every measure
+// reaches a final state (ready, error, or cancelled). Each time a measure turns 'ready'
+// it fires one data fetch. Resets on graphId change, stops on 404.
 import { ref, watch, toValue, onBeforeUnmount } from 'vue'
 import { apiUrl } from './useApi.js'
 
@@ -63,7 +64,7 @@ export function useCentralityPoller(graphIdRef) {
       const next = await res.json()
       if (id !== activeGraphId) return
 
-      // Each 'ready' transition triggers a one-shot data fetch.
+      // Each time a measure turns 'ready' we fire a single data fetch.
       const prev = status.value
       const flips = MEASURES.filter(m => next[m] === 'ready' && prev[m] !== 'ready')
       status.value = { ...prev, ...next }

@@ -38,7 +38,7 @@ export function useAllCentralities() {
     || status.value.betweenness === 'cancelled'
     || status.value.closeness === 'cancelled'
   )
-  // 'spectral' covers both PR and Eig — user can't disentangle them at this layer.
+  // 'spectral' covers both PR and Eig — the user can't tell them apart at this layer.
   const failedMeasures = computed(() => {
     const out = []
     for (const k of ['spectral', 'betweenness', 'closeness']) {

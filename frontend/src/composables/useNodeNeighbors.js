@@ -39,7 +39,7 @@ export function useNodeNeighbors(graphIdRef, nodeIdRef, directionRef) {
         throw new Error(body?.detail || `HTTP ${res.status}`)
       }
       const payload = await res.json()
-      if (myGen !== reqGen) return  // a newer request superseded us
+      if (myGen !== reqGen) return  // a newer request has replaced this one
       if (offset === 0) {
         items.value = payload.items
       } else {
