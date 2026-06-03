@@ -105,7 +105,7 @@ const toggleSection = (s) => {
           :class="{ 'pb-1': !collapsed[s] }"
           @click="collapsed[s] = !collapsed[s]">
           <component :is="sectionIcon(s)" :size="14" class="text-primary" :stroke-width="1.75" />
-          <p class="flex-1 text-sm font-semibold text-primary">{{ s }}</p>
+          <h3 class="flex-1 text-sm font-semibold text-primary">{{ s }}</h3>
           <component :is="collapsed[s] ? ChevronRight : ChevronDown" :size="11" class="text-secondary" />
         </div>
         <ul v-if="!collapsed[s]" class="ml-3 space-y-0.5">

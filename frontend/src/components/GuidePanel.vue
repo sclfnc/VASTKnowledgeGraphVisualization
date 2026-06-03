@@ -51,7 +51,7 @@ function toggleLock() {
 </script>
 
 <template>
-  <div
+  <article
     class="card-elev group flex flex-col rounded-md relative"
     :class="[
       expanded ? 'col-span-2 row-span-2' : (widened ? 'col-span-2' : ''),
@@ -66,7 +66,7 @@ function toggleLock() {
       <Lock :size="10" class="text-white" />
     </div>
     <div class="flex items-center justify-between p-1">
-      <p class="pl-3 text-base font-bold leading-6 text-primary">{{ panelSpec.label }}</p>
+      <h3 class="pl-3 text-base font-bold leading-6 text-primary">{{ panelSpec.label }}</h3>
       <div class="segmented-track inline-flex items-center">
         <button
           class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center"
@@ -125,5 +125,5 @@ function toggleLock() {
         @request-shrink="$emit('request-shrink')"
       />
     </div>
-  </div>
+  </article>
 </template>

@@ -62,7 +62,7 @@ function requestShrink(id) { if (widenedId.value === id) widenedId.value = null 
 </script>
 
 <template>
-  <div class="flex min-w-0 flex-col gap-3">
+  <section class="flex min-w-0 flex-col gap-3">
     <div v-if="!renderable.length" class="flex h-48 items-center justify-center text-sm text-muted">
       Select a panel from Contents ←
     </div>
@@ -86,7 +86,7 @@ function requestShrink(id) { if (widenedId.value === id) widenedId.value = null 
         @request-shrink="requestShrink(p.id)"
       />
     </div>
-  </div>
+  </section>
 
   <PanelFocus :panel="focused" :schema="schema" :graph-id="graphId" @close="focused = null" />
 </template>
