@@ -15,6 +15,7 @@
 import { computed, toValue } from 'vue'
 import * as d3 from 'd3'
 import { injectEffectiveTypes } from './useEffectiveTypes.js'
+import { FALLBACK_COLOR } from '@/panels/shared.js'
 
 // Tableau10 — d3's canonical 10-color categorical palette. Single source of
 // truth (no hardcoded duplication of the hex literals).
@@ -57,7 +58,7 @@ export function useNodeTypeColors(schemaRef) {
   const color = d3.scaleOrdinal()
     .domain(types.value.filter(t => t !== 'Unknown'))
     .range(PALETTE)
-    .unknown('#94a3b8')
+    .unknown(FALLBACK_COLOR)
 
   // Allocate `{shape, color}` for each type in `activeTypes` so that within the
   // set no two types share both shape AND color tonality. Process in order; for

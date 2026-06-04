@@ -6,6 +6,7 @@
 import { computed, toValue } from 'vue'
 import * as d3 from 'd3'
 import { injectEffectiveTypes } from './useEffectiveTypes.js'
+import { FALLBACK_COLOR } from '@/panels/shared.js'
 
 const PALETTE = [
   // Tableau10 (10)
@@ -35,7 +36,7 @@ export function useEdgeTypeColors(schemaRef) {
   const color = d3.scaleOrdinal()
     .domain(types.value.filter(t => t !== 'Unknown'))
     .range(PALETTE)
-    .unknown('#94a3b8')
+    .unknown(FALLBACK_COLOR)
 
   return { color, palette: PALETTE, types }
 }

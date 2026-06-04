@@ -21,6 +21,9 @@ export function svgFrame(container, margins, opts = {}) {
   return { totalW, totalH, innerW, innerH }
 }
 
+// Fallback color for missing category / Unknown
+export const FALLBACK_COLOR = '#94a3b8'
+
 // Opacity for marks outside the active mask. Single source of truth.
 export const ATTENUATED_OPACITY = 0.12
 
