@@ -33,8 +33,22 @@ Any suitable knowledge-graph-like dataset may be used to motivate or illustrate 
 ## Repository Status
 
 This repository tracks the team's meetings and design decisions. A working reference implementation
-— a FastAPI backend plus a Vue 3 + D3 frontend ("Telescope") — is developed by [@sclfnc](https://github.com/sclfnc)
-on the `api-integration` branch; see [`docs/sclfnc/`](docs/sclfnc/) for its design, contract, and usage.
+— a FastAPI backend plus a Vue 3 + D3 frontend ("Telescope") — is developed by [@sclfnc](https://github.com/sclfnc);
+see [`docs/sclfnc/`](docs/sclfnc/) for its design, contract, and usage.
+
+### Where things live
+
+| Path | What's inside |
+| --- | --- |
+| `frontend/src/views/` | The main pages: `DatasetView` (data loading), `GuideView` (the dashboard), `HomeView`. |
+| `frontend/src/panels/` | The D3 charts (degree, components, centrality, ego, type-mixing, edge-flow, timeline) and the panel list in `index.js`. |
+| `frontend/src/components/` | Reusable interface parts: sidebar, panel card, detail modal, graph status. |
+| `frontend/src/composables/` | Shared logic: loading data from the API, the filter model, the force-graph, the type colors. |
+| `frontend/src/stores/` | Application state (Pinia): filters, selection, isolation, panels, user preferences. |
+| `frontend/src/utils/` | `bitset.js` and `binsearch.js`, the building blocks used to apply filters. |
+| `api/` | The FastAPI backend. `main.py` connects everything; each feature has its own file (`schema`, `centrality`, `ego`, and so on). |
+| `api/tests/` | The backend tests. |
+| `docs/` | Meeting notes and the `sclfnc/` design documentation. |
 
 
 ## Working Approach
@@ -82,5 +96,9 @@ This section will be later expanded with the list of participants.
 - VAST Challenge 2025 – Design Challenge: https://vast-challenge.github.io/2025/DC.html
 - IEEE VIS / VAST community resources on visual analytics, graph visualization, and knowledge graphs
 
+## Deployment Constraint — Single Worker Only
 
+The backend keeps **all its state in memory** (the graph registry, the caches, the centrality tasks). There is no database and no shared store. This is a deliberate choice: the prototype is built for design, and only one analyst uses it at a time. The dev script runs `uvicorn main:app --reload` with no `--workers` flag, so there is only one process.
+
+**Do not run it with `--workers N` (N > 1)** or in any setup with more than one process. Each worker would keep its own separate registry, so a graph loaded by one worker would not be visible to the others.
 

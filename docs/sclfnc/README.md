@@ -1,10 +1,10 @@
 # Telescope — Documentation
 
 The reference implementation of the VAST 2025 Design Challenge dashboard: a FastAPI backend plus a
-Vue 3 + D3 frontend, by [@sclfnc](https://github.com/sclfnc), on the `api-integration` branch.
+Vue 3 + D3 frontend, by [@sclfnc](https://github.com/sclfnc).
 
-This folder is the knowledge base for that work. Setup and conventions for one part of the codebase
-live in the README inside that folder; the design that spans the whole project lives here.
+This folder is the knowledge base for that work. The setup and conventions of each part of the
+codebase live in the README inside its folder; the design that spans the whole project lives here.
 
 ## Start here
 
@@ -62,4 +62,4 @@ Design and architecture live here; setup and code-level how-tos stay in the per-
 ## Author
 
 Francesco Secoli — [github.com/sclfnc](https://github.com/sclfnc).
-Repository: [github.com/sclfnc/VASTKnowledgeGraphVisualization](https://github.com/sclfnc/VASTKnowledgeGraphVisualization/tree/api-integration)
+Repository: [github.com/sclfnc/VASTKnowledgeGraphVisualization](https://github.com/sclfnc/VASTKnowledgeGraphVisualization)

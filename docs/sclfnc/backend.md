@@ -84,7 +84,8 @@ one concern, depends on the *core* layer, and nothing depends on it except `main
 
 ### Dependency shape
 
-A clean DAG rooted at `schema.py`, with `main.py` as the single orchestrator on top:
+The imports form a clean tree: every module depends on `schema.py` at the bottom, and `main.py`
+sits on top and connects everything. There are no import cycles.
 
 ```
                          main.py            (wires every feature module)
@@ -149,7 +150,7 @@ GET  /health/                              {status: "healthy", graph_count}
 GET  /datasets/                            built-in list + structural summary
 POST /datasets/load/{name}                 load a built-in → graph_id
 GET  /schema/{id}                          counts, types, ranges, structural flags, auto_promoted
-GET  /metrics/{id}                         degree sequence + stats + degree_by_type
+GET  /metrics/{id}                         degree sequence + stats + degree_by_type — DEAD CODE (see note below)
 GET  /degree-fit/{id}                      theoretical fits + by-type
 GET  /components/{id}                       WCC (+ SCC if directed) breakdown
 GET  /type-mixing/{id}                     assortativity + metadata (counts client-side)
@@ -168,6 +169,11 @@ GET  /node-inspect/{id}/{node}             inspector envelope + neighbor preview
 GET  /node-neighbors/{id}/{node}           paginated neighbor list
 GET  /edge-inspect/{id}/{edge}             per-edge inspector payload
 ```
+
+`/metrics/` is **dead code**: no frontend code calls it (the Degree Distribution panel derives degree
+from the `/nodes/` SoA + `/degree-fit/` instead). It is kept only because the upstream `tests/` suite
+(`test_modular.py`) still exercises it — removing the endpoint would break that test. Do not build new
+work on it.
 
 Per-graph results are cached in `registry.Caches` (`schema`, `degree_fit`, `components`, `node_index`,
 `node_order`, `edge_index`, `edge_index_map`, `graph_object`, `edge_flow`, `type_mixing`, `timeline`,
