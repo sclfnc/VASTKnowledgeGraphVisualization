@@ -102,8 +102,7 @@ function fmtSize(bytes) {
     class="flex min-h-screen items-center justify-center px-4 py-8"
     @dragover.prevent="dragOver = true"
     @dragleave.prevent="dragOver = false"
-    @drop.prevent="onDrop"
-  >
+    @drop.prevent="onDrop">
     <div class="card-elev w-full max-w-2xl rounded-2xl p-8">
 
       <!-- Header -->
@@ -129,8 +128,7 @@ function fmtSize(bytes) {
           class="flex w-full items-center gap-3 rounded-lg px-4 py-3 ring-1 text-left transition disabled:opacity-50"
           :class="dragOver ? 'ring-slate-400 bg-white' : 'surface-recessed ring-transparent hover:bg-white hover:ring-slate-200'"
           :disabled="loading"
-          @click="fileInput?.click()"
-        >
+          @click="fileInput?.click()">
           <Upload :size="16" class="shrink-0 text-secondary" />
           <span class="flex flex-col">
             <span class="text-sm font-semibold text-primary">Upload your own file</span>
@@ -147,15 +145,16 @@ function fmtSize(bytes) {
                 <span class="text-xs text-muted">{{ fmtSize(pickedFile.size) }}</span>
               </div>
             </div>
-            <button class="shrink-0 text-muted hover:text-red-500" @click="clearFile"><X :size="14" /></button>
+            <button class="shrink-0 text-muted hover:text-red-500" @click="clearFile">
+              <X :size="14" />
+            </button>
           </div>
           <input
             v-model="graphName"
             type="text"
             placeholder="Graph name (optional)"
             maxlength="80"
-            class="input-base w-full px-3 py-2 text-sm text-primary placeholder:text-muted"
-          />
+            class="input-base w-full px-3 py-2 text-sm text-primary placeholder:text-muted" />
         </div>
 
         <input ref="fileInput" type="file" accept=".json" class="hidden" @change="onPick" />
@@ -164,11 +163,12 @@ function fmtSize(bytes) {
       <!-- Divider -->
       <div class="relative mb-6">
         <hr class="border-slate-200" />
-        <span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-muted">or</span>
+        <span
+          class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-muted">or</span>
       </div>
 
       <!-- Sample datasets: 2-column list, segmented-pill selection vocabulary -->
-      <div class="mb-6 grid grid-cols-2 gap-2">
+      <div v-if="builtins?.length" class="mb-6 grid grid-cols-2 gap-2">
         <button
           v-for="ds in builtins"
           :key="ds.name"
@@ -177,44 +177,52 @@ function fmtSize(bytes) {
             ? 'elev-light ring-slate-300 shadow-sm'
             : 'surface-recessed ring-transparent hover:bg-white hover:ring-slate-200'"
           :disabled="loading"
-          @click="selectBuiltin(ds.name)"
-        >
+          @click="selectBuiltin(ds.name)">
           <span class="flex min-w-0 flex-col gap-1.5">
             <span class="text-sm font-semibold leading-tight text-primary">{{ ds.description }}</span>
             <!-- Stats -->
             <span v-if="ds.nodes != null" class="text-xs font-medium text-primary">
-              {{ ds.nodes.toLocaleString() }} nodes<template v-if="ds.node_types > 1"> ({{ ds.node_types }} types)</template>
-              · {{ ds.edges.toLocaleString() }} edges<template v-if="ds.edge_types > 1"> ({{ ds.edge_types }} types)</template>
+              {{ ds.nodes.toLocaleString() }} nodes<template v-if="ds.node_types > 1"> ({{ ds.node_types }}
+                types)</template>
+              · {{ ds.edges.toLocaleString() }} edges<template v-if="ds.edge_types > 1"> ({{ ds.edge_types }}
+                types)</template>
             </span>
             <!-- Chips -->
             <span v-if="ds.nodes != null" class="flex flex-wrap gap-1">
-              <span class="rounded-full bg-white px-1.5 py-px text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">{{ ds.directed ? 'directed' : 'undirected' }}</span>
-              <span v-if="ds.weighted" class="rounded-full bg-white px-1.5 py-px text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">weighted</span>
-              <span v-if="ds.bipartite" class="rounded-full bg-white px-1.5 py-px text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">bipartite</span>
-              <span v-if="ds.multigraph" class="rounded-full bg-white px-1.5 py-px text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">multigraph</span>
+              <span
+                class="rounded-full bg-white px-1.5 py-px text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">{{
+                  ds.directed ? 'directed' : 'undirected' }}</span>
+              <span v-if="ds.weighted"
+                class="rounded-full bg-white px-1.5 py-px text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">weighted</span>
+              <span v-if="ds.bipartite"
+                class="rounded-full bg-white px-1.5 py-px text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">bipartite</span>
+              <span v-if="ds.multigraph"
+                class="rounded-full bg-white px-1.5 py-px text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">multigraph</span>
             </span>
             <!-- Description -->
-            <span class="text-xs italic text-secondary text-justify leading-relaxed">"{{ DATASET_META[ds.name]?.blurb }}"</span>
+            <span class="text-xs italic text-secondary text-justify leading-relaxed">"{{ DATASET_META[ds.name]?.blurb
+            }}"</span>
           </span>
         </button>
+      </div>
+      <!-- Skeletal dataset buttons: displayed while waiting for the server response -->
+      <div v-else class="mb-6 grid grid-cols-2 gap-2 animate-pulse">
+        <div v-for="i in 6" :key="i" class="flex h-36 items-start gap-3 rounded-lg px-3 py-3 surface-recessed">
+        </div>
       </div>
 
       <p v-if="error" class="mb-4 text-sm text-red-500">{{ error }}</p>
 
       <button
         class="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slate-900"
-        :disabled="!canLoad"
-        @click="onLoad"
-      >
+        :disabled="!canLoad" @click="onLoad">
         <span>{{ loading ? 'Loading…' : 'Load graph' }}</span>
         <ArrowRight v-if="!loading" :size="14" />
       </button>
     </div>
 
-    <div
-      v-if="dragOver"
-      class="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px]"
-    >
+    <div v-if="dragOver"
+      class="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px]">
       <div class="card-elev rounded-lg px-5 py-3">
         <p class="inline-flex items-center gap-2 text-sm font-medium text-primary">
           <Upload :size="16" /><span>Drop to upload</span>
