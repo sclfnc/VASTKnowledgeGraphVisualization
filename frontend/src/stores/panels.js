@@ -40,11 +40,18 @@ export const usePanelsStore = defineStore('panels', () => {
     panels.value.filter(p => p.active && p.component)
   )
 
+  // Getters
+  const getPanelsByView = computed(() => (view) => panels.value.filter(p => p.view === view))
+  const getSectionsByView = computed(() => (view) => {
+    const currentViewSections = panels.value.filter(p => p.view === view).map(p => p.section)
+    return sections.value.filter(s => currentViewSections.includes(s))
+  })
+
   const toggle = (p) => { if (!p.conditional) p.active = !p.active }
   const loadSection = (s) =>
     panels.value.filter(p => p.section === s && !p.conditional).forEach(p => { p.active = true })
   const removeSection = (s) =>
     panels.value.filter(p => p.section === s).forEach(p => { p.active = false })
 
-  return { panels, sections, orderedActive, toggle, loadSection, removeSection }
+  return { panels, sections, getPanelsByView, getSectionsByView, orderedActive, toggle, loadSection, removeSection }
 })

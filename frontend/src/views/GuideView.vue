@@ -23,7 +23,8 @@ const { toggle } = panelsStore
 // Skip rendering those — the spec's `available(schema)` predicate decides.
 const renderable = computed(() =>
   orderedActive.value.filter(
-    p => typeof p.available !== 'function' || p.available(schema.value)
+    p => (typeof p.available !== 'function' || p.available(schema.value))
+      && p.view == 'guide'
   )
 )
 
