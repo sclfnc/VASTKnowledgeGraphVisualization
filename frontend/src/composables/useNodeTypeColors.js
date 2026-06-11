@@ -16,6 +16,7 @@
 import { computed, toValue } from 'vue'
 import * as d3 from 'd3'
 import { injectEffectiveTypes } from './useEffectiveTypes.js'
+import { FALLBACK_COLOR } from '@/panels/shared.js'
 
 // Tableau10 — d3's canonical 10-color categorical palette. Single source of
 // truth (no hardcoded duplication of the hex literals).
@@ -26,11 +27,11 @@ const PALETTE = d3.schemeTableau10
 const SHAPE_NAMES = ['circle', 'square', 'triangle', 'diamond', 'cross']
 
 const D3_SYMBOL_TYPE = {
-  circle:   d3.symbolCircle,
-  square:   d3.symbolSquare,
+  circle: d3.symbolCircle,
+  square: d3.symbolSquare,
   triangle: d3.symbolTriangle,
-  diamond:  d3.symbolDiamond,
-  cross:    d3.symbolCross,
+  diamond: d3.symbolDiamond,
+  cross: d3.symbolCross,
 }
 
 // Two independent encoding channels per base color: 5 shapes × 2 tonalities
@@ -53,14 +54,16 @@ export function useNodeTypeColors(schemaRef) {
     return toValue(schemaRef)?.node_types ?? []
   })
 
-  const colors = computed(() => {
-    const out = {}
-    types.value.forEach((t, i) => { out[t] = PALETTE[i % PALETTE.length] })
-    return out
-  })
-
   // Falls back to neutral slate so panels never break on missing schema.
-  const color = (type) => colors.value[type] ?? '#94a3b8'
+  // Fallback color is also used for type == 'Unknown'
+  const colorScale = computed(() =>
+    d3.scaleOrdinal()
+      .domain(types.value.filter(t => t !== 'Unknown'))
+      .range(PALETTE)
+      .unknown(FALLBACK_COLOR)
+  )
+  const color = (type) => colorScale.value(type)
+
 
   // Allocate `{shape, color}` for each type in `activeTypes` so that within the
   // set no two types share both shape AND color tonality. Process in order; for
@@ -102,7 +105,7 @@ export function useNodeTypeColors(schemaRef) {
   }
 
   return {
-    colors, color, palette: PALETTE, types,
+    color, palette: PALETTE, types,
     stylesFor, d3SymbolType, symbolPath,
     SHAPE_NAMES,
   }

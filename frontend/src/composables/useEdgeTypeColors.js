@@ -4,7 +4,9 @@
 // Effective-type aware: when /effective-types/ exposes per-edge labels, the
 // type list comes from there; otherwise falls back to `schema.edge_types`.
 import { computed, toValue } from 'vue'
+import * as d3 from 'd3'
 import { injectEffectiveTypes } from './useEffectiveTypes.js'
+import { FALLBACK_COLOR } from '@/panels/shared.js'
 
 // 22 saturated, well-separated hues. The yellows and washed-out pastels of the
 // old Tableau10+Set3 mix read poorly on white, so the extension uses stronger,
@@ -32,14 +34,16 @@ export function useEdgeTypeColors(schemaRef) {
     return toValue(schemaRef)?.edge_types ?? []
   })
 
-  const colors = computed(() => {
-    const out = {}
-    types.value.forEach((t, i) => { out[t] = PALETTE[i % PALETTE.length] })
-    return out
-  })
-
   // Neutral slate fallback so panels never break on missing schema.
-  const color = (type) => colors.value[type] ?? '#94a3b8'
+  // Fallback color is also used for type == 'Unknown'
+  const colorScale = computed(() =>
+  d3.scaleOrdinal()
+      .domain(types.value.filter(t => t !== 'Unknown'))
+      .range(PALETTE)
+      .unknown(FALLBACK_COLOR)
+  )
+  const color = (type) => colorScale.value(type)
 
-  return { colors, color, palette: PALETTE, types }
+
+  return { color, palette: PALETTE, types }
 }

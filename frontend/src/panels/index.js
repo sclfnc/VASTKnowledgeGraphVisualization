@@ -25,9 +25,11 @@ const CENTRALITY_BASE_CONTROLS = {
 }
 
 const ALL_SPECS = [
+  // A. Guide View
   // 1. Descriptive Metrics
   {
     id: 'degree',
+    view: 'guide',
     label: 'Degree Distribution',
     section: 'Descriptive Metrics',
     conditional: false,
@@ -45,6 +47,7 @@ const ALL_SPECS = [
 
   {
     id: 'paths',
+    view: 'guide',
     label: 'Paths & Distances',
     section: 'Descriptive Metrics',
     conditional: false,
@@ -55,6 +58,7 @@ const ALL_SPECS = [
 
   {
     id: 'connectivity',
+    view: 'guide',
     label: 'Connected Components',
     section: 'Descriptive Metrics',
     conditional: false,
@@ -72,6 +76,7 @@ const ALL_SPECS = [
 
   {
     id: 'density',
+    view: 'guide',
     label: 'Density',
     section: 'Descriptive Metrics',
     conditional: false,
@@ -82,6 +87,7 @@ const ALL_SPECS = [
 
   {
     id: 'clustering',
+    view: 'guide',
     label: 'Clustering Coefficient',
     section: 'Descriptive Metrics',
     conditional: false,
@@ -92,6 +98,7 @@ const ALL_SPECS = [
 
   {
     id: 'reciprocity',
+    view: 'guide',
     label: 'Reciprocity',
     section: 'Descriptive Metrics',
     conditional: true,
@@ -102,6 +109,7 @@ const ALL_SPECS = [
 
   {
     id: 'edge_weight',
+    view: 'guide',
     label: 'Edge Weight',
     section: 'Descriptive Metrics',
     conditional: true,
@@ -113,6 +121,7 @@ const ALL_SPECS = [
   // 2. Centrality
   {
     id: 'cent_pagerank',
+    view: 'guide',
     label: 'PageRank',
     section: 'Centrality',
     conditional: false,
@@ -124,6 +133,7 @@ const ALL_SPECS = [
 
   {
     id: 'cent_eigenvector',
+    view: 'guide',
     label: 'Eigenvector',
     section: 'Centrality',
     conditional: false,
@@ -135,6 +145,7 @@ const ALL_SPECS = [
 
   {
     id: 'cent_betweenness',
+    view: 'guide',
     label: 'Betweenness',
     section: 'Centrality',
     conditional: false,
@@ -146,6 +157,7 @@ const ALL_SPECS = [
 
   {
     id: 'cent_closeness',
+    view: 'guide',
     label: 'Closeness',
     section: 'Centrality',
     conditional: false,
@@ -160,6 +172,7 @@ const ALL_SPECS = [
 
   {
     id: 'cent_compare',
+    view: 'guide',
     label: 'Centrality Comparison',
     section: 'Centrality',
     conditional: false,
@@ -173,6 +186,7 @@ const ALL_SPECS = [
   // 3. Local Structure
   {
     id: 'ego',
+    view: 'guide',
     label: 'Ego Network',
     section: 'Local Structure',
     conditional: false,
@@ -192,6 +206,7 @@ const ALL_SPECS = [
 
   {
     id: 'ego_compare',
+    view: 'guide',
     label: 'Ego Comparison',
     section: 'Local Structure',
     conditional: false,
@@ -212,6 +227,7 @@ const ALL_SPECS = [
 
   {
     id: 'triadic',
+    view: 'guide',
     label: 'Triadic Closure',
     section: 'Local Structure',
     conditional: false,
@@ -222,6 +238,7 @@ const ALL_SPECS = [
 
   {
     id: 'kcore',
+    view: 'guide',
     label: 'k-Core Decomposition',
     section: 'Local Structure',
     conditional: false,
@@ -233,6 +250,7 @@ const ALL_SPECS = [
   // 4. Mixing & Assortativity
   {
     id: 'assort',
+    view: 'guide',
     label: 'Assortativity r',
     section: 'Mixing & Assortativity',
     conditional: false,
@@ -243,6 +261,7 @@ const ALL_SPECS = [
 
   {
     id: 'deg_corr',
+    view: 'guide',
     label: 'Degree Correlation',
     section: 'Mixing & Assortativity',
     conditional: false,
@@ -253,6 +272,7 @@ const ALL_SPECS = [
 
   {
     id: 'type_mixing',
+    view: 'guide',
     label: 'Type Mixing Matrix',
     section: 'Mixing & Assortativity',
     conditional: false,
@@ -270,6 +290,7 @@ const ALL_SPECS = [
 
   {
     id: 'edge_flow',
+    view: 'guide',
     label: 'Edge Type Flow',
     section: 'Mixing & Assortativity',
     conditional: false,
@@ -285,6 +306,7 @@ const ALL_SPECS = [
   // 5. Generative Models
   {
     id: 'er',
+    view: 'guide',
     label: 'ER Baseline',
     section: 'Generative Models',
     conditional: false,
@@ -295,6 +317,7 @@ const ALL_SPECS = [
 
   {
     id: 'ws',
+    view: 'guide',
     label: 'Watts-Strogatz',
     section: 'Generative Models',
     conditional: false,
@@ -305,6 +328,7 @@ const ALL_SPECS = [
 
   {
     id: 'ba',
+    view: 'guide',
     label: 'Barabási-Albert',
     section: 'Generative Models',
     conditional: false,
@@ -315,6 +339,7 @@ const ALL_SPECS = [
 
   {
     id: 'model_compare',
+    view: 'guide',
     label: 'Model Comparison',
     section: 'Generative Models',
     conditional: false,
@@ -326,6 +351,7 @@ const ALL_SPECS = [
   // 6. Resilience
   {
     id: 'random_fail',
+    view: 'guide',
     label: 'Random Failure',
     section: 'Resilience',
     conditional: false,
@@ -336,6 +362,7 @@ const ALL_SPECS = [
 
   {
     id: 'targeted',
+    view: 'guide',
     label: 'Targeted Attack',
     section: 'Resilience',
     conditional: false,
@@ -347,6 +374,7 @@ const ALL_SPECS = [
   // 7. Temporal Analysis (two scopes share one parametric component)
   {
     id: 'timeline_node',
+    view: 'guide',
     label: 'Activity Timeline · Nodes',
     section: 'Temporal Analysis',
     conditional: false,
@@ -359,11 +387,12 @@ const ALL_SPECS = [
     controlsSchema: {
       attr:      { default: null },
       breakdown: { default: 'type' },
-      binSize:   { default: 'year' },
+      binSize: { default: 'year' },
     },
   },
   {
     id: 'timeline_edge',
+    view: 'guide',
     label: 'Activity Timeline · Edges',
     section: 'Temporal Analysis',
     conditional: false,
@@ -383,6 +412,7 @@ const ALL_SPECS = [
   // 8. Heterogeneous Structure
   {
     id: 'type_dist',
+    view: 'guide',
     label: 'Type Distribution',
     section: 'Heterogeneous Structure',
     conditional: true,
@@ -394,6 +424,7 @@ const ALL_SPECS = [
   // 9. Community Detection
   {
     id: 'modularity',
+    view: 'guide',
     label: 'Modularity',
     section: 'Community Detection',
     conditional: false,
@@ -404,6 +435,7 @@ const ALL_SPECS = [
 
   {
     id: 'louvain',
+    view: 'guide',
     label: 'Louvain & Leiden',
     section: 'Community Detection',
     conditional: false,
@@ -414,6 +446,7 @@ const ALL_SPECS = [
 
   {
     id: 'label_prop',
+    view: 'guide',
     label: 'Label Propagation',
     section: 'Community Detection',
     conditional: false,
@@ -425,12 +458,66 @@ const ALL_SPECS = [
   // 10. Link Prediction
   {
     id: 'similarity',
+    view: 'guide',
     label: 'Similarity Indices',
     section: 'Link Prediction',
     conditional: false,
     status: 'stub',
     component: NotImplementedStub,
     controlsSchema: {},
+  },
+
+  // B. Graph View
+  {
+    id: 'graph_node_link',
+    view: 'graph',
+    label: 'Node-Link Diagram',
+    active: true,
+    section: 'Main',
+    defaultActive: true,
+    conditional: false,
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
+    order: 'first',
+  },
+  {
+    id: 'graph_ego',
+    view: 'graph',
+    label: 'Ego Network',
+    section: 'Main',
+    defaultActive: true,
+    conditional: false,
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
+    order: 'last',
+  },
+  {
+    id: 'graph_flows',
+    view: 'graph',
+    label: 'Edge Flows',
+    section: 'Edge Overview',
+    defaultActive: true,
+    conditional: false,
+    status: 'planned',
+    component: NotImplementedStub,
+    controlsSchema: {},
+    resizable: false,
+  },
+  {
+    id: 'graph_edge_types',
+    label: 'Edge Types',
+    view: 'graph',
+    section: 'Edge Overview',
+    defaultActive: true,
+    conditional: false,
+    status: 'implemented',
+    component: NotImplementedStub,
+    controlsSchema: {
+      view: { default: 'all' },
+    },
+    resizable: false
   },
 ]
 

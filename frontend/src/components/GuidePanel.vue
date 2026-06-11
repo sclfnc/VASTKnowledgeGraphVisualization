@@ -13,8 +13,11 @@ const props = defineProps({
   expanded:     { type: Boolean, default: false },
   widened:      { type: Boolean, default: false },
   controlsOpen: { type: Boolean, default: false },
-  drawerId:     { type: String, default: null },
-  drawerReady:  { type: Boolean, default: false },
+  drawerId: { type: String, default: null },
+  drawerReady: { type: Boolean, default: false },
+  resizable: { type: Boolean, default: true },
+  removable: { type: Boolean, default: true },
+  order: { type: String, default: null },
 })
 
 defineEmits(['remove', 'focus', 'toggle-expand', 'toggle-controls', 'request-widen', 'request-shrink'])
@@ -51,13 +54,13 @@ function toggleLock() {
 </script>
 
 <template>
-  <div
+  <article
     class="card-elev group flex flex-col rounded-md relative"
     :class="[
       expanded ? 'col-span-2 row-span-2' : (widened ? 'col-span-2' : ''),
       isIsolated ? 'ring-2 ring-amber-400' : '',
-    ]"
-  >
+      order == 'first' ? 'lg:order-first' : order == 'last' ? 'order-last' : ''
+    ]">
     <div
       v-if="isIsolated"
       class="pointer-events-none absolute -top-2 -left-2 rounded-full bg-amber-400 p-1 shadow-sm"
@@ -66,7 +69,7 @@ function toggleLock() {
       <Lock :size="10" class="text-white" />
     </div>
     <div class="flex items-center justify-between p-1">
-      <p class="pl-3 text-base font-bold leading-6 text-primary">{{ panelSpec.label }}</p>
+      <h3 class="pl-3 text-base font-bold leading-6 text-primary">{{ panelSpec.label }}</h3>
       <div class="segmented-track inline-flex items-center">
         <button
           class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center"
@@ -83,6 +86,7 @@ function toggleLock() {
           <component :is="isIsolated ? Unlock : Lock" :size="14" />
         </button>
         <button
+          v-if="resizable"
           class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center"
           :class="{ 'segmented-pill--active': expanded || widened }"
           :title="(expanded || widened) ? 'Shrink' : 'Enlarge'"
@@ -96,6 +100,7 @@ function toggleLock() {
           <BookOpen :size="14" />
         </button>
         <button
+          v-if="removable"
           class="segmented-pill segmented-pill--danger inline-flex h-6 w-6 shrink-0 items-center justify-center"
           title="Remove"
           @click="$emit('remove')">
@@ -125,5 +130,5 @@ function toggleLock() {
         @request-shrink="$emit('request-shrink')"
       />
     </div>
-  </div>
+  </article>
 </template>

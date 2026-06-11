@@ -4,7 +4,6 @@ import {
   Search, ChevronDown, ChevronRight, Plus, X,
   Network, BarChart3, Target, Triangle, Shuffle, Sparkles, Shield, Clock, Layers, Users, Link2, BookOpen,
 } from 'lucide-vue-next'
-import { storeToRefs } from 'pinia'
 import { usePanelsStore } from '../stores/panels.js'
 import { injectSchema } from '../composables/useSchema.js'
 
@@ -39,7 +38,9 @@ function centralityBadge(panel) {
 }
 
 const panelsStore = usePanelsStore()
-const { panels, sections } = storeToRefs(panelsStore)
+const panels = computed(() => panelsStore.getPanelsByView('guide'))
+const sections = computed(() => panelsStore.getSectionsByView('guide'))
+// const { panels, sections } = storeToRefs(panelsStore)
 const { toggle, loadSection, removeSection } = panelsStore
 const { schema } = injectSchema()
 
@@ -90,22 +91,20 @@ const toggleSection = (s) => {
         v-model="search"
         type="text"
         placeholder="Search…"
-        class="input-base w-full rounded-md py-1 pl-7 pr-2 text-xs"
-      />
+        class="input-base w-full rounded-md py-1 pl-7 pr-2 text-xs" />
     </div>
 
     <ul>
       <li
         v-for="s in visibleSections"
         :key="s"
-        class="border-t border-slate-200 py-2 first:border-t-0 first:pt-0"
-      >
+        class="border-t border-slate-200 py-2 first:border-t-0 first:pt-0">
         <div
           class="group cursor-pointer flex items-center gap-1.5"
           :class="{ 'pb-1': !collapsed[s] }"
           @click="collapsed[s] = !collapsed[s]">
           <component :is="sectionIcon(s)" :size="14" class="text-primary" :stroke-width="1.75" />
-          <p class="flex-1 text-sm font-semibold text-primary">{{ s }}</p>
+          <h3 class="flex-1 text-sm font-semibold text-primary">{{ s }}</h3>
           <component :is="collapsed[s] ? ChevronRight : ChevronDown" :size="11" class="text-secondary" />
         </div>
         <ul v-if="!collapsed[s]" class="ml-3 space-y-0.5">
@@ -113,8 +112,7 @@ const toggleSection = (s) => {
             <button
               class="flex items-center gap-1 text-[10px] hover:font-semibold"
               :class="isSectionFull(s) ? 'text-secondary hover:text-red-500' : 'text-secondary hover:text-primary'"
-              @click="toggleSection(s)"
-            >
+              @click="toggleSection(s)">
               <component :is="isSectionFull(s) ? X : Plus" :size="10" />
               <span>{{ isSectionFull(s) ? 'remove all' : 'load all' }}</span>
             </button>
@@ -130,13 +128,11 @@ const toggleSection = (s) => {
                 : p.status === 'stub'
                   ? 'text-muted hover:text-secondary'
                   : 'text-secondary hover:text-primary'"
-            @click="!p.conditional && toggle(p)"
-          >
+            @click="!p.conditional && toggle(p)">
             <span class="flex-1 truncate">{{ p.label }}</span>
             <span
               v-if="centralityBadge(p)"
-              :class="['badge-base', centralityBadge(p).cls]"
-            >{{ centralityBadge(p).label }}</span>
+              :class="['badge-base', centralityBadge(p).cls]">{{ centralityBadge(p).label }}</span>
           </li>
         </ul>
       </li>
