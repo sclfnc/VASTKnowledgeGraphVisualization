@@ -7,7 +7,7 @@
 import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
-import { Telescope, Network, BookOpen } from 'lucide-vue-next'
+import { Telescope, Network, BookOpen, Info, Database } from 'lucide-vue-next'
 import { useGraphStore } from '../stores/graph.js'
 import { useSidebarsStore } from '../stores/sidebars.js'
 import { useSelectionStore } from '../stores/selection.js'
