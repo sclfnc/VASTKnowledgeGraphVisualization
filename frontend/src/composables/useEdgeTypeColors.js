@@ -33,10 +33,14 @@ export function useEdgeTypeColors(schemaRef) {
 
   // Neutral slate fallback so panels never break on missing schema.
   // Fallback color is also used for type == 'Unknown'
-  const color = d3.scaleOrdinal()
-    .domain(types.value.filter(t => t !== 'Unknown'))
-    .range(PALETTE)
-    .unknown(FALLBACK_COLOR)
+  const colorScale = computed(() =>
+  d3.scaleOrdinal()
+      .domain(types.value.filter(t => t !== 'Unknown'))
+      .range(PALETTE)
+      .unknown(FALLBACK_COLOR)
+  )
+  const color = (type) => colorScale.value(type)
+
 
   return { color, palette: PALETTE, types }
 }
