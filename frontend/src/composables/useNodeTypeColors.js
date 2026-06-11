@@ -55,10 +55,14 @@ export function useNodeTypeColors(schemaRef) {
 
   // Falls back to neutral slate so panels never break on missing schema.
   // Fallback color is also used for type == 'Unknown'
-  const color = d3.scaleOrdinal()
-    .domain(types.value.filter(t => t !== 'Unknown'))
-    .range(PALETTE)
-    .unknown(FALLBACK_COLOR)
+  const colorScale = computed(() =>
+    d3.scaleOrdinal()
+      .domain(types.value.filter(t => t !== 'Unknown'))
+      .range(PALETTE)
+      .unknown(FALLBACK_COLOR)
+  )
+  const color = (type) => colorScale.value(type)
+
 
   // Allocate `{shape, color}` for each type in `activeTypes` so that within the
   // set no two types share both shape AND color tonality. Process in order; for
