@@ -11,6 +11,7 @@ import TypeMixingMatrix from './TypeMixingMatrix.vue'
 import ActivityTimeline from './ActivityTimeline.vue'
 import NotImplementedStub from './NotImplementedStub.vue'
 import EdgeTypes from './EdgeTypes.vue'
+import SankeyDiagram from './SankeyDiagram.vue'
 
 // Shared defaults for the 4 single-measure centrality panels; per-measure overrides spread below.
 // `showTypes` is shared: it governs the type subset for the "vs Degree" scatter
@@ -502,7 +503,7 @@ const ALL_SPECS = [
     defaultActive: true,
     conditional: false,
     status: 'planned',
-    component: NotImplementedStub,
+    component: SankeyDiagram,
     controlsSchema: {},
     resizable: false,
   },
