@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ListTree, SlidersHorizontal } from 'lucide-vue-next'
 import { useGraphStore } from '../stores/graph.js'
