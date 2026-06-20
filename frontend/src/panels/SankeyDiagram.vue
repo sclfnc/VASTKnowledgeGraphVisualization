@@ -10,6 +10,8 @@ import { injectGraphEdges } from '@/composables/useGraphEdges.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
+import { useFiltersStore } from '@/stores/filters.js'
+import { SLATE } from './shared.js'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -21,6 +23,7 @@ const props = defineProps({
 
 defineEmits(['request-widen', 'request-shrink'])
 
+const filters = useFiltersStore()
 const { edges } = injectGraphEdges(toRef(props, 'graphId'))
 const { activeEdgeMask } = usePanelContextFromProps(props)
 const { nodeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
@@ -64,17 +67,43 @@ const edgeAgg = computed(() => {
       sankeyLinks.push({ source: st, target: tt, count })
     }
   }
-  const sankeyNodes = [...new Set(sources)].map(name => ({ name, id: name + '_s' }))
-    .concat([...new Set(targets)].map(name => ({ name, id: name + '_t' })))
+  const sankeyNodes = [...new Set(sources)].map(name => ({ name, id: name + '_s', role: 'source' }))
+    .concat([...new Set(targets)].map(name => ({ name, id: name + '_t', role: 'target' })))
 
   return { nodes: [... new Set(sankeyNodes)], links: sankeyLinks }
 })
 
 
+function handleNodeClick(e, d) {
+  e.stopPropagation()
+  if (d.role === 'source') {
+    filterSourceType(d.name)
+  }
+  else filterTargetType(d.name)
+}
+
+function handleLinkClick(e, d) {
+  e.stopPropagation()
+  filterSourceType(d.source.name)
+  filterTargetType(d.target.name)
+}
+
+function filterSourceType(t) {
+  filters.sourceType = t
+}
+
+function filterTargetType(t) {
+  filters.targetType = t
+}
+
+function clearFilters() {
+  filters.sourceType = null
+  filters.targetType = null
+}
+
 const containerRef = ref(null)
 
 function render() {
-  if (!edgeAgg.value.nodes.length || !edgeAgg.value.links.length) return
   const totalW = containerRef.value.clientWidth || 800
   const totalH = containerRef.value.clientHeight || Math.round(totalW * 3 / 4)
   const innerW = Math.max(0, totalW - MARGINS.left - MARGINS.right)
@@ -84,8 +113,18 @@ function render() {
   const svg = d3.select(containerRef.value).select('svg')
     .attr('width', totalW)
     .attr('height', totalH)
+
+  const innerChart = svg
     .select('g')
     .attr('transform', `translate(${MARGINS.left}, ${MARGINS.top})`)
+
+  if (!edgeAgg.value.links.length) {
+    // Clear inner Chart content and put warning message in the correct position
+    innerChart.selectAll('*').remove()
+    svg.select('text#message').attr('x', totalW / 2).attr('y', totalH / 2)
+
+    return
+  }
 
   const sankey = SankeyGraph()
     .size([innerW, innerH])
@@ -93,7 +132,7 @@ function render() {
     .colorScale(colorScale)
     .nodeWidth(10)
 
-  svg.datum(edgeAgg.value).call(sankey)
+  innerChart.datum(edgeAgg.value).call(sankey)
 
 }
 
@@ -120,8 +159,6 @@ function SankeyGraph() {
       links: selection.datum().links.map(d => ({ ...d, value: d.count }))
     });
 
-    console.log(sankey)
-
     selection
       .attr('font-family', fontFamily)
       .attr('font-size', fontSize)
@@ -145,6 +182,7 @@ function SankeyGraph() {
         : colorScale(d.target.name))
       .attr('stroke-width', d => Math.max(1, d.width))
       .attr('d', d3Sankey.sankeyLinkHorizontal())
+      .on('click', handleLinkClick)
 
     links.selectAll('title')
       .data(d => [d])
@@ -159,7 +197,12 @@ function SankeyGraph() {
       .data(d => d, d => d.id)
       .join('g')
       .classed('node', true)
+      .classed('clicked', d => d.role == 'source'
+        ? d.name === filters.sourceType
+        : d.name === filters.targetType
+      )
       .attr('transform', d => `translate(${d.x0}, ${d.y0})`)
+      .on('click', handleNodeClick)
 
     nodes
       .selectAll('rect')
@@ -244,8 +287,12 @@ useD3Chart(containerRef, render)
     </Teleport>
     <div ref="containerRef" class="chart-elev w-full"
       style="aspect-ratio: 4/3; position: relative;">
-      <svg>
+      <svg @click="clearFilters">
         <g></g>
+        <!-- Display message if no edges match the current filter -->
+        <text v-if="!edgeAgg.links.length" id="message" text-anchor="middle" font-size="12" :fill="SLATE[400]">
+          No edges match the current filters
+        </text>
       </svg>
     </div>
   </div>
@@ -266,7 +313,8 @@ useD3Chart(containerRef, render)
   stroke-width: 0;
 }
 
-:deep(g.node:hover) {
+:deep(g.node:hover),
+:deep(g.node.clicked) {
   stroke-opacity: 1;
   stroke-width: 1.5;
   font-weight: bold;

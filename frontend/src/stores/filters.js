@@ -33,6 +33,8 @@ export const useFiltersStore = defineStore('filters', () => {
   // since WCC and SCC ids do not share the same numbering. ConnectedComponents
   // writes it tagged by its active mode. null = all components.
   const wccFilter = ref(null)
+  const sourceType = ref(null)
+  const targetType = ref(null)
 
   // v2 per-type attribute filters.
   const nodeAttrs = ref({})  // {[nodeType]: {[attr]: AttrFilterSpec}}
@@ -56,6 +58,8 @@ export const useFiltersStore = defineStore('filters', () => {
     hideSelfLoops.value = false
     temporalFilter.value = null
     wccFilter.value = null
+    sourceType.value = null
+    targetType.value  = null
     nodeAttrs.value = {}
     edgeAttrs.value = {}
   }

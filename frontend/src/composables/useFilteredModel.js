@@ -217,8 +217,30 @@ export function useFilteredModel(graphId) {
       }
     }
 
-    return mask
-  })
+    // Step 6: filter by source/target type
+    const sf = filters.sourceType;
+    const tf = filters.targetType;
+    const effNodeLabels = effData.value?.node;
 
-  return { activeNodeMask, activeEdgeMask }
+    if (effNodeLabels) {
+      for (let i = 0; i < E; i++) {
+        if (!mask.get(i)) continue;
+        if ((sf && effNodeLabels[source[i]] !== sf) || (tf && effNodeLabels[target[i]] !== tf))
+          mask.clear(i);
+      }
+    } else {
+      for (let i = 0; i < E; i++) {
+        if (!mask.get(i)) continue;
+        if (
+          (sf && nodes.value.types[source[i]] !== sf) ||
+          (tf && nodes.value.types[target[i]] !== tf)
+        )
+          mask.clear(i);
+      }
+    }
+
+    return mask;
+  });
+
+  return { activeNodeMask, activeEdgeMask };
 }
