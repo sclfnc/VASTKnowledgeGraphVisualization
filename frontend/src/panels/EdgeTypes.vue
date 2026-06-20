@@ -26,13 +26,11 @@ const { edges } = injectGraphEdges(toRef(props, 'graphId'))
 const { activeEdgeMask } = usePanelContextFromProps(props)
 const { edgeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, props.schema)
-const duration = 1500;
 
-
-controls.value.view = 'selection'
+controls.value.view = 'all'
 const VIEW_OPTIONS = [
-  { k: 'selection', label: 'Current Selection' },
   { k: 'all', label: 'Entire Graph' },
+  { k: 'selection', label: 'Current Selection' },
 ]
 const MARGINS = { top: 8, right: 12, bottom: 38, left: 44 }
 
@@ -150,8 +148,6 @@ function BarChart() {
       .attr('fill', FALLBACK_COLOR)
       .attr("stroke", d => filters.edgeTypes.includes(d.name) ? '#0f172a' : 'none')
       .attr("stroke-width", d => filters.edgeTypes.includes(d.name) ? 1.5 : 0)
-      .transition()
-      .duration(duration)
       .attr("width", d => xScale(d.count))
 
     gs.selectAll('text')
@@ -161,10 +157,8 @@ function BarChart() {
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', d => xScale(d.count) > size[0] / 2 ? 'end' : 'start')
       .attr('fill', 'black')
-      .transition()
-      .duration(duration)
-      .attr('x', d => xScale(d.count) > size[0] / 2 ? xScale(d.count) - labelPadding : xScale(d.count) + labelPadding)
-      .attr('y', yScale.bandwidth() / 2);
+      .attr('y', yScale.bandwidth() / 2)
+      .attr('transform', d => `translate(${xScale(d.count) > size[0] / 2 ? xScale(d.count) - labelPadding : xScale(d.count) + labelPadding}, 0)`)
   }
 
   my.size = function (value) {
@@ -230,8 +224,10 @@ useD3Chart(containerRef, render)
 </template>
 
 <style scoped>
-:deep(g.bar) {
-  transition: font-weight 150ms all 1500ms;
+:deep(svg > g *) {
+  transition: all 1500ms,
+    font-weight 150ms,
+    stroke-width 150ms;
   cursor: pointer;
 }
 
