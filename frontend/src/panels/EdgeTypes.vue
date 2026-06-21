@@ -10,6 +10,10 @@ import { injectGraphEdges } from '@/composables/useGraphEdges.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { useFiltersStore } from '@/stores/filters.js'
+import { injectGraphNodes } from '@/composables/useGraphNodes.js'
+import { Bitset } from '@/utils/bitset.js'
+import { injectAttributeIndex } from '@/composables/useAttributeIndex.js'
+import { injectEffectiveTypes } from '@/composables/useEffectiveTypes.js'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -23,16 +27,118 @@ defineEmits(['request-widen', 'request-shrink'])
 
 const filters = useFiltersStore()
 const { edges } = injectGraphEdges(toRef(props, 'graphId'))
-const { activeEdgeMask } = usePanelContextFromProps(props)
+const { nodes } = injectGraphNodes(toRef(props, 'graphId'))
+const { activeNodeMask } = usePanelContextFromProps(props)
+const attrIndex = injectAttributeIndex(toRef(props, 'graphId'))
+const { data: effData } = injectEffectiveTypes(toRef(props, 'graphId'))
 const { edgeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, props.schema)
 
-controls.value.view = 'all'
+controls.value.view = 'selection'
 const VIEW_OPTIONS = [
-  { k: 'all', label: 'Entire Graph' },
   { k: 'selection', label: 'Current Selection' },
+  { k: 'all', label: 'Entire Graph' },
 ]
 const MARGINS = { top: 8, right: 12, bottom: 38, left: 44 }
+
+// Custom edge mask using all filters except Edge Types
+const activeEdgeMask = computed(() => {
+  const soa = edges.value
+  if (!soa) return null
+  const { E, source, target, weight, typeMasks } = soa
+
+  const mask = new Bitset(E)
+  mask.setAll()
+  // Only omit step 1, which would filter by edge type
+
+  // Step 2: weight range filter (only on weighted graphs)
+  // NaN comparisons return false in JS, so edges without weight survive the range filter.
+  const weightRange = filters.weight?.value
+  if (weight && Array.isArray(weightRange) && weightRange.length === 2) {
+    const [wMin, wMax] = weightRange
+    for (let i = 0; i < E; i++) {
+      if (!mask.get(i)) continue
+      const w = weight[i]
+      if (w < wMin || w > wMax) mask.clear(i)
+    }
+  }
+
+  // Step 3: self-loop filter
+  if (filters.hideSelfLoops) {
+    for (let i = 0; i < E; i++) {
+      if (!mask.get(i)) continue
+      if (source[i] === target[i]) mask.clear(i)
+    }
+  }
+
+  // Step 4: v2 per-type edge attribute filters. Same shape as the node side.
+  const edgeAttrs = filters.edgeAttrs
+  if (edgeAttrs && Object.keys(edgeAttrs).length > 0 && attrIndex.ready.value) {
+    const passMask = new Bitset(E)
+    for (const [t, tMask] of typeMasks) {
+      if (!(t in edgeAttrs)) passMask.orInPlace(tMask)
+    }
+    for (const [t, constraints] of Object.entries(edgeAttrs)) {
+      const tMask = typeMasks.get(t)
+      if (!tMask) continue
+      const allowed = tMask.clone()
+      for (const [attr, spec] of Object.entries(constraints)) {
+        const bs = attrIndex.bitsetFor('edge', t, attr, spec)
+        if (bs) allowed.andInPlace(bs)
+        else { allowed.clearAll(); break }
+      }
+      passMask.orInPlace(allowed)
+    }
+    mask.andInPlace(passMask)
+  }
+
+  // v2: temporal filter, edge scope. Same OR-across-types pattern as nodes.
+  const tfEdge = filters.temporalFilter
+  if (tfEdge && tfEdge.scope === 'edge' && Array.isArray(tfEdge.range) && attrIndex.ready.value) {
+    const tfMask = new Bitset(E)
+    const payload = attrIndex.data.value?.edge_attrs ?? {}
+    const spec = { kind: 'date', range: tfEdge.range }
+    for (const type of Object.keys(payload)) {
+      if (!payload[type]?.[tfEdge.attr]) continue
+      const bs = attrIndex.bitsetFor('edge', type, tfEdge.attr, spec)
+      if (bs) tfMask.orInPlace(bs)
+    }
+    mask.andInPlace(tfMask)
+  }
+
+  // Step 5: AND with node mask — an edge is active only if both endpoints survive
+  const nodeMask = activeNodeMask.value
+  if (nodeMask) {
+    for (let i = 0; i < E; i++) {
+      if (!mask.get(i)) continue
+      if (!nodeMask.get(source[i]) || !nodeMask.get(target[i])) mask.clear(i)
+    }
+  }
+
+  // Step 6: filter by source/target type
+  const sf = filters.sourceType;
+  const tf = filters.targetType;
+  const effNodeLabels = effData.value?.node;
+
+  if (effNodeLabels) {
+    for (let i = 0; i < E; i++) {
+      if (!mask.get(i)) continue;
+      if ((sf && effNodeLabels[source[i]] !== sf) || (tf && effNodeLabels[target[i]] !== tf))
+        mask.clear(i);
+    }
+  } else {
+    for (let i = 0; i < E; i++) {
+      if (!mask.get(i)) continue;
+      if (
+        (sf && nodes.value.types[source[i]] !== sf) ||
+        (tf && nodes.value.types[target[i]] !== tf)
+      )
+        mask.clear(i);
+    }
+  }
+
+  return mask;
+});
 
 const edgeTypeCounts = computed(() => {
   if (!props.schema) return []
@@ -57,6 +163,7 @@ const currentEdgeTypeCounts = computed(() => {
 
 function handleClickOnEdgeBar(e, d) {
   e.stopPropagation()
+  if (d.count <= 0) return
   if (e.ctrlKey || e.metaKey) {
     toggleEdgeType(d.name)
 
@@ -138,6 +245,7 @@ function BarChart() {
       .attr('font-family', fontFamily)
       .attr('font-size', fontSize)
       .classed('bar', true)
+      .classed('inactive', d => d.count <= 0)
       .on('click', handleClickOnEdgeBar)
       .attr('transform', d => `translate(0, ${yScale(d.name)})`);
 
@@ -200,7 +308,8 @@ function BarChart() {
   return my;
 }
 
-watch([controls, edgeTypeCounts, activeEdgeMask], () => nextTick(render), { deep: true })
+// Watch also filters, since the edge mask does't register edge type filtering
+watch([controls, edgeTypeCounts, activeEdgeMask, filters], () => nextTick(render), { deep: true })
 useD3Chart(containerRef, render)
 </script>
 
@@ -228,10 +337,21 @@ useD3Chart(containerRef, render)
   transition: all 1500ms,
     font-weight 150ms,
     stroke-width 150ms;
+}
+
+:deep(g.bar) {
   cursor: pointer;
+}
+
+:deep(g.bar.inactive) {
+  cursor: not-allowed;
 }
 
 :deep(g.bar:hover) {
   font-weight: bold;
+}
+
+:deep(g.bar.inactive:hover) {
+  font-weight: normal;
 }
 </style>
