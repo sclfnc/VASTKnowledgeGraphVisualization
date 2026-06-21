@@ -320,6 +320,10 @@ useD3Chart(containerRef, render)
   font-weight: bold;
 }
 
+:deep(g.link:hover) {
+  stroke-opacity: .9;
+}
+
 :deep(svg > g *) {
   transition: all 1500ms,
     stroke-opacity 150ms,
