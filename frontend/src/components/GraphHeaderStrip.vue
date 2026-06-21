@@ -46,6 +46,21 @@ const activeChips = computed(() => {
       remove: () => { filters.edgeTypes = [...effectiveEdgeTypes.value] },
     })
   }
+  if (filters.sourceType) {
+    chips.push({
+      key: 'sourceType',
+      label: `Source Type: ${filters.sourceType}`,
+      remove: () => { filters.sourceType = null }
+    })
+  }
+
+  if (filters.targetType) {
+    chips.push({
+      key: 'targetType',
+      label: `Target Type: ${filters.targetType}`,
+      remove: () => { filters.targetType = null }
+    })
+  }
   const dRange = filters.degree?.value
   const dFull = schema.value?.degree_range
   if (dRange && dFull && (dRange[0] > dFull[0] || dRange[1] < dFull[1])) {
