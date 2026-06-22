@@ -109,6 +109,7 @@ export const useFiltersStore = defineStore('filters', () => {
   return {
     nodeTypes, edgeTypes, degree, weight,
     hideIsolated, hideSelfLoops, temporalFilter, wccFilter,
+    sourceType, targetType,
     nodeAttrs, edgeAttrs,
     reset, setNodeAttr, setEdgeAttr, clearNodeAttrs, clearEdgeAttrs,
   }

@@ -28,8 +28,8 @@ function snapshotFrom(f) {
       : null,
     // Scoped component filter { scope, ids } | legacy array | null — JSON-safe.
     wccFilter: deepClone(f.wccFilter ?? null),
-    sourceType: deepClone(f.sourceType ?? null),
-    targetType: deepClone(f.targetType ?? null),
+    sourceType: f.sourceType ?? null,
+    targetType: f.targetType ?? null,
     nodeAttrs: deepClone(f.nodeAttrs ?? {}),
     edgeAttrs: deepClone(f.edgeAttrs ?? {}),
   }
@@ -62,8 +62,8 @@ function restoreInto(f, snap, schema) {
   // are numeric and scope-tagged), so restore it unchanged. Older snapshots
   // without the key restore as null (filter cleared), which is the safe default.
   f.wccFilter = deepClone(snap.wccFilter ?? null)
-  f.sourceType = deepClone(snap.sourceType ?? null)
-  f.targetType = deepClone(snap.targetType ?? null)
+  f.sourceType = (validNT.size && validNT.has(snap.sourceType)) ? snap.sourceType : null
+  f.targetType = (validNT.size && validNT.has(snap.targetType)) ? snap.targetType : null
   f.nodeAttrs = _restoreAttrs(snap.nodeAttrs, validNT)
   f.edgeAttrs = _restoreAttrs(snap.edgeAttrs, validET)
 }
