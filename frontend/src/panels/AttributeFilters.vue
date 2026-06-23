@@ -413,19 +413,36 @@ const isolatedAlreadyFiltered = computed(() => {
           </button>
         </div>
         <!-- Source Type / Target Type filter -->
-        <div
-          class="rounded-md border border-slate-200 bg-white px-2 py-1.5 flex flex-col gap-1.5">
-          <span class="text-[10px] font-semibold uppercase tracking-wide text-muted">Source Type Filter</span>
+        <template v-if="schema.directed">
+          <div
+            class="rounded-md border border-slate-200 bg-white px-2 py-1.5 flex flex-col gap-1.5">
+            <span class="text-[10px] font-semibold uppercase tracking-wide text-muted">Source Type Filter</span>
+            <button v-if="filters.sourceType"
+              class="text-[10px] flex items-center gap-1 transition self-start text-secondary hover:text-primary"
+              @click="filters.sourceType = null">
+              <X :size="11" />
+              {{ filters.sourceType }}
+            </button>
+          </div>
+          <div
+            class="rounded-md border border-slate-200 bg-white px-2 py-1.5 flex flex-col gap-1.5">
+            <span class="text-[10px] font-semibold uppercase tracking-wide text-muted">Target Type Filter</span>
+            <button v-if="filters.targetType"
+              class="text-[10px] flex items-center gap-1 transition self-start text-secondary hover:text-primary"
+              @click="filters.targetType = null">
+              <X :size="11" />
+              {{ filters.targetType }}
+            </button>
+          </div>
+        </template>
+        <div v-else class="rounded-md border border-slate-200 bg-white px-2 py-1.5 flex flex-col gap-1.5">
+          <span class="text-[10px] font-semibold uppercase tracking-wide text-muted">Incident Node Type Filter</span>
           <button v-if="filters.sourceType"
             class="text-[10px] flex items-center gap-1 transition self-start text-secondary hover:text-primary"
             @click="filters.sourceType = null">
             <X :size="11" />
             {{ filters.sourceType }}
           </button>
-        </div>
-        <div
-          class="rounded-md border border-slate-200 bg-white px-2 py-1.5 flex flex-col gap-1.5">
-          <span class="text-[10px] font-semibold uppercase tracking-wide text-muted">Target Type Filter</span>
           <button v-if="filters.targetType"
             class="text-[10px] flex items-center gap-1 transition self-start text-secondary hover:text-primary"
             @click="filters.targetType = null">
@@ -433,6 +450,7 @@ const isolatedAlreadyFiltered = computed(() => {
             {{ filters.targetType }}
           </button>
         </div>
+
       </template>
 
       <!-- Per-type accordion: types without filterable attrs are omitted.

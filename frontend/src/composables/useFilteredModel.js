@@ -10,6 +10,7 @@ import { injectGraphNodes } from './useGraphNodes.js'
 import { injectGraphEdges } from './useGraphEdges.js'
 import { injectAttributeIndex } from './useAttributeIndex.js'
 import { injectEffectiveTypes } from './useEffectiveTypes.js'
+import { useEdgeFlow } from './useEdgeFlow.js'
 import { Bitset } from '@/utils/bitset.js'
 import { lowerBound, upperBound } from '@/utils/binsearch.js'
 
@@ -220,21 +221,34 @@ export function useFilteredModel(graphId) {
     // Step 6: filter by source/target type
     const sf = filters.sourceType;
     const tf = filters.targetType;
-    const effNodeLabels = effData.value?.node;
+    const effNodeLabels = effData.value?.node ?? nodes.value.types;
+    const directed = useEdgeFlow.value?.directed ?? false;
 
-    if (effNodeLabels) {
+    if (!directed) {
       for (let i = 0; i < E; i++) {
-        if (!mask.get(i)) continue;
-        if ((sf && effNodeLabels[source[i]] !== sf) || (tf && effNodeLabels[target[i]] !== tf))
-          mask.clear(i);
+        if (sf && tf) {
+          // Nested check
+          if (sf === effNodeLabels[source[i]]) {
+            if (tf !== effNodeLabels[target[i]]) {
+              mask.clear(i);
+            } else continue;
+          } else if (sf === effNodeLabels[target[i]]) {
+            if (tf !== effNodeLabels[source[i]]) {
+              mask.clear(i);
+            } else continue;
+          } else mask.clear(i);
+        } else if (sf) {
+          // Check if one of them matches
+          if (sf !== effNodeLabels[source[i]] && sf !== effNodeLabels[target[i]]) mask.clear(i);
+        } else if (tf) {
+          // Check if one of them matches
+          if (tf !== effNodeLabels[source[i]] && tf !== effNodeLabels[target[i]]) mask.clear(i);
+        } else continue;
       }
     } else {
       for (let i = 0; i < E; i++) {
         if (!mask.get(i)) continue;
-        if (
-          (sf && nodes.value.types[source[i]] !== sf) ||
-          (tf && nodes.value.types[target[i]] !== tf)
-        )
+        if ((sf && effNodeLabels[source[i]] !== sf) || (tf && effNodeLabels[target[i]] !== tf))
           mask.clear(i);
       }
     }

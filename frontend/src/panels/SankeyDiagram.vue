@@ -31,7 +31,6 @@ const { controls, updateControl } = usePanel(props, props.panelSpec?.id, props.s
 const { color: colorScale } = useNodeTypeColors(toRef(props, 'schema'))
 
 
-controls.value.color = 'source'
 const COLOR_OPTIONS = [
   { k: 'source', label: 'Source Type' },
   { k: 'target', label: 'Target Type' },
@@ -67,6 +66,7 @@ const edgeAgg = computed(() => {
       sankeyLinks.push({ source: st, target: tt, count })
     }
   }
+  console.log(bySource)
   const sankeyNodes = [...new Set(sources)].map(name => ({ name, id: name + '_s', role: 'source' }))
     .concat([...new Set(targets)].map(name => ({ name, id: name + '_t', role: 'target' })))
 
@@ -147,7 +147,6 @@ function SankeyGraph() {
   var colorScale = d3.scaleOrdinal(d3.schemeObservable10);
 
   function my(selection) {
-    console.log('sankey diagram selection datum', selection.datum())
     const sankeyGenerator = d3Sankey.sankey()
       .nodeId(d => d.id)
       .nodeWidth(nodeWidth)

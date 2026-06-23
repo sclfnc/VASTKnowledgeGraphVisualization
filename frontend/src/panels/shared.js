@@ -333,3 +333,8 @@ export function seededUnit(key) {
   }
   return ((h >>> 0) % 100000) / 100000
 }
+
+// Utility for converting radians to degrees
+export function radiansToDegrees(angle) {
+  return (angle * 180) / Math.PI;
+}

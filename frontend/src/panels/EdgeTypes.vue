@@ -34,7 +34,6 @@ const { data: effData } = injectEffectiveTypes(toRef(props, 'graphId'))
 const { edgeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, props.schema)
 
-controls.value.view = 'selection'
 const VIEW_OPTIONS = [
   { k: 'selection', label: 'Current Selection' },
   { k: 'all', label: 'Entire Graph' },
@@ -116,26 +115,41 @@ const activeEdgeMask = computed(() => {
   }
 
   // Step 6: filter by source/target type
+  // Step 6: filter by source/target type
   const sf = filters.sourceType;
   const tf = filters.targetType;
-  const effNodeLabels = effData.value?.node;
+  const effNodeLabels = effData.value?.node ?? nodes.value.types;
+  const directed = props.schema?.directed ?? false;
 
-  if (effNodeLabels) {
+  if (!directed) {
+    for (let i = 0; i < E; i++) {
+      if (sf && tf) {
+        // Nested check
+        if (sf === effNodeLabels[source[i]]) {
+          if (tf !== effNodeLabels[target[i]]) {
+            mask.clear(i);
+          } else continue;
+        } else if (sf === effNodeLabels[target[i]]) {
+          if (tf !== effNodeLabels[source[i]]) {
+            mask.clear(i);
+          } else continue;
+        } else mask.clear(i);
+      } else if (sf) {
+        // Check if one of them matches
+        if (sf !== effNodeLabels[source[i]] && sf !== effNodeLabels[target[i]]) mask.clear(i);
+      } else if (tf) {
+        // Check if one of them matches
+        if (tf !== effNodeLabels[source[i]] && tf !== effNodeLabels[target[i]]) mask.clear(i);
+      } else continue;
+    }
+  } else {
     for (let i = 0; i < E; i++) {
       if (!mask.get(i)) continue;
       if ((sf && effNodeLabels[source[i]] !== sf) || (tf && effNodeLabels[target[i]] !== tf))
         mask.clear(i);
     }
-  } else {
-    for (let i = 0; i < E; i++) {
-      if (!mask.get(i)) continue;
-      if (
-        (sf && nodes.value.types[source[i]] !== sf) ||
-        (tf && nodes.value.types[target[i]] !== tf)
-      )
-        mask.clear(i);
-    }
   }
+
 
   return mask;
 });
