@@ -14,6 +14,7 @@ import { injectGraphNodes } from '@/composables/useGraphNodes.js'
 import { Bitset } from '@/utils/bitset.js'
 import { injectAttributeIndex } from '@/composables/useAttributeIndex.js'
 import { injectEffectiveTypes } from '@/composables/useEffectiveTypes.js'
+import { resizeAndRenderFactory } from './shared.js'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -321,9 +322,11 @@ function BarChart() {
   return my
 }
 
+const resizeAndRender = resizeAndRenderFactory(containerRef, render)
+
 // Watch also filters, since the edge mask does't register edge type filtering
 watch([controls, edgeTypeCounts, activeEdgeMask, filters], () => nextTick(render), { deep: true })
-useD3Chart(containerRef, render)
+useD3Chart(containerRef, resizeAndRender)
 </script>
 
 <template>
@@ -339,7 +342,7 @@ useD3Chart(containerRef, render)
     <div ref="containerRef" class="chart-elev w-full"
       style="aspect-ratio: 4/3; position: relative;">
       <svg v-on:click="clearEdgeTypeFilter">
-        <g></g>
+        <g class="inner-chart"></g>
       </svg>
     </div>
   </div>

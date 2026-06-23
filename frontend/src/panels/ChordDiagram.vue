@@ -9,6 +9,7 @@ import { useEffectiveType } from '@/composables/useEffectiveType.js'
 import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import { SLATE, radiansToDegrees } from './shared.js'
+import { resizeAndRenderFactory } from './shared.js'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -309,8 +310,10 @@ function chordGraph() {
   return my
 }
 
+const resizeAndRender = resizeAndRenderFactory(containerRef, render)
+
 watch([controls, edgeAgg, activeEdgeMask], () => nextTick(render), { deep: true })
-useD3Chart(containerRef, render)
+useD3Chart(containerRef, resizeAndRender)
 </script>
 
 <template>
@@ -322,7 +325,7 @@ useD3Chart(containerRef, render)
     <div ref="containerRef" class="chart-elev w-full"
       style="aspect-ratio: 4/3; position: relative;">
       <svg @click="clearFilters">
-        <g></g>
+        <g class="inner-chart"></g>
         <!-- Display message if no edges match the current filter -->
         <text v-if="!edgeAgg.nodes.length" id="message" text-anchor="middle" font-size="12" :fill="SLATE[400]">
           No edges match the current filters
