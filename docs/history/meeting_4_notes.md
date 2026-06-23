@@ -2,7 +2,7 @@
 
 ## Home view visualization grid
 The general idea of the proposed design is to have 3 panels with linked interactive visualizations.
-![Wireframe for home view](../assets/meeting_4/wireframe.png)
+![Wireframe for home view](img/wireframe.png)
 
 The image shows the state of the UI during a possible analysis performed on the MC1 graph of the 2025 VAST Challenge.
 Namely, the user has detected the possible semantic incongruence of a group of edges of type `RecordedBy` with source of type `RecordLabel` and is analyzing the nodes involved.
@@ -15,7 +15,7 @@ Namely, the user has detected the possible semantic incongruence of a group of e
 
 This is the new proposed grid for the home view:
 
-![Horizontal layout](../assets/meeting_4/horizontal_layout.png)
+![Horizontal layout](img/horizontal_layout.png)
 
 Since the normal workflow would go like this:
 1. Filter to an interesting selection of edges using **edge overview**: in the example, the user selected edges of type `RecordedBy` and refined their selection to only those having `RecordLabel` as source;
@@ -24,7 +24,7 @@ Since the normal workflow would go like this:
 
 It would probably make sense, for smaller screens, to reflow the layout like this (with **edge overview** as the first panel).
 
-![Vertical layout](../assets/meeting_4/vertical_layout.png)
+![Vertical layout](img/vertical_layout.png)
 
 ## Home view shared state
 At least the following information should be shared among the visualizations of the home view (thus they should reside in the home view component):
@@ -46,7 +46,7 @@ I am not extremely knowledgeable in Single Page Applications, but I suppose the 
 So, for example, for the described workflow, we would have something like the following sequence of routes:
 1. `http://localhost:5173/`
 2. `http://localhost:5173/?EdgeType=RecordedBy`
-3. `http://localhost:5173/?EdgeType=RecordeBy&SourceType=RecordLabel`
+3. `http://localhost:5173/?EdgeType=RecordedBy&SourceType=RecordLabel`
 4. `http://localhost:5173/?EdgeType=RecordedBy&SourceType=RecordLabel&SelectedNode=17370`
 
 ## Node-link diagram: further suggestion

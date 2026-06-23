@@ -1,104 +1,75 @@
-# VAST Knowledge Graph Visualization
+# Telescope — Zoom into your graph
 
-Collaborative project developed by students of the **Course on Visual Analytics** in response to the **VAST Challenge 2025 – Design Challenge**.
+A visual-analytics dashboard for the first exploration of attributed knowledge graphs.
+Load a graph and get its main metrics — degree distribution, centralities, components,
+type mixing, timelines — computed, visualised, and interactively explorable. No notebook,
+no code.
 
-> Challenge page: https://vast-challenge.github.io/2025/DC.html
+Developed by students of the **Course on Visual Analytics** (University of Pisa) for the
+**VAST Challenge 2025 – Design Challenge**. The challenge asks for a visual-analytics
+design that helps non-expert users explore knowledge graphs: discover new relationships,
+identify anomalies, and infer missing information.
 
-## Overview
+> Challenge page: <https://vast-challenge.github.io/2025/DC.html>
 
-This repository is intended to host the research, design material, prototypes, and documentation produced for the 2025 VAST Design Challenge. The challenge asks participants to conceive a **visual analytics design for knowledge graphs** that helps non-expert users:
+## Quick start
 
-- discover new information or relationships,
-- identify anomalies or inconsistencies, and/or
-- infer missing information from context.
+```bash
+./dev.sh            # backend (:8000) + frontend (:5173); Ctrl+C stops both
+./dev.sh --dev      # also install test deps and run the API suite first
+./dev.sh --log      # stream full pip/npm output
+```
 
-Knowledge graphs combine graph structure with rich, heterogeneous node and edge attributes. This creates important visualization challenges related to scale, uncertainty, incomplete information, and interpretability. Our project explores how visual analytics can support these tasks through an accessible and well-justified design.
+The script creates `api/venv`, installs Python and Node dependencies on first run, then
+starts uvicorn and Vite. It needs a Linux shell with `bash`, `python3`, and Node
+(`^20.19.0 || >=22.12.0`). To start backend or frontend by hand, see the README in each
+folder.
 
-## Project Goals
-
-The main goals of this collaborative project are to:
-
-1. study the VAST 2025 Design Challenge requirements;
-2. investigate visual encodings and interaction techniques for knowledge-graph exploration; (see [Notes of meeting 1](docs/meeting_1_notes.md))
-3. design a visual analytics solution that supports the challenge tasks;
-4. document the design rationale, limitations, and intended user workflow;
-5. coordinate the contributions of the student team.
-
-## Challenge Context
-
-According to the challenge brief, the final submission should focus on a **design**, not necessarily a fully working prototype. However, within the class we will explore factual implementations using Vue.js and D3.js to have a final tool that can be used to demonstrate the design.
-
-Any suitable knowledge-graph-like dataset may be used to motivate or illustrate the design. The emphasis is on visual analytics thinking and design interactivity capable of supporting multiple domain scenarios.
-
-## Repository Status
-
-This repository tracks the team's meetings and design decisions. A working reference implementation
-— a FastAPI backend plus a Vue 3 + D3 frontend ("Telescope") — is developed by [@sclfnc](https://github.com/sclfnc);
-see [`docs/sclfnc/`](docs/sclfnc/) for its design, contract, and usage.
-
-### Where things live
+## Repository layout
 
 | Path | What's inside |
 | --- | --- |
-| `frontend/src/views/` | The main pages: `DatasetView` (data loading), `GuideView` (the dashboard), `HomeView`. |
-| `frontend/src/panels/` | The D3 charts (degree, components, centrality, ego, type-mixing, edge-flow, timeline) and the panel list in `index.js`. |
-| `frontend/src/components/` | Reusable interface parts: sidebar, panel card, detail modal, graph status. |
-| `frontend/src/composables/` | Shared logic: loading data from the API, the filter model, the force-graph, the type colors. |
-| `frontend/src/stores/` | Application state (Pinia): filters, selection, isolation, panels, user preferences. |
-| `frontend/src/utils/` | `bitset.js` and `binsearch.js`, the building blocks used to apply filters. |
-| `api/` | The FastAPI backend. `main.py` connects everything; each feature has its own file (`schema`, `centrality`, `ego`, and so on). |
-| `api/tests/` | The backend tests. |
-| `docs/` | Meeting notes and the `sclfnc/` design documentation. |
+| [`frontend/`](frontend/) | Vue 3 + D3 single-page app: the dashboard, its panels, stores, and composables. |
+| [`api/`](api/) | FastAPI backend: graph loading, indices, and per-panel analysis endpoints. |
+| [`docs/`](docs/) | Design documentation: what Telescope is, the cross-panel contract, meeting history. |
+| [`data/`](data/) | Dataset download helper. The datasets themselves are not committed. |
 
+## Documentation
 
-## Working Approach
+| Topic | Where |
+| --- | --- |
+| Design rationale, audiences, scope | [`docs/README.md`](docs/README.md) |
+| Cross-panel interaction contract | [`docs/contract.md`](docs/contract.md) |
+| Backend architecture, endpoints, setup | [`api/README.md`](api/README.md) |
+| Frontend architecture, conventions, setup | [`frontend/README.md`](frontend/README.md) |
+| Panel catalogue and authoring guide | [`frontend/src/panels/README.md`](frontend/src/panels/README.md) |
+| Meeting notes and early wireframes | [`docs/history/`](docs/history/) |
 
-A possible workflow for the team is:
+## Stack
 
-1. **Interpret the challenge**
-   - identify the analytical tasks the team wants to support;
-   - define the target user and usage scenario.
-
-2. **Explore design alternatives**
-   - compare different visual representations for large, attributed, uncertain graphs;
-   - evaluate trade-offs between overview, detail, explainability, and interaction complexity.
-
-3. **Develop and refine the concept**
-   - create sketches, wireframes, or interactive mockups;
-   - gather feedback during class reviews or team meetings;
-   - refine the design rationale and task support.
-
-4. **Prepare final deliverables**
-   - write the final design description;
-   - document limitations and assumptions;
-   - assemble supporting visuals, storyboard, and reflection material.
-
-## Collaboration Guidelines
-
-To keep the project organized, contributors may follow these practices:
-
-- create focused branches for substantial changes;
-- use clear commit messages;
-- document design decisions in markdown files under `docs/`;
-- store figures and interface mockups in `assets/`.
-
+| Area | Tech |
+| --- | --- |
+| Frontend | Vue 3 · Vite · Pinia · Vue Router · Tailwind CSS v4 · D3 · Lucide · @vueform/slider |
+| Backend | FastAPI · NetworkX · NetworKit (centralities) · powerlaw (distribution fits) |
 
 ## Team
 
-This project is developed collaboratively by students of the **Course on Visual Analytics**.
+Developed collaboratively by students of the Course on Visual Analytics. Specific
+contributions, from the git history:
 
-- Francesco Secoli — [@sclfnc](https://github.com/sclfnc) (reference implementation: backend + Telescope frontend)
-
-This section will be later expanded with the list of participants.
+- **Salvo Rinzivillo** — project scaffolding (Vue 3 + Vite setup, Tailwind integration,
+  first layout components), the original upstream API and its test suite, the initial
+  README, meeting 1 notes, and the data download script.
+- **Giulia Fabiani** ([@g-fabiani4](https://github.com/g-fabiani4-unipi)) — dashboard
+  rework into nested router views (Graph/Guide), responsive layout, accessibility pass,
+  Graph-view panels and per-view panel filtering, dataset-view loading skeletons,
+  meeting 4 notes and wireframes.
+- **Francesco Secoli** ([@sclfnc](https://github.com/sclfnc)) — the Telescope reference
+  implementation: the modular FastAPI backend (indices, analysis endpoints, centrality
+  pipeline), the D3 panels, the filter/selection bitmap model and cross-panel contract,
+  the design system, and the design documentation.
 
 ## References
 
-- VAST Challenge 2025 – Design Challenge: https://vast-challenge.github.io/2025/DC.html
+- VAST Challenge 2025 – Design Challenge: <https://vast-challenge.github.io/2025/DC.html>
 - IEEE VIS / VAST community resources on visual analytics, graph visualization, and knowledge graphs
-
-## Deployment Constraint — Single Worker Only
-
-The backend keeps **all its state in memory** (the graph registry, the caches, the centrality tasks). There is no database and no shared store. This is a deliberate choice: the prototype is built for design, and only one analyst uses it at a time. The dev script runs `uvicorn main:app --reload` with no `--workers` flag, so there is only one process.
-
-**Do not run it with `--workers N` (N > 1)** or in any setup with more than one process. Each worker would keep its own separate registry, so a graph loaded by one worker would not be visible to the others.
-

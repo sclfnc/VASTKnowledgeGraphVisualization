@@ -12,5 +12,7 @@ api/venv/
 api/__pycache__/
 api/graph_storage/
 docs/interactions/
+# Local issue drafts (HCI audit backlog) — file as GitHub issues, don't commit
+issues.md
 # Local report workspace (LaTeX) — never integrate
 tex/
