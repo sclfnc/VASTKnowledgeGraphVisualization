@@ -47,3 +47,9 @@ python3 data/download_github_zip.py \
   https://github.com/vast-challenge/2025-data/blob/main/MC1_release.zip
 ```
 
+## Team
+
+Contributions to this folder, from the git history:
+
+- **Salvo Rinzivillo** — the download script and this guide.
+

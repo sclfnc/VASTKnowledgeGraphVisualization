@@ -1,6 +1,6 @@
 # Meeting notes
 
-![Notes from the balckboard](../assets/balckboard_meeting_1.jpg)
+![Notes from the blackboard](img/blackboard_meeting_1.jpg)
 
 From the first discussion, we have identified a few key points to consider for our design.
 
