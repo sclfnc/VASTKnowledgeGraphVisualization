@@ -171,12 +171,19 @@ const activeMatrix = computed(() => {
 
   if (controls.value.mode === 'edges') {
     const filter = controls.value.edgeTypeFilter || null
+    // Undirected → symmetric: each edge counts once per type pair, mirrored onto
+    // both off-diagonal cells. Same-type edges (st === dt) land on the diagonal
+    // and stay counted once (no double-add), so every cell reads as the literal
+    // edge count between its two types.
+    const directed = data.value?.directed ?? false
     for (const [st, byEt] of agg.byTriple) {
       if (!(st in out)) continue
       for (const [et, byDt] of byEt) {
         if (filter && et !== filter) continue
         for (const [dt, c] of byDt) {
-          if (dt in out[st]) out[st][dt] += c
+          if (!(dt in out[st])) continue
+          out[st][dt] += c
+          if (!directed && st !== dt) out[dt][st] += c
         }
       }
     }
