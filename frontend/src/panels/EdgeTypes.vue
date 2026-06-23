@@ -115,11 +115,10 @@ const activeEdgeMask = computed(() => {
   }
 
   // Step 6: filter by source/target type
-  // Step 6: filter by source/target type
-  const sf = filters.sourceType;
-  const tf = filters.targetType;
-  const effNodeLabels = effData.value?.node ?? nodes.value.types;
-  const directed = props.schema?.directed ?? false;
+  const sf = filters.sourceType
+  const tf = filters.targetType
+  const effNodeLabels = effData.value?.node ?? nodes.value.types
+  const directed = props.schema?.directed ?? false
 
   if (!directed) {
     for (let i = 0; i < E; i++) {
@@ -127,32 +126,32 @@ const activeEdgeMask = computed(() => {
         // Nested check
         if (sf === effNodeLabels[source[i]]) {
           if (tf !== effNodeLabels[target[i]]) {
-            mask.clear(i);
-          } else continue;
+            mask.clear(i)
+          } else continue
         } else if (sf === effNodeLabels[target[i]]) {
           if (tf !== effNodeLabels[source[i]]) {
-            mask.clear(i);
-          } else continue;
-        } else mask.clear(i);
+            mask.clear(i)
+          } else continue
+        } else mask.clear(i)
       } else if (sf) {
         // Check if one of them matches
-        if (sf !== effNodeLabels[source[i]] && sf !== effNodeLabels[target[i]]) mask.clear(i);
+        if (sf !== effNodeLabels[source[i]] && sf !== effNodeLabels[target[i]]) mask.clear(i)
       } else if (tf) {
         // Check if one of them matches
-        if (tf !== effNodeLabels[source[i]] && tf !== effNodeLabels[target[i]]) mask.clear(i);
-      } else continue;
+        if (tf !== effNodeLabels[source[i]] && tf !== effNodeLabels[target[i]]) mask.clear(i)
+      } else continue
     }
   } else {
     for (let i = 0; i < E; i++) {
-      if (!mask.get(i)) continue;
+      if (!mask.get(i)) continue
       if ((sf && effNodeLabels[source[i]] !== sf) || (tf && effNodeLabels[target[i]] !== tf))
-        mask.clear(i);
+        mask.clear(i)
     }
   }
 
 
-  return mask;
-});
+  return mask
+})
 
 const edgeTypeCounts = computed(() => {
   if (!props.schema) return []
@@ -166,7 +165,7 @@ const currentEdgeTypeCounts = computed(() => {
   const counts = {}
   if (props.schema) props.schema.edge_types.forEach(type => {
     counts[type] = 0
-  });
+  })
   for (let i = 0; i < soa.E; i++) {
     if (!mask.get(i)) continue
     const type = edgeTypeAt(i) ?? soa.edgeTypes[soa.type[i]]
@@ -235,12 +234,12 @@ function render() {
 
 
 function BarChart() {
-  var size = [300, 300];
-  var fontFamily = 'sans-serif';
-  var fontSize = 10;
-  var labelPadding = 3;
-  var barHeight = 25;
-  var scaleBandDomain;
+  var size = [300, 300]
+  var fontFamily = 'sans-serif'
+  var fontSize = 10
+  var labelPadding = 3
+  var barHeight = 25
+  var scaleBandDomain
 
   function my(selection) {
     const yScale = d3.scaleBand()
@@ -250,7 +249,7 @@ function BarChart() {
 
     const xScale = d3.scaleLinear()
       .domain([0, Math.max(d3.max(selection.datum(), d => d.count), 1)])
-      .range([1, size[0]]);
+      .range([1, size[0]])
 
 
     let gs = selection.selectAll("g.bar")
@@ -261,7 +260,7 @@ function BarChart() {
       .classed('bar', true)
       .classed('inactive', d => d.count <= 0)
       .on('click', handleClickOnEdgeBar)
-      .attr('transform', d => `translate(0, ${yScale(d.name)})`);
+      .attr('transform', d => `translate(0, ${yScale(d.name)})`)
 
     gs.selectAll('rect')
       .data(d => [d])
@@ -284,32 +283,32 @@ function BarChart() {
   }
 
   my.size = function (value) {
-    if (!arguments.length) return size;
-    size = value;
-    return my;
+    if (!arguments.length) return size
+    size = value
+    return my
   }
 
   my.fontSize = function (value) {
-    if (!arguments.length) return fontSize;
-    fontSize = value;
-    return my;
+    if (!arguments.length) return fontSize
+    fontSize = value
+    return my
   }
 
   my.fontFamily = function (value) {
-    if (!arguments.length) return fontFamily;
-    fontFamily = value;
-    return my;
+    if (!arguments.length) return fontFamily
+    fontFamily = value
+    return my
   }
 
   my.labelPadding = function (value) {
-    if (!arguments.length) return labelPadding;
-    labelPadding = value;
-    return my;
+    if (!arguments.length) return labelPadding
+    labelPadding = value
+    return my
   }
 
   my.barHeight = function (value) {
     if (!arguments.length) return barHeight
-    barHeight = value;
+    barHeight = value
     return my
   }
 
@@ -319,7 +318,7 @@ function BarChart() {
     return my
   }
 
-  return my;
+  return my
 }
 
 // Watch also filters, since the edge mask does't register edge type filtering
