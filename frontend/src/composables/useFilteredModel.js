@@ -10,9 +10,9 @@ import { injectGraphNodes } from './useGraphNodes.js'
 import { injectGraphEdges } from './useGraphEdges.js'
 import { injectAttributeIndex } from './useAttributeIndex.js'
 import { injectEffectiveTypes } from './useEffectiveTypes.js'
-import { useEdgeFlow } from './useEdgeFlow.js'
 import { Bitset } from '@/utils/bitset.js'
 import { lowerBound, upperBound } from '@/utils/binsearch.js'
+import { injectSchema } from './useSchema.js'
 
 export function useFilteredModel(graphId) {
   const filters = useFiltersStore()
@@ -20,6 +20,7 @@ export function useFilteredModel(graphId) {
   const { edges } = injectGraphEdges(graphId)
   const attrIndex = injectAttributeIndex(graphId)
   const { data: effData } = injectEffectiveTypes(graphId)
+  const {schema} = injectSchema()
 
   const activeNodeMask = computed(() => {
     const soa = nodes.value
@@ -221,8 +222,8 @@ export function useFilteredModel(graphId) {
     // Step 6: filter by source/target type
     const sf = filters.sourceType;
     const tf = filters.targetType;
-    const effNodeLabels = effData.value?.node ?? nodes.value.types;
-    const directed = useEdgeFlow.value?.directed ?? false;
+    const effNodeLabels = effData.value?.node ?? nodes.value?.types;
+    const directed = schema.value?.directed ?? false;
 
     if (!directed) {
       for (let i = 0; i < E; i++) {
