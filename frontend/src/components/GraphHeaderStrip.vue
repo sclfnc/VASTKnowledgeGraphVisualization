@@ -46,6 +46,26 @@ const activeChips = computed(() => {
       remove: () => { filters.edgeTypes = [...effectiveEdgeTypes.value] },
     })
   }
+
+  if (filters.sourceType) {
+    chips.push({
+      key: 'sourceType',
+      label: schema.value?.directed
+        ? `Source Node Type: ${filters.sourceType}`
+        : `Incident Node Type: ${filters.sourceType}`,
+      remove: () => { filters.sourceType = null }
+    })
+  }
+
+  if (filters.targetType) {
+    chips.push({
+      key: 'targetType',
+      label: schema.value?.directed
+        ? `Target Node Type: ${filters.targetType}`
+        : `Incident Node Type: ${filters.targetType}`,
+      remove: () => { filters.targetType = null }
+    })
+  }
   const dRange = filters.degree?.value
   const dFull = schema.value?.degree_range
   if (dRange && dFull && (dRange[0] > dFull[0] || dRange[1] < dFull[1])) {
@@ -171,7 +191,7 @@ function resetAll() {
     <!-- Active filter chips (or "no filters active" placeholder) -->
     <div v-if="activeChips.length" class="flex flex-wrap items-center gap-1">
       <span v-for="c in activeChips" :key="c.key"
-            class="inline-flex h-[18px] items-center rounded-full border border-slate-300 bg-white pl-2 pr-1.5 text-[10px] leading-none text-slate-700 shadow-sm">
+        class="inline-flex h-[18px] items-center rounded-full border border-slate-300 bg-white pl-2 pr-1.5 text-[10px] leading-none text-slate-700 shadow-sm">
         {{ c.label }}
         <button
           class="ml-1.5 -mr-1.5 inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border border-slate-300 bg-white text-slate-900 transition hover:text-red-500 hover:bg-red-50"

@@ -333,3 +333,23 @@ export function seededUnit(key) {
   }
   return ((h >>> 0) % 100000) / 100000
 }
+
+// Utility for converting radians to degrees
+export function radiansToDegrees(angle) {
+  return (angle * 180) / Math.PI;
+}
+
+
+// Resize svg to 0 and remove all inner chart elements.
+// Prevents animations and avoids altering panel aspect ratio when resizing.
+//(In the future we may want to implement this logic directly in the shared D3 chart lifecycle.)
+export function resizeAndRenderFactory(containerRef, render) {
+  function inner() {
+    const svg = d3.select(containerRef.value).select("svg").attr("width", 0).attr("height", 0);
+
+    svg.select("g.inner-chart").selectAll("*").remove();
+
+    render();
+  }
+  return inner
+}

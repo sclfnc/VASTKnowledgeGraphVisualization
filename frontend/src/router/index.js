@@ -14,14 +14,14 @@ const router = createRouter({
       redirect: 'dashboard'
     },
     {
-      path: '/dashboard/',
+      path: '/dashboard',
       name: 'home',
       component: HomeView,
       children: [
         // Dashboard nested views need a defaul component for the main container
         //  and a component for the body of the sidebar
         {
-          path: '',
+          path: '/',
           name: 'graph',
           components: {
             default: GraphView,
@@ -29,7 +29,7 @@ const router = createRouter({
           }
         },
         {
-          path: 'guide',
+          path: '/guide',
           name: 'guide',
           components: {
             default: GuideView,
@@ -41,7 +41,7 @@ const router = createRouter({
     },
     // EXTENSION: onboarding route — entry point when no graph is loaded
     {
-      path: '/dataset/',
+      path: '/dataset',
       name: 'dataset',
       component: () => import('../views/DatasetView.vue'),
     },

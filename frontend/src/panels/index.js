@@ -10,6 +10,9 @@ import EdgeFlow from './EdgeFlow.vue'
 import TypeMixingMatrix from './TypeMixingMatrix.vue'
 import ActivityTimeline from './ActivityTimeline.vue'
 import NotImplementedStub from './NotImplementedStub.vue'
+import EdgeTypes from './EdgeTypes.vue'
+import SankeyDiagram from './SankeyDiagram.vue'
+import ChordDiagram from './ChordDiagram.vue'
 
 // Shared defaults for the 4 single-measure centrality panels; per-measure overrides spread below.
 // `showTypes` is shared: it governs the type subset for the "vs Degree" scatter
@@ -494,15 +497,32 @@ const ALL_SPECS = [
     order: 'last',
   },
   {
-    id: 'graph_flows',
+    id: 'graph_sankey',
+    view: 'graph',
+    label: 'Edge Flows',
+    section: 'Edge Overview',
+    defaultActive: true,
+    conditional: false,
+    status: 'implemented',
+    component: SankeyDiagram,
+    available: (schema) => schema?.directed ?? false,
+    controlsSchema: {
+      color: {default: 'source'},
+    },
+    resizable: false,
+  },
+  {
+    id: 'graph_chord',
     view: 'graph',
     label: 'Edge Flows',
     section: 'Edge Overview',
     defaultActive: true,
     conditional: false,
     status: 'planned',
-    component: NotImplementedStub,
-    controlsSchema: {},
+    component: ChordDiagram,
+    available: (schema) => (schema?.directed ?? false) === false,
+    controlsSchema: {
+    },
     resizable: false,
   },
   {
@@ -513,9 +533,10 @@ const ALL_SPECS = [
     defaultActive: true,
     conditional: false,
     status: 'implemented',
-    component: NotImplementedStub,
+    component: EdgeTypes,
+    available: (schema) => (schema?.edge_types.length ?? 1) > 1,
     controlsSchema: {
-      view: { default: 'all' },
+      view: { default: 'selection' },
     },
     resizable: false
   },
