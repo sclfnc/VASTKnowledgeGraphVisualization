@@ -73,10 +73,18 @@ const edgeAgg = computed(() => {
 
 function handleNodeClick(e, d) {
   e.stopPropagation()
-  if (filters.sourceType) {
-    filterTargetType(d.name)
+  if (filters.targetType === d.name) {
+    filters.targetType = null
+    return
   }
-  else filterSourceType(d.name)
+  if (filters.sourceType === d.name) {
+    filters.sourceType = null
+    return
+  }
+  filters.sourceType
+    ? filterTargetType(d.name)
+    : filterSourceType(d.name)
+
 }
 
 function handleLinkClick(e, d) {
@@ -268,6 +276,13 @@ function chordGraph() {
       .attr('text-anchor', 'middle')
       .text(d => d.name)
 
+    nodes.selectAll('title')
+      .data(d => [d])
+      .join('title')
+      .text(d => (d.name === filters.sourceType || d.name === filters.targetType)
+        ? 'Click to remove filter'
+        : 'Click to filter by incident node type'
+      )
   }
 
   // Getters and setters

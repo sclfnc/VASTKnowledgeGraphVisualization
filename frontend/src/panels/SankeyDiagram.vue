@@ -78,23 +78,31 @@ const edgeAgg = computed(() => {
 function handleNodeClick(e, d) {
   e.stopPropagation()
   if (d.role === 'source') {
-    filterSourceType(d.name)
+    toggleFilterSource(d.name)
   }
-  else filterTargetType(d.name)
+  else toggleFilterTarget(d.name)
 }
 
 function handleLinkClick(e, d) {
   e.stopPropagation()
-  filterSourceType(d.source.name)
-  filterTargetType(d.target.name)
+  filters.sourceType = d.source.name
+  filters.targetType = d.target.name
 }
 
-function filterSourceType(t) {
-  filters.sourceType = t
+function toggleFilterSource(t) {
+  if (filters.sourceType === t) {
+    filters.sourceType = null
+  } else {
+    filters.sourceType = t
+  }
 }
 
-function filterTargetType(t) {
-  filters.targetType = t
+function toggleFilterTarget(t) {
+  if (filters.targetType === t) {
+    filters.targetType = null
+  } else {
+    filters.targetType = t
+  }
 }
 
 function clearFilters() {
@@ -163,11 +171,11 @@ function SankeyGraph() {
       .attr('font-family', fontFamily)
       .attr('font-size', fontSize)
 
-
-    const links = selection.selectAll('g.sankey_links')
+    // links
+    const links = selection.selectAll('g.sankey-links')
       .data([sankey.links])
       .join('g')
-      .classed('sankey_links', true)
+      .classed('sankey-links', true)
       .selectAll('g.link')
       .data(d => d, d => `${d.source.id}-${d.target.id}`)
       .join('g')
@@ -189,22 +197,20 @@ function SankeyGraph() {
       .join('title')
       .text(d => `${d.source.name} → ${d.target.name}: ${d.value}`);
 
-    const nodes = selection.selectAll('g.sankey_nodes')
-      .data([sankey.nodes])
+    // source nodes
+    const sources = selection.selectAll('g.sankey-sources')
+      .data([sankey.nodes.filter(d => d.role === 'source')])
       .join('g')
-      .classed('sankey_nodes', true)
+      .classed('sankey-sources', true)
       .selectAll('g.node')
       .data(d => d, d => d.id)
       .join('g')
       .classed('node', true)
-      .classed('clicked', d => d.role == 'source'
-        ? d.name === filters.sourceType
-        : d.name === filters.targetType
-      )
+      .classed('clicked', d => d.name === filters.sourceType)
       .attr('transform', d => `translate(${d.x0}, ${d.y0})`)
       .on('click', handleNodeClick)
 
-    nodes
+    sources
       .selectAll('rect')
       .data(d => [d])
       .join('rect')
@@ -214,14 +220,62 @@ function SankeyGraph() {
       .attr('width', d => d.x1 - d.x0)
       .attr('height', d => d.y1 - d.y0)
 
-    nodes.selectAll('text')
+    sources.selectAll('text')
       .data(d => [d])
       .join('text')
-      .attr('x', d => d.x0 < size[0] / 2 ? nodeWidth + labelPadding : -labelPadding)
+      .attr('x', nodeWidth + labelPadding)
       .attr('y', d => - ((d.y0 - d.y1) / 2))
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', d => d.x0 < size[0] / 2 ? 'start' : 'end')
       .text(d => d.name)
+
+    sources.selectAll('title')
+      .data(d => [d])
+      .join('title')
+      .text(d => d.name === filters.sourceType
+        ? 'Click to remove filter'
+        : 'Click to filter by source type'
+      )
+
+    // target nodes
+    const targets = selection.selectAll('g.sankey-targets')
+      .data([sankey.nodes.filter(d => d.role === 'target')])
+      .join('g')
+      .classed('sankey-targets', true)
+      .selectAll('g.node')
+      .data(d => d, d => d.id)
+      .join('g')
+      .classed('node', true)
+      .classed('clicked', d => d.name === filters.targetType)
+      .attr('transform', d => `translate(${d.x0}, ${d.y0})`)
+      .on('click', handleNodeClick)
+
+    targets
+      .selectAll('rect')
+      .data(d => [d])
+      .join('rect')
+      .attr('fill', d => colorScale(d.name))
+      .attr('stroke', '#0f172a')
+      .attr('stroke-width', 1.5)
+      .attr('width', d => d.x1 - d.x0)
+      .attr('height', d => d.y1 - d.y0)
+
+    targets.selectAll('text')
+      .data(d => [d])
+      .join('text')
+      .attr('x', -labelPadding)
+      .attr('y', d => - ((d.y0 - d.y1) / 2))
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', d => d.x0 < size[0] / 2 ? 'start' : 'end')
+      .text(d => d.name)
+
+    targets.selectAll('title')
+      .data(d => [d])
+      .join('title')
+      .text(d => d.name === filters.targetType
+        ? 'Click to remove filter'
+        : 'Click to filter by target type'
+      )
 
   }
 
