@@ -118,7 +118,7 @@ const activeEdgeMask = computed(() => {
   // Step 6: filter by source/target type
   const sf = filters.sourceType
   const tf = filters.targetType
-  const effNodeLabels = effData.value?.node ?? nodes.value.types
+  const effNodeLabels = effData.value?.node ?? nodes.value?.types
   const directed = props.schema?.directed ?? false
 
   if (!directed) {
