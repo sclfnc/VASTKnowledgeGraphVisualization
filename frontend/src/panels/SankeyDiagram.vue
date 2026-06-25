@@ -13,6 +13,7 @@ import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import { SLATE } from './shared.js'
 import { resizeAndRenderFactory } from './shared.js'
+import { showTip, hideTip } from './shared.js'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -36,7 +37,7 @@ const COLOR_OPTIONS = [
   { k: 'source', label: 'Source Type' },
   { k: 'target', label: 'Target Type' },
 ]
-const MARGINS = { top: 8, right: 8, bottom: 8, left: 44 }
+const MARGINS = { top: 8, right: 44, bottom: 8, left: 44 }
 
 const edgeAgg = computed(() => {
   const sankeyLinks = []
@@ -111,6 +112,7 @@ function clearFilters() {
 }
 
 const containerRef = ref(null)
+const tooltipRef = ref(null)
 
 function render() {
   const totalW = containerRef.value.clientWidth || 800
@@ -126,6 +128,7 @@ function render() {
   const innerChart = svg
     .select('g')
     .attr('transform', `translate(${MARGINS.left}, ${MARGINS.top})`)
+
 
   if (!edgeAgg.value.links.length) {
     // Clear inner Chart content and put warning message in the correct position
@@ -167,9 +170,20 @@ function SankeyGraph() {
       links: selection.datum().links.map(d => ({ ...d, value: d.count }))
     });
 
+    const total = d3.sum(selection.datum().links, d => d.count)
+
+    function linkHtml(d) {
+      const pct = ((d.count / total) * 100).toFixed(1).toLocaleString()
+      return `<b>${d.source.name}</b> → <b>${d.target.name}</b>
+    <br>${d.count.toLocaleString()} edges (${pct}% of shown)
+    `
+    }
+
     selection
       .attr('font-family', fontFamily)
       .attr('font-size', fontSize)
+
+    const tooltip = d3.select(tooltipRef.value)
 
     // links
     const links = selection.selectAll('g.sankey-links')
@@ -190,12 +204,13 @@ function SankeyGraph() {
         : colorScale(d.target.name))
       .attr('stroke-width', d => Math.max(1, d.width))
       .attr('d', d3Sankey.sankeyLinkHorizontal())
-      .on('click', handleLinkClick)
-
-    links.selectAll('title')
-      .data(d => [d])
-      .join('title')
-      .text(d => `${d.source.name} → ${d.target.name}: ${d.value}`);
+      .on('click', (e, d) => {
+        hideTip(tooltip)
+        handleLinkClick(e, d)
+      })
+      .on('mouseenter', (e, d) => showTip(tooltip, e, linkHtml(d)))
+      .on('mousemove', (e, d) => showTip(tooltip, e, linkHtml(d)))
+      .on('mouseleave', () => hideTip(tooltip))
 
     // source nodes
     const sources = selection.selectAll('g.sankey-sources')
@@ -350,6 +365,7 @@ useD3Chart(containerRef, resizeAndRender)
           No edges match the current filters
         </text>
       </svg>
+      <div ref="tooltipRef" class="tooltip"></div>
     </div>
   </div>
 </template>
@@ -384,5 +400,17 @@ useD3Chart(containerRef, resizeAndRender)
   transition: all 1500ms,
     stroke-opacity 150ms,
     font-weight 150ms;
+}
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #334155;
+  opacity: 0;
 }
 </style>
