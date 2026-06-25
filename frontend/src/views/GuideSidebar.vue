@@ -54,7 +54,7 @@ const MODE_OPTIONS = [
     <div v-if="graphId"
       class="scrollbar-slim flex-1 min-h-0 overflow-y-auto px-4">
       <GuideContents v-if="sidebarMode === 'contents'" />
-      <SidebarFilters />
+      <SidebarFilters v-else />
     </div>
   </div>
 
