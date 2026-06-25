@@ -32,7 +32,7 @@ const { nodes } = injectGraphNodes(toRef(props, 'graphId'))
 const { activeNodeMask } = usePanelContextFromProps(props)
 const attrIndex = injectAttributeIndex(toRef(props, 'graphId'))
 const { data: effData } = injectEffectiveTypes(toRef(props, 'graphId'))
-const { edgeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
+const { edgeTypeAt, edgeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, props.schema)
 
 const VIEW_OPTIONS = [
@@ -155,8 +155,16 @@ const activeEdgeMask = computed(() => {
 })
 
 const edgeTypeCounts = computed(() => {
-  if (!props.schema) return []
-  return props.schema.edge_types_detail
+  const soa = edges.value
+  if (!soa) return []
+  const counts = {}
+  for (let i = 0; i < soa.E; i++) {
+    const type = edgeTypeAt(i) ?? soa.edgeTypes[soa.type[i]]
+    counts[type] = (counts[type] || 0) + 1
+  }
+  return Object.entries(counts)
+    .map(([k, v]) => ({ name: k, count: v }))
+    .filter(d => d.count > 0)
 })
 
 const currentEdgeTypeCounts = computed(() => {
@@ -164,7 +172,7 @@ const currentEdgeTypeCounts = computed(() => {
   const mask = activeEdgeMask.value
   if (!soa || !mask) return []
   const counts = {}
-  if (props.schema) props.schema.edge_types.forEach(type => {
+  if (edgeTypeList.value) edgeTypeList.value.forEach(type => {
     counts[type] = 0
   })
   for (let i = 0; i < soa.E; i++) {
@@ -198,7 +206,7 @@ function selectEdgeType(t) {
 }
 
 function clearEdgeTypeFilter() {
-  filters.edgeTypes = props.schema?.edge_types ?? []
+  filters.edgeTypes = [...edgeTypeList.value] ?? []
 }
 
 

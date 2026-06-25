@@ -534,7 +534,7 @@ const ALL_SPECS = [
     conditional: false,
     status: 'implemented',
     component: EdgeTypes,
-    available: (schema) => (schema?.edge_types.length ?? 1) > 1,
+    available: (_, edgeTypes) => edgeTypes.length > 1,
     controlsSchema: {
       view: { default: 'selection' },
     },

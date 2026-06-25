@@ -6,16 +6,18 @@ import { useGraphStore } from '../stores/graph.js'
 import { storeToRefs } from 'pinia'
 import { injectSchema } from '@/composables/useSchema.js'
 import { usePanelsStore } from '@/stores/panels.js'
+import { useEffectiveType } from '@/composables/useEffectiveType.js'
 
 const { schema } = injectSchema()
 const { graphId } = storeToRefs(useGraphStore())
+const { edgeTypeList } = useEffectiveType(graphId, schema)
 
 const panelsStore = usePanelsStore()
 const { orderedActive } = storeToRefs(panelsStore)
 
 const panels = computed(() =>
   orderedActive.value.filter(
-    p => (typeof p.available !== 'function' || p.available(schema.value))
+    p => (typeof p.available !== 'function' || p.available(schema.value, edgeTypeList.value))
       && p.view == 'graph'
   )
 )
