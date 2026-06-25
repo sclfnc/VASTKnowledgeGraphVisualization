@@ -204,21 +204,65 @@ function logMajorTicks(scale) {
   }
   return out.length ? out : majors
 }
-export function drawAxes(g, xScale, yScale, innerW, innerH, opts = {}) {
-  const { xLabel = '', yLabel = '', yTickFmt = null, xTickFmt = null, yTicks = 5, xTicks = 6 } = opts
-  const axisLabelColor = '#64748b' // slate-500 — neutral for axis labels
-  const yAxis = d3.axisLeft(yScale)
-  if (isLogScale(yScale)) yAxis.tickValues(logMajorTicks(yScale)).tickFormat(d3.format('.0e'))
-  else { yAxis.ticks(yTicks); if (yTickFmt) yAxis.tickFormat(d3.format(yTickFmt)) }
-  g.append('g').call(yAxis)
-    .append('text').attr('transform', 'rotate(-90)').attr('x', -innerH / 2).attr('y', -32)
-    .attr('fill', axisLabelColor).attr('font-size', '12px').attr('text-anchor', 'middle').text(yLabel)
-  const xAxis = d3.axisBottom(xScale)
-  if (isLogScale(xScale)) xAxis.tickValues(logMajorTicks(xScale)).tickFormat(d3.format('~g'))
-  else { xAxis.ticks(xTicks); if (xTickFmt) xAxis.tickFormat(d3.format(xTickFmt)) }
-  g.append('g').attr('transform', `translate(0,${innerH})`).call(xAxis)
-    .append('text').attr('x', innerW / 2).attr('y', 28)
-    .attr('fill', axisLabelColor).attr('font-size', '12px').attr('text-anchor', 'middle').text(xLabel)
+
+export function drawAxes(selection, xScale, yScale, innerW, innerH, opts = {}) {
+  const {
+    xLabel = "",
+    yLabel = "",
+    yTickFmt = null,
+    xTickFmt = null,
+    yTickFmtFunc = null,
+    xTickFmtFunc = null,
+    yTicks = 5,
+    xTicks = 6,
+  } = opts;
+  const axisLabelColor = "#64748b"; // slate-500 — neutral for axis labels
+  const yAxis = d3.axisLeft(yScale);
+  if (isLogScale(yScale)) yAxis.tickValues(logMajorTicks(yScale)).tickFormat(d3.format(".0e"));
+  else {
+    yAxis.ticks(yTicks);
+    if (yTickFmt) yAxis.tickFormat(d3.format(yTickFmt));
+    if (yTickFmtFunc) yAxis.tickFormat(yTickFmtFunc);
+  }
+  selection.selectAll('g.y-axis')
+  .data([selection.datum()])
+  .join('g')
+  .classed('y-axis', true)
+    .call(yAxis)
+    .selectAll('text.label')
+    .data(d => [d])
+    .join('text')
+    .classed('label', true)
+    .attr("transform", "rotate(-90)")
+    .attr("x", -innerH / 2)
+    .attr("y", -32)
+    .attr("fill", axisLabelColor)
+    .attr("font-size", "12px")
+    .attr("text-anchor", "middle")
+    .text(yLabel);
+  const xAxis = d3.axisBottom(xScale);
+  if (isLogScale(xScale)) xAxis.tickValues(logMajorTicks(xScale)).tickFormat(d3.format("~g"));
+  else {
+    xAxis.ticks(xTicks);
+    if (xTickFmt) xAxis.tickFormat(d3.format(xTickFmt));
+    if (xTickFmtFunc) xAxis.tickFormat(xTickFmtFunc);
+  }
+  selection.selectAll('g.x-axis')
+  .data([selection.datum()])
+  .join('g')
+  .classed('x-axis', true)
+    .attr("transform", `translate(0,${innerH})`)
+    .call(xAxis)
+    .selectAll("text.label")
+    .data(d => [d])
+    .join('text')
+    .classed('label', true)
+    .attr("x", innerW / 2)
+    .attr("y", 28)
+    .attr("fill", axisLabelColor)
+    .attr("font-size", "12px")
+    .attr("text-anchor", "middle")
+    .text(xLabel);
 }
 
 // Solid → width 1.8; dashed → 1.5 + rounded caps. Default accessors (d.k, d.p).
