@@ -68,7 +68,6 @@ const edgeAgg = computed(() => {
       sankeyLinks.push({ source: st, target: tt, count })
     }
   }
-  console.log(bySource)
   const sankeyNodes = [...new Set(sources)].map(name => ({ name, id: name + '_s', role: 'source' }))
     .concat([...new Set(targets)].map(name => ({ name, id: name + '_t', role: 'target' })))
 
