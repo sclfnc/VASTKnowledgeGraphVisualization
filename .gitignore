@@ -3,9 +3,6 @@
 !docs/**
 .*
 !.gitignore
-data/*
-!data/download_github_zip.py
-!data/README.md
 notebooks/*
 _upstream_ref/
 api/venv/
