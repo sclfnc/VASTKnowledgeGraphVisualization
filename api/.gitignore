@@ -3,10 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
-__init__.py
-# ...except the one marking tests/ as a package, so layouts/CI that import the
-# suite as `api.tests` (or run with importlib import mode) don't break.
-!tests/__init__.py
 
 # Distribution / packaging
 .Python
