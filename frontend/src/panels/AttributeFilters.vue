@@ -413,7 +413,7 @@ const isolatedAlreadyFiltered = computed(() => {
           </button>
         </div>
         <!-- Source Type / Target Type filter -->
-        <template v-if="schema.directed">
+        <template v-if="schema?.directed">
           <div
             class="rounded-md border border-slate-200 bg-white px-2 py-1.5 flex flex-col gap-1.5">
             <span class="text-[10px] font-semibold uppercase tracking-wide text-muted">Source Type Filter</span>

@@ -5,7 +5,7 @@ import { usePanel } from './usePanel.js'
 import { useD3Chart } from './useD3Chart.js'
 import ControlSection from './controls/ControlSection.vue'
 import ControlToggleGroup from './controls/ControlToggleGroup.vue'
-import { FALLBACK_COLOR } from './shared.js'
+import { drawAxes, FALLBACK_COLOR, hideTip, showTip } from './shared.js'
 import { injectGraphEdges } from '@/composables/useGraphEdges.js'
 import { usePanelContextFromProps } from '@/composables/usePanelContext.js'
 import { useEffectiveType } from '@/composables/useEffectiveType.js'
@@ -32,14 +32,14 @@ const { nodes } = injectGraphNodes(toRef(props, 'graphId'))
 const { activeNodeMask } = usePanelContextFromProps(props)
 const attrIndex = injectAttributeIndex(toRef(props, 'graphId'))
 const { data: effData } = injectEffectiveTypes(toRef(props, 'graphId'))
-const { edgeTypeAt } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
+const { edgeTypeAt, edgeTypeList } = useEffectiveType(toRef(props, 'graphId'), toRef(props, 'schema'))
 const { controls, updateControl } = usePanel(props, props.panelSpec?.id, props.schema)
 
 const VIEW_OPTIONS = [
   { k: 'selection', label: 'Current Selection' },
   { k: 'all', label: 'Entire Graph' },
 ]
-const MARGINS = { top: 8, right: 12, bottom: 38, left: 44 }
+const MARGINS = { top: 12, right: 60, bottom: 44, left: 110 }
 
 // Custom edge mask using all filters except Edge Types
 const activeEdgeMask = computed(() => {
@@ -118,7 +118,7 @@ const activeEdgeMask = computed(() => {
   // Step 6: filter by source/target type
   const sf = filters.sourceType
   const tf = filters.targetType
-  const effNodeLabels = effData.value?.node ?? nodes.value.types
+  const effNodeLabels = effData.value?.node ?? nodes.value?.types
   const directed = props.schema?.directed ?? false
 
   if (!directed) {
@@ -155,8 +155,16 @@ const activeEdgeMask = computed(() => {
 })
 
 const edgeTypeCounts = computed(() => {
-  if (!props.schema) return []
-  return props.schema.edge_types_detail
+  const soa = edges.value
+  if (!soa) return []
+  const counts = {}
+  for (let i = 0; i < soa.E; i++) {
+    const type = edgeTypeAt(i) ?? soa.edgeTypes[soa.type[i]]
+    counts[type] = (counts[type] || 0) + 1
+  }
+  return Object.entries(counts)
+    .map(([k, v]) => ({ name: k, count: v }))
+    .filter(d => d.count > 0)
 })
 
 const currentEdgeTypeCounts = computed(() => {
@@ -164,7 +172,7 @@ const currentEdgeTypeCounts = computed(() => {
   const mask = activeEdgeMask.value
   if (!soa || !mask) return []
   const counts = {}
-  if (props.schema) props.schema.edge_types.forEach(type => {
+  if (edgeTypeList.value) edgeTypeList.value.forEach(type => {
     counts[type] = 0
   })
   for (let i = 0; i < soa.E; i++) {
@@ -198,11 +206,12 @@ function selectEdgeType(t) {
 }
 
 function clearEdgeTypeFilter() {
-  filters.edgeTypes = props.schema?.edge_types ?? []
+  filters.edgeTypes = [...edgeTypeList.value] ?? []
 }
 
 
 const containerRef = ref(null)
+const tooltipRef = ref(null)
 
 function render() {
   const totalW = containerRef.value.clientWidth || 800
@@ -239,31 +248,53 @@ function BarChart() {
   var fontFamily = 'sans-serif'
   var fontSize = 10
   var labelPadding = 3
-  var barHeight = 25
   var scaleBandDomain
 
   function my(selection) {
     const yScale = d3.scaleBand()
       .domain(scaleBandDomain ?? selection.datum().map(d => d.name))
-      .range([0, Math.min(size[1], selection.datum().length * barHeight)])
+      .range([0, size[1]])
       .paddingInner(.2)
 
     const xScale = d3.scaleLinear()
       .domain([0, Math.max(d3.max(selection.datum(), d => d.count), 1)])
       .range([1, size[0]])
+      .nice()
+
+    const truncate = s => s.length > 18 ? s.slice(0, 16) + '…' : s
+
+    drawAxes(selection, xScale, yScale, size[0], size[1],
+      {
+        xLabel: `N. of edges in ${controls.value.view === 'all' ? 'graph' : 'current selection'}`,
+        yTickFmtFunc: truncate,
+        xTicks: 4,
+      })
+
+    const total = d3.sum(selection.datum(), d => d.count)
+
+    function barHtml(d) {
+      const pct = ((d.count / total) * 100).toFixed(1).toLocaleString()
+      return `<b>${d.name}</b><br>${d.count.toLocaleString()} edges (${pct}% of shown)`
+    }
+
+    const tooltip = d3.select(tooltipRef.value)
 
 
-    let gs = selection.selectAll("g.bar")
+    let bars = selection.selectAll("g.bar")
       .data(selection.datum(), d => d.name)
       .join("g")
       .attr('font-family', fontFamily)
       .attr('font-size', fontSize)
       .classed('bar', true)
       .classed('inactive', d => d.count <= 0)
-      .on('click', handleClickOnEdgeBar)
       .attr('transform', d => `translate(0, ${yScale(d.name)})`)
+      .on('click', handleClickOnEdgeBar)
+      .on('mouseenter', (e, d) => showTip(tooltip, e, barHtml(d)))
+      .on('mousemove', (e, d) => showTip(tooltip, e, barHtml(d)))
+      .on('mouseleave', () => hideTip(tooltip))
 
-    gs.selectAll('rect')
+
+    bars.selectAll('rect')
       .data(d => [d])
       .join('rect')
       .attr("height", yScale.bandwidth())
@@ -272,15 +303,15 @@ function BarChart() {
       .attr("stroke-width", d => filters.edgeTypes.includes(d.name) ? 1.5 : 0)
       .attr("width", d => xScale(d.count))
 
-    gs.selectAll('text')
+    bars.selectAll('text')
       .data(d => [d])
       .join('text')
-      .text(d => `${d.name}: ${d.count}`)
+      .text(d => `${d.count.toLocaleString()}`)
       .attr('dominant-baseline', 'middle')
-      .attr('text-anchor', d => xScale(d.count) > size[0] / 2 ? 'end' : 'start')
+      .attr('text-anchor', 'start')
       .attr('fill', 'black')
       .attr('y', yScale.bandwidth() / 2)
-      .attr('transform', d => `translate(${xScale(d.count) > size[0] / 2 ? xScale(d.count) - labelPadding : xScale(d.count) + labelPadding}, 0)`)
+      .attr('transform', d => `translate(${xScale(d.count) + labelPadding}, 0)`)
   }
 
   my.size = function (value) {
@@ -304,12 +335,6 @@ function BarChart() {
   my.labelPadding = function (value) {
     if (!arguments.length) return labelPadding
     labelPadding = value
-    return my
-  }
-
-  my.barHeight = function (value) {
-    if (!arguments.length) return barHeight
-    barHeight = value
     return my
   }
 
@@ -344,6 +369,11 @@ useD3Chart(containerRef, resizeAndRender)
       <svg v-on:click="clearEdgeTypeFilter">
         <g class="inner-chart"></g>
       </svg>
+      <div ref="tooltipRef" class="tooltip"></div>
+    </div>
+    <div class="text-[10px] leading-tight text-muted px-1">
+      <p>Click on a bar to filter by edge type.</p>
+      <p>Ctrl + click for multiple selection.</p>
     </div>
   </div>
 </template>
@@ -369,5 +399,17 @@ useD3Chart(containerRef, resizeAndRender)
 
 :deep(g.bar.inactive:hover) {
   font-weight: normal;
+}
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #334155;
+  opacity: 0;
 }
 </style>

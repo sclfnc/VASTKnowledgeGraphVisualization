@@ -7,16 +7,17 @@ import { useFiltersStore } from '../stores/filters.js'
 import { usePanelContextFromProps } from '../composables/usePanelContext.js'
 
 const props = defineProps({
-  panelSpec:    { type: Object, required: true },
-  schema:       { type: Object, default: null },
-  graphId:      { type: String, default: null },
-  expanded:     { type: Boolean, default: false },
-  widened:      { type: Boolean, default: false },
+  panelSpec: { type: Object, required: true },
+  schema: { type: Object, default: null },
+  graphId: { type: String, default: null },
+  expanded: { type: Boolean, default: false },
+  widened: { type: Boolean, default: false },
   controlsOpen: { type: Boolean, default: false },
   drawerId: { type: String, default: null },
   drawerReady: { type: Boolean, default: false },
   resizable: { type: Boolean, default: true },
   removable: { type: Boolean, default: true },
+  lockable: { type: Boolean, default: true },
   order: { type: String, default: null },
 })
 
@@ -64,8 +65,7 @@ function toggleLock() {
     <div
       v-if="isIsolated"
       class="pointer-events-none absolute -top-2 -left-2 rounded-full bg-amber-400 p-1 shadow-sm"
-      title="Panel is locked"
-    >
+      title="Panel is locked">
       <Lock :size="10" class="text-white" />
     </div>
     <div class="flex items-center justify-between p-1">
@@ -79,6 +79,7 @@ function toggleLock() {
           <SlidersHorizontal :size="14" />
         </button>
         <button
+          v-if="lockable"
           class="segmented-pill inline-flex h-6 w-6 shrink-0 items-center justify-center"
           :class="{ 'segmented-pill--active': isIsolated }"
           :title="isIsolated ? 'Unlock (resume live updates)' : 'Lock (freeze current state)'"
@@ -127,8 +128,7 @@ function toggleLock() {
         :expanded="expanded"
         :controls-target="drawerReady ? drawerId : null"
         @request-widen="$emit('request-widen')"
-        @request-shrink="$emit('request-shrink')"
-      />
+        @request-shrink="$emit('request-shrink')" />
     </div>
   </article>
 </template>

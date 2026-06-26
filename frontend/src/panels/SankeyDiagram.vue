@@ -13,6 +13,7 @@ import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import { SLATE } from './shared.js'
 import { resizeAndRenderFactory } from './shared.js'
+import { showTip, hideTip } from './shared.js'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -36,7 +37,7 @@ const COLOR_OPTIONS = [
   { k: 'source', label: 'Source Type' },
   { k: 'target', label: 'Target Type' },
 ]
-const MARGINS = { top: 8, right: 8, bottom: 8, left: 44 }
+const MARGINS = { top: 8, right: 44, bottom: 8, left: 44 }
 
 const edgeAgg = computed(() => {
   const sankeyLinks = []
@@ -67,7 +68,6 @@ const edgeAgg = computed(() => {
       sankeyLinks.push({ source: st, target: tt, count })
     }
   }
-  console.log(bySource)
   const sankeyNodes = [...new Set(sources)].map(name => ({ name, id: name + '_s', role: 'source' }))
     .concat([...new Set(targets)].map(name => ({ name, id: name + '_t', role: 'target' })))
 
@@ -78,23 +78,31 @@ const edgeAgg = computed(() => {
 function handleNodeClick(e, d) {
   e.stopPropagation()
   if (d.role === 'source') {
-    filterSourceType(d.name)
+    toggleFilterSource(d.name)
   }
-  else filterTargetType(d.name)
+  else toggleFilterTarget(d.name)
 }
 
 function handleLinkClick(e, d) {
   e.stopPropagation()
-  filterSourceType(d.source.name)
-  filterTargetType(d.target.name)
+  filters.sourceType = d.source.name
+  filters.targetType = d.target.name
 }
 
-function filterSourceType(t) {
-  filters.sourceType = t
+function toggleFilterSource(t) {
+  if (filters.sourceType === t) {
+    filters.sourceType = null
+  } else {
+    filters.sourceType = t
+  }
 }
 
-function filterTargetType(t) {
-  filters.targetType = t
+function toggleFilterTarget(t) {
+  if (filters.targetType === t) {
+    filters.targetType = null
+  } else {
+    filters.targetType = t
+  }
 }
 
 function clearFilters() {
@@ -103,6 +111,7 @@ function clearFilters() {
 }
 
 const containerRef = ref(null)
+const tooltipRef = ref(null)
 
 function render() {
   const totalW = containerRef.value.clientWidth || 800
@@ -118,6 +127,7 @@ function render() {
   const innerChart = svg
     .select('g')
     .attr('transform', `translate(${MARGINS.left}, ${MARGINS.top})`)
+
 
   if (!edgeAgg.value.links.length) {
     // Clear inner Chart content and put warning message in the correct position
@@ -159,15 +169,26 @@ function SankeyGraph() {
       links: selection.datum().links.map(d => ({ ...d, value: d.count }))
     });
 
+    const total = d3.sum(selection.datum().links, d => d.count)
+
+    function linkHtml(d) {
+      const pct = ((d.count / total) * 100).toFixed(1).toLocaleString()
+      return `<b>${d.source.name}</b> → <b>${d.target.name}</b>
+    <br>${d.count.toLocaleString()} edges (${pct}% of shown)
+    `
+    }
+
     selection
       .attr('font-family', fontFamily)
       .attr('font-size', fontSize)
 
+    const tooltip = d3.select(tooltipRef.value)
 
-    const links = selection.selectAll('g.sankey_links')
+    // links
+    const links = selection.selectAll('g.sankey-links')
       .data([sankey.links])
       .join('g')
-      .classed('sankey_links', true)
+      .classed('sankey-links', true)
       .selectAll('g.link')
       .data(d => d, d => `${d.source.id}-${d.target.id}`)
       .join('g')
@@ -182,29 +203,28 @@ function SankeyGraph() {
         : colorScale(d.target.name))
       .attr('stroke-width', d => Math.max(1, d.width))
       .attr('d', d3Sankey.sankeyLinkHorizontal())
-      .on('click', handleLinkClick)
+      .on('click', (e, d) => {
+        hideTip(tooltip)
+        handleLinkClick(e, d)
+      })
+      .on('mouseenter', (e, d) => showTip(tooltip, e, linkHtml(d)))
+      .on('mousemove', (e, d) => showTip(tooltip, e, linkHtml(d)))
+      .on('mouseleave', () => hideTip(tooltip))
 
-    links.selectAll('title')
-      .data(d => [d])
-      .join('title')
-      .text(d => `${d.source.name} → ${d.target.name}: ${d.value}`);
-
-    const nodes = selection.selectAll('g.sankey_nodes')
-      .data([sankey.nodes])
+    // source nodes
+    const sources = selection.selectAll('g.sankey-sources')
+      .data([sankey.nodes.filter(d => d.role === 'source')])
       .join('g')
-      .classed('sankey_nodes', true)
+      .classed('sankey-sources', true)
       .selectAll('g.node')
       .data(d => d, d => d.id)
       .join('g')
       .classed('node', true)
-      .classed('clicked', d => d.role == 'source'
-        ? d.name === filters.sourceType
-        : d.name === filters.targetType
-      )
+      .classed('clicked', d => d.name === filters.sourceType)
       .attr('transform', d => `translate(${d.x0}, ${d.y0})`)
       .on('click', handleNodeClick)
 
-    nodes
+    sources
       .selectAll('rect')
       .data(d => [d])
       .join('rect')
@@ -214,14 +234,62 @@ function SankeyGraph() {
       .attr('width', d => d.x1 - d.x0)
       .attr('height', d => d.y1 - d.y0)
 
-    nodes.selectAll('text')
+    sources.selectAll('text')
       .data(d => [d])
       .join('text')
-      .attr('x', d => d.x0 < size[0] / 2 ? nodeWidth + labelPadding : -labelPadding)
+      .attr('x', nodeWidth + labelPadding)
       .attr('y', d => - ((d.y0 - d.y1) / 2))
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', d => d.x0 < size[0] / 2 ? 'start' : 'end')
       .text(d => d.name)
+
+    sources.selectAll('title')
+      .data(d => [d])
+      .join('title')
+      .text(d => d.name === filters.sourceType
+        ? 'Click to remove filter'
+        : 'Click to filter by source type'
+      )
+
+    // target nodes
+    const targets = selection.selectAll('g.sankey-targets')
+      .data([sankey.nodes.filter(d => d.role === 'target')])
+      .join('g')
+      .classed('sankey-targets', true)
+      .selectAll('g.node')
+      .data(d => d, d => d.id)
+      .join('g')
+      .classed('node', true)
+      .classed('clicked', d => d.name === filters.targetType)
+      .attr('transform', d => `translate(${d.x0}, ${d.y0})`)
+      .on('click', handleNodeClick)
+
+    targets
+      .selectAll('rect')
+      .data(d => [d])
+      .join('rect')
+      .attr('fill', d => colorScale(d.name))
+      .attr('stroke', '#0f172a')
+      .attr('stroke-width', 1.5)
+      .attr('width', d => d.x1 - d.x0)
+      .attr('height', d => d.y1 - d.y0)
+
+    targets.selectAll('text')
+      .data(d => [d])
+      .join('text')
+      .attr('x', -labelPadding)
+      .attr('y', d => - ((d.y0 - d.y1) / 2))
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', d => d.x0 < size[0] / 2 ? 'start' : 'end')
+      .text(d => d.name)
+
+    targets.selectAll('title')
+      .data(d => [d])
+      .join('title')
+      .text(d => d.name === filters.targetType
+        ? 'Click to remove filter'
+        : 'Click to filter by target type'
+      )
 
   }
 
@@ -296,6 +364,7 @@ useD3Chart(containerRef, resizeAndRender)
           No edges match the current filters
         </text>
       </svg>
+      <div ref="tooltipRef" class="tooltip"></div>
     </div>
   </div>
 </template>
@@ -330,5 +399,17 @@ useD3Chart(containerRef, resizeAndRender)
   transition: all 1500ms,
     stroke-opacity 150ms,
     font-weight 150ms;
+}
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #334155;
+  opacity: 0;
 }
 </style>

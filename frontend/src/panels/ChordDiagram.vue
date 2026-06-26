@@ -10,6 +10,7 @@ import { useNodeTypeColors } from '@/composables/useNodeTypeColors.js'
 import { useFiltersStore } from '@/stores/filters.js'
 import { SLATE, radiansToDegrees } from './shared.js'
 import { resizeAndRenderFactory } from './shared.js'
+import { showTip, hideTip } from './shared.js'
 
 const props = defineProps({
   panelSpec: { type: Object, required: true },
@@ -73,10 +74,18 @@ const edgeAgg = computed(() => {
 
 function handleNodeClick(e, d) {
   e.stopPropagation()
-  if (filters.sourceType) {
-    filterTargetType(d.name)
+  if (filters.targetType === d.name) {
+    filters.targetType = null
+    return
   }
-  else filterSourceType(d.name)
+  if (filters.sourceType === d.name) {
+    filters.sourceType = null
+    return
+  }
+  filters.sourceType
+    ? filterTargetType(d.name)
+    : filterSourceType(d.name)
+
 }
 
 function handleLinkClick(e, d) {
@@ -99,6 +108,7 @@ function clearFilters() {
 }
 
 const containerRef = ref(null)
+const tooltipRef = ref(null)
 
 function render() {
   const totalW = containerRef.value.clientWidth || 800
@@ -148,7 +158,7 @@ function chordGraph() {
 
     const matrix = selection.datum().adjMatrix
     const nodeList = selection.datum().nodes
-    const total = d3.sum(matrix.map(row => d3.sum(row)))
+    const total = d3.sum(matrix.map((row, i) => d3.sum(row.slice(i))))
 
     // Scale real values in order to ensure that all paths are visible
     const scale = d3.scaleLinear()
@@ -181,6 +191,14 @@ function chordGraph() {
     selection
       .attr('font-family', fontFamily)
       .attr('font-size', fontSize)
+
+    function linkHtml(d) {
+      const pct = ((d.count / total) * 100).toFixed(1).toLocaleString()
+      return `<b>${d.sourceName}</b> - <b>${d.targetName}</b>
+      <br>${d.count.toLocaleString()} edges (${pct}% of shown)`
+    }
+
+    const tooltip = d3.select(tooltipRef.value)
 
 
     const grads = selection.selectAll('defs')
@@ -217,17 +235,18 @@ function chordGraph() {
         ? colorScale(nodeList[d.source.index])
         : `url(#${d.source.index}-${d.target.index})`)
       .classed('link', true)
-      .on('click', handleLinkClick)
+      .on('click', (e, d) => {
+        hideTip
+        handleLinkClick(e, d)
+      })
+      .on('mouseenter', (e, d) => showTip(tooltip, e, linkHtml(d)))
+      .on('mousemove', (e, d) => showTip(tooltip, e, linkHtml(d)))
+      .on('mouseleave', () => hideTip(tooltip))
 
     links.selectAll('path')
       .data(d => [d])
       .join('path')
       .attr('d', d3.ribbon().radius(outerRadius - nodeWidth))
-
-    links.selectAll('title')
-      .data(d => [d])
-      .join('title')
-      .text(d => `${d.name}: ${d.count}`)
 
     const nodes = selection.selectAll('g.chord_nodes')
       .data([chord.groups])
@@ -268,6 +287,13 @@ function chordGraph() {
       .attr('text-anchor', 'middle')
       .text(d => d.name)
 
+    nodes.selectAll('title')
+      .data(d => [d])
+      .join('title')
+      .text(d => (d.name === filters.sourceType || d.name === filters.targetType)
+        ? 'Click to remove filter'
+        : 'Click to filter by incident node type'
+      )
   }
 
   // Getters and setters
@@ -331,6 +357,7 @@ useD3Chart(containerRef, resizeAndRender)
           No edges match the current filters
         </text>
       </svg>
+      <div ref="tooltipRef" class="tooltip"></div>
     </div>
   </div>
 </template>
@@ -366,5 +393,17 @@ useD3Chart(containerRef, resizeAndRender)
     fill-opacity 150ms,
     stroke-opacity 150ms,
     font-weight 150ms;
+}
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #334155;
+  opacity: 0;
 }
 </style>
