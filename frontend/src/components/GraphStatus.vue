@@ -240,22 +240,27 @@ const edgeAttrEntries = computed(() => {
   </div>
 
   <!-- Counts (compact single row) — the "summary" block. -->
-  <div v-else-if="schema && showCounts" class="rounded-md border border-slate-200 bg-white px-3 py-2 flex flex-col gap-1">
+  <div v-else-if="schema && showCounts"
+    class="rounded-md border border-slate-200 bg-white px-3 py-2 flex flex-col gap-1">
     <div class="flex items-baseline justify-between gap-2 text-xs tabular-nums">
-      <span class="inline-flex items-baseline gap-1">
+      <span class="inline-flex items-baseline gap-1 flex-wrap">
         <span class="text-[10px] uppercase tracking-wide text-secondary">Nodes</span>
-        <strong class="text-primary">{{ filteredNodeCount.toLocaleString() }}</strong>
-        <span class="text-secondary">/ {{ schema.nodes.toLocaleString() }}</span>
+        <span>
+          <strong class="text-primary">{{ filteredNodeCount.toLocaleString() }}</strong>
+          <span class="text-secondary">&nbsp;/&nbsp;{{ schema.nodes.toLocaleString() }}</span>
+        </span>
       </span>
-      <span class="inline-flex items-baseline gap-1">
+      <span class="inline-flex items-baseline gap-1 flex-wrap">
         <span class="text-[10px] uppercase tracking-wide text-secondary">Edges</span>
-        <strong class="text-primary">{{ filteredEdgeCount.toLocaleString() }}</strong>
-        <span class="text-secondary">/ {{ schema.edges.toLocaleString() }}</span>
+        <span> <strong class="text-primary">{{ filteredEdgeCount.toLocaleString() }}</strong>
+          <span class="text-secondary">&nbsp;/&nbsp;{{ schema.edges.toLocaleString() }}</span>
+        </span>
       </span>
     </div>
 
     <!-- Auto-promotion caption -->
-    <p v-if="promotionCaption" class="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 self-start">
+    <p v-if="promotionCaption"
+      class="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 self-start">
       {{ promotionCaption }} <span class="opacity-60">(auto)</span>
     </p>
 
@@ -267,7 +272,7 @@ const edgeAttrEntries = computed(() => {
 
   <!-- Node inspector card — rendered in the Nodes group when a node is selected. -->
   <div v-else-if="schema && showNodeInspector && selectedIds.length"
-       class="rounded-md border border-slate-200 bg-white px-3 py-2">
+    class="rounded-md border border-slate-200 bg-white px-3 py-2">
     <div>
       <div class="flex w-full items-center gap-1">
         <button
@@ -279,9 +284,7 @@ const edgeAttrEntries = computed(() => {
             (1 of {{ selectedIds.length }})
           </span>
         </button>
-        <button
-          class="rounded p-0.5 text-secondary transition hover:text-red-500"
-          title="Clear selection"
+        <button class="rounded p-0.5 text-secondary transition hover:text-red-500" title="Clear selection"
           @click.stop="selection.clear()">
           <X :size="11" />
         </button>
@@ -290,11 +293,9 @@ const edgeAttrEntries = computed(() => {
       <div v-if="inspectorOpen" class="mt-1.5 flex flex-col gap-2">
         <!-- Selection queue (only when more than one) -->
         <div v-if="selectedIds.length > 1" class="flex flex-wrap items-center gap-1">
-          <button
-            v-for="id in queueIds" :key="id"
+          <button v-for="id in queueIds" :key="id"
             class="inline-flex items-center rounded-full border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] transition hover:border-slate-500"
-            :class="id === focusedId ? 'ring-1 ring-slate-900' : ''"
-            @click="promoteNode(id)">
+            :class="id === focusedId ? 'ring-1 ring-slate-900' : ''" @click="promoteNode(id)">
             <span class="max-w-[110px] truncate">{{ id }}</span>
           </button>
           <span v-if="queueOverflow > 0" class="text-[10px] text-muted">+{{ queueOverflow }}</span>
@@ -309,8 +310,7 @@ const edgeAttrEntries = computed(() => {
         <!-- Inspector card -->
         <div v-else-if="inspectData" class="flex flex-col gap-2 text-xs">
           <div v-if="showNodeTypeChip" class="flex items-center gap-2">
-            <span
-              class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
               :style="{ backgroundColor: typeColor(effectiveTypeLabel) }">
               {{ effectiveTypeLabel }}
             </span>
@@ -323,42 +323,29 @@ const edgeAttrEntries = computed(() => {
           <!-- Structural counters; on directed graphs they're also toggle filters
                for the Neighbors list below ('all' / 'in' / 'out'). -->
           <div class="grid gap-1" :class="isDirected ? 'grid-cols-3' : 'grid-cols-1'">
-            <button
-              type="button"
-              class="rounded-md border bg-white px-2 py-1 text-left transition"
-              :class="isDirected
-                ? (neighborFilter === 'all'
-                  ? 'border-slate-900 ring-1 ring-slate-900'
-                  : 'border-slate-200 hover:border-slate-400')
-                : 'border-slate-200 cursor-default'"
-              :disabled="!isDirected"
-              :title="isDirected ? 'Show all neighbors' : ''"
-              @click="isDirected && toggleNeighborFilter('all')">
+            <button type="button" class="rounded-md border bg-white px-2 py-1 text-left transition" :class="isDirected
+              ? (neighborFilter === 'all'
+                ? 'border-slate-900 ring-1 ring-slate-900'
+                : 'border-slate-200 hover:border-slate-400')
+              : 'border-slate-200 cursor-default'" :disabled="!isDirected"
+              :title="isDirected ? 'Show all neighbors' : ''" @click="isDirected && toggleNeighborFilter('all')">
               <div class="text-[9px] uppercase tracking-wider text-secondary">Deg</div>
               <div class="text-xs font-semibold tabular-nums">{{ inspectData.structural.degree }}</div>
             </button>
-            <button
-              v-if="isDirected"
-              type="button"
-              class="rounded-md border bg-white px-2 py-1 text-left transition"
+            <button v-if="isDirected" type="button" class="rounded-md border bg-white px-2 py-1 text-left transition"
               :class="neighborFilter === 'in'
                 ? 'border-slate-900 ring-1 ring-slate-900'
-                : 'border-slate-200 hover:border-slate-400'"
-              title="Filter neighbors: incoming only"
+                : 'border-slate-200 hover:border-slate-400'" title="Filter neighbors: incoming only"
               @click="toggleNeighborFilter('in')">
               <div class="flex items-center gap-1 text-[9px] uppercase tracking-wider text-secondary">
                 <ArrowRightToLine :size="9" /> In
               </div>
               <div class="text-xs font-semibold tabular-nums">{{ inspectData.structural.in_degree ?? '—' }}</div>
             </button>
-            <button
-              v-if="isDirected"
-              type="button"
-              class="rounded-md border bg-white px-2 py-1 text-left transition"
+            <button v-if="isDirected" type="button" class="rounded-md border bg-white px-2 py-1 text-left transition"
               :class="neighborFilter === 'out'
                 ? 'border-slate-900 ring-1 ring-slate-900'
-                : 'border-slate-200 hover:border-slate-400'"
-              title="Filter neighbors: outgoing only"
+                : 'border-slate-200 hover:border-slate-400'" title="Filter neighbors: outgoing only"
               @click="toggleNeighborFilter('out')">
               <div class="flex items-center gap-1 text-[9px] uppercase tracking-wider text-secondary">
                 <ArrowRightFromLine :size="9" /> Out
@@ -380,38 +367,28 @@ const edgeAttrEntries = computed(() => {
 
           <!-- Neighbors -->
           <section v-if="neighborTotal > 0">
-            <h4 class="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-secondary mb-0.5">
+            <h4
+              class="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-secondary mb-0.5">
               <span>Neighbors</span>
               <span class="font-normal normal-case text-[10px] text-muted">
                 {{ neighborFilteredTotal }} / {{ neighborTotal }}
               </span>
             </h4>
-            <ul
-              v-if="visibleNeighbors.length"
-              ref="scrollContainer"
+            <ul v-if="visibleNeighbors.length" ref="scrollContainer"
               class="flex flex-col divide-y divide-slate-100 rounded-md border border-slate-200 bg-white"
               :class="neighborsExpanded ? 'max-h-72 overflow-y-auto scrollbar-slim' : ''"
               @scroll="neighborsExpanded ? onNeighborsScroll($event) : null">
-              <li v-for="(n, i) in visibleNeighbors" :key="i"
-                  class="flex items-center gap-1.5 px-1.5 py-1">
-                <button
-                  v-if="n.edge_id !== undefined"
-                  class="text-secondary transition hover:text-primary shrink-0"
-                  :title="`Inspect edge #${n.edge_id} (${n.edge_type})`"
-                  @click="selection.replaceEdges([n.edge_id])">
+              <li v-for="(n, i) in visibleNeighbors" :key="i" class="flex items-center gap-1.5 px-1.5 py-1">
+                <button v-if="n.edge_id !== undefined" class="text-secondary transition hover:text-primary shrink-0"
+                  :title="`Inspect edge #${n.edge_id} (${n.edge_type})`" @click="selection.replaceEdges([n.edge_id])">
                   <component :is="isDirected
                     ? (n.direction === 'out' ? ArrowRightFromLine : ArrowRightToLine)
-                    : ArrowLeftRight"
-                    :size="11" />
+                    : ArrowLeftRight" :size="11" />
                 </button>
                 <component v-else :is="isDirected
                   ? (n.direction === 'out' ? ArrowRightFromLine : ArrowRightToLine)
-                  : ArrowLeftRight"
-                  :size="10"
-                  class="text-secondary shrink-0" />
-                <button
-                  class="text-[10px] text-slate-900 hover:underline truncate"
-                  :title="n.id"
+                  : ArrowLeftRight" :size="10" class="text-secondary shrink-0" />
+                <button class="text-[10px] text-slate-900 hover:underline truncate" :title="n.id"
                   @click="selection.replace([n.id])">
                   {{ n.id }}<span v-if="n.degree !== undefined" class="text-muted">
                     ({{ isDirected
@@ -419,8 +396,7 @@ const edgeAttrEntries = computed(() => {
                       : `deg ${n.degree}` }})
                   </span>
                 </button>
-                <span
-                  v-if="showNodeTypeChip"
+                <span v-if="showNodeTypeChip"
                   class="ml-auto inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium text-white"
                   :style="{ backgroundColor: typeColor(n.type) }">
                   {{ n.type }}
@@ -433,8 +409,7 @@ const edgeAttrEntries = computed(() => {
             <p v-if="neighborsLoading && neighborsExpanded" class="mt-1 text-[10px] italic text-muted">
               Loading more…
             </p>
-            <button
-              v-if="neighborOverflow > 0"
+            <button v-if="neighborOverflow > 0"
               class="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 py-0.5 text-[10px] text-secondary transition hover:text-primary hover:border-slate-400"
               @click="neighborsExpanded = !neighborsExpanded">
               {{ neighborsExpanded ? 'Show less' : `Show all (${neighborFilteredTotal})` }}
@@ -447,7 +422,7 @@ const edgeAttrEntries = computed(() => {
 
   <!-- Edge inspector card — rendered in the Edges group when an edge is selected. -->
   <div v-else-if="schema && showEdgeInspector && selectedEdgeIds.length"
-       class="rounded-md border border-slate-200 bg-white px-3 py-2">
+    class="rounded-md border border-slate-200 bg-white px-3 py-2">
     <div class="flex w-full items-center gap-1">
       <button
         class="flex flex-1 min-w-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-secondary hover:text-primary"
@@ -458,20 +433,16 @@ const edgeAttrEntries = computed(() => {
           (1 of {{ selectedEdgeIds.length }})
         </span>
       </button>
-      <button
-        class="rounded p-0.5 text-secondary transition hover:text-red-500"
-        title="Clear edge selection"
+      <button class="rounded p-0.5 text-secondary transition hover:text-red-500" title="Clear edge selection"
         @click.stop="selection.clearEdges()">
         <X :size="11" />
       </button>
 
       <div v-if="edgeInspectorOpen" class="mt-1.5 flex flex-col gap-2">
         <div v-if="selectedEdgeIds.length > 1" class="flex flex-wrap items-center gap-1">
-          <button
-            v-for="id in edgeQueueIds" :key="id"
+          <button v-for="id in edgeQueueIds" :key="id"
             class="inline-flex items-center rounded-full border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] transition hover:border-slate-500"
-            :class="id === focusedEdgeId ? 'ring-1 ring-slate-900' : ''"
-            @click="promoteEdge(id)">
+            :class="id === focusedEdgeId ? 'ring-1 ring-slate-900' : ''" @click="promoteEdge(id)">
             <span class="font-mono">#{{ id }}</span>
           </button>
           <span v-if="edgeQueueOverflow > 0" class="text-[10px] text-muted">+{{ edgeQueueOverflow }}</span>
@@ -484,8 +455,7 @@ const edgeAttrEntries = computed(() => {
 
         <div v-else-if="edgeData" class="flex flex-col gap-2 text-xs">
           <div class="flex items-center gap-2">
-            <span
-              v-if="showEdgeTypeChip"
+            <span v-if="showEdgeTypeChip"
               class="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white">
               {{ edgeData.edge_type }}
             </span>
@@ -496,23 +466,17 @@ const edgeAttrEntries = computed(() => {
           <div class="flex items-center gap-1.5 text-[11px] text-primary">
             <button
               class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 hover:border-slate-500"
-              :title="`Inspect node ${edgeData.source.id}`"
-              @click="selection.replace([edgeData.source.id])">
-              <span
-                v-if="showNodeTypeChip"
-                class="inline-block h-2 w-2 rounded-full"
+              :title="`Inspect node ${edgeData.source.id}`" @click="selection.replace([edgeData.source.id])">
+              <span v-if="showNodeTypeChip" class="inline-block h-2 w-2 rounded-full"
                 :style="{ backgroundColor: typeColor(edgeData.source.type) }" />
               <span class="truncate max-w-[100px]">{{ edgeData.source.id }}</span>
             </button>
-            <component :is="edgeData.directed ? ArrowRight : ArrowLeftRight"
-                       :size="11" class="text-secondary shrink-0" />
+            <component :is="edgeData.directed ? ArrowRight : ArrowLeftRight" :size="11"
+              class="text-secondary shrink-0" />
             <button
               class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 hover:border-slate-500"
-              :title="`Inspect node ${edgeData.target.id}`"
-              @click="selection.replace([edgeData.target.id])">
-              <span
-                v-if="showNodeTypeChip"
-                class="inline-block h-2 w-2 rounded-full"
+              :title="`Inspect node ${edgeData.target.id}`" @click="selection.replace([edgeData.target.id])">
+              <span v-if="showNodeTypeChip" class="inline-block h-2 w-2 rounded-full"
                 :style="{ backgroundColor: typeColor(edgeData.target.type) }" />
               <span class="truncate max-w-[100px]">{{ edgeData.target.id }}</span>
             </button>

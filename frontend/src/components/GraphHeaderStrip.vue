@@ -51,7 +51,7 @@ const activeChips = computed(() => {
     chips.push({
       key: 'sourceType',
       label: schema.value?.directed
-        ? `Source Node Type: ${filters.sourceType}`
+        ? `Source Type: ${filters.sourceType}`
         : `Incident Node Type: ${filters.sourceType}`,
       remove: () => { filters.sourceType = null }
     })
@@ -61,7 +61,7 @@ const activeChips = computed(() => {
     chips.push({
       key: 'targetType',
       label: schema.value?.directed
-        ? `Target Node Type: ${filters.targetType}`
+        ? `Target Type: ${filters.targetType}`
         : `Incident Node Type: ${filters.targetType}`,
       remove: () => { filters.targetType = null }
     })
@@ -184,7 +184,7 @@ function resetAll() {
         <RotateCcw :size="12" />
       </button>
       <span class="ml-auto text-[10px] uppercase tracking-wider text-secondary">
-        {{ activeChips.length }} active
+        {{ activeChips.length }} active filter{{ activeChips.length !== 1 ? 's' : '' }}
       </span>
     </div>
 
@@ -200,6 +200,6 @@ function resetAll() {
         </button>
       </span>
     </div>
-    <span v-else class="text-[10px] italic text-muted">No filters active</span>
+    <span v-else class="text-[10px] italic text-muted">No active filters</span>
   </div>
 </template>

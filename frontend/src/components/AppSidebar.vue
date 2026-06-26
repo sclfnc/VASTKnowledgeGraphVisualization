@@ -4,22 +4,17 @@
 // (node + edge attribute filters). The two modes are mutually exclusive
 // because the user rarely needs both at once: layout decisions in
 // Contents, exploration in Filters. Light theme; full-height; fixed.
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Telescope, Network, BookOpen, Info, Database } from 'lucide-vue-next'
 import { useGraphStore } from '../stores/graph.js'
-import { useSidebarsStore } from '../stores/sidebars.js'
-import { useSelectionStore } from '../stores/selection.js'
 import { useAboutModal } from '../composables/useAboutModal.js'
 import GraphStatus from './GraphStatus.vue'
+import GraphHeaderStrip from './GraphHeaderStrip.vue'
 
 const graphStore = useGraphStore()
-const sidebars = useSidebarsStore()
-const selection = useSelectionStore()
-const { mode: sidebarMode } = storeToRefs(sidebars)
 const { graphId } = storeToRefs(graphStore)
-const { ids: selectedIds, edgeIds: selectedEdgeIds } = storeToRefs(selection)
 const { openAbout } = useAboutModal()
 const router = useRouter()
 
@@ -91,6 +86,10 @@ function onChangeDataset() {
            the node/edge inspector moved into the Filters body to keep the
            shared header light and Contents clean. -->
       <GraphStatus v-if="graphId" section="identity" />
+      <!-- Summary: filtered/total counts for nodes + edges. -->
+      <GraphStatus section="counts" />
+      <!-- Active filters: chips + undo/redo/reset. -->
+      <GraphHeaderStrip />
 
     </header>
 

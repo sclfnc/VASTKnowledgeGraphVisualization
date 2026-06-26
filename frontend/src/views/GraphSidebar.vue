@@ -13,7 +13,7 @@ const { graphId } = storeToRefs(graphStore)
   <div class="scrollbar-slim flex-1 min-h-0 overflow-y-auto px-4">
     <div v-if="graphId"
       class="scrollbar-slim flex-1 min-h-0 overflow-y-auto px-4 mt-2">
-      <SidebarFilters :edges-first="true" />
+      <SidebarFilters />
     </div>
   </div>
 </template>
