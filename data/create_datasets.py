@@ -81,7 +81,8 @@ def create_asoiaf_graph(destination_dir):
     # Add nodes
     node_file = next(iter(asoiaf_dir.glob('*nodes*')))
     nodes = []
-    families_re = re.compile('(Targaryen|Greyjoy|Snow|Baratheon|Lannister|Stark|Frey)')
+    families_re = re.compile('(Targaryen|Greyjoy|Snow|Baratheon|Lannister|Stark|Frey|Tyrell|Martell|Arryn|Mormont|Bolton|Tully)')
+    books = {'1': 'A Game of Thrones', '2': 'A Clash of Kings', '3': 'A Storm of Swords', '4':'A Feast of Crows', '5': 'A Dance with Dragons'}
     try:
         with open(node_file) as file:
             reader = csv.DictReader(file)
@@ -105,7 +106,7 @@ def create_asoiaf_graph(destination_dir):
                 reader = csv.DictReader(file)
                 graph.add_edges_from([
                     (row['Source'], row['Target'], {
-                        'Edge Type': f'Book {row['book'] or 'Unknown'}',
+                        'Edge Type': books.get(row['book'], 'Book Unknown'),
                         })
                         for row in reader
                 ])
